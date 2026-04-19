@@ -17,6 +17,8 @@
   --rule:       rgba(236, 231, 221, 0.12);
   --surface-1:  rgba(255, 255, 255, 0.04);
   --surface-2:  rgba(255, 255, 255, 0.03);
+  --header-bg:  rgba(12, 13, 15, 0.55);
+  --diagram-fade: rgba(20, 21, 24, 0.4);
   --bg-radial-1: rgba(255, 77, 46, 0.10);
   --bg-radial-2: rgba(255, 77, 46, 0.04);
   --grain-blend: overlay;
@@ -43,6 +45,8 @@
   --rule:       rgba(28, 26, 24, 0.14);
   --surface-1:  rgba(28, 26, 24, 0.04);
   --surface-2:  rgba(28, 26, 24, 0.03);
+  --header-bg:  rgba(246, 241, 231, 0.78);
+  --diagram-fade: rgba(216, 210, 196, 0.45);
   --bg-radial-1: rgba(214, 58, 28, 0.08);
   --bg-radial-2: rgba(214, 58, 28, 0.04);
   --grain-blend: multiply;
@@ -115,7 +119,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   padding: 22px var(--pad-x);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
-  background: rgba(12, 13, 15, 0.55);
+  background: var(--header-bg);
   border-bottom: 1px solid var(--rule);
 }
 
@@ -406,7 +410,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   font-size: 13px;
   line-height: 1.45;
   color: var(--muted);
-  background: linear-gradient(180deg, var(--ink-soft) 0%, rgba(20,21,24,0.4) 100%);
+  background: linear-gradient(180deg, var(--ink-soft) 0%, var(--diagram-fade) 100%);
   border: 1px solid var(--rule);
   border-radius: 8px;
   padding: 32px clamp(20px, 4vw, 48px);
