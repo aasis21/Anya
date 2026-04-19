@@ -418,6 +418,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   margin: 0;
   white-space: pre;
   overflow-x: auto;
+  text-align: center;
 }
 .diagram .d-box  { color: var(--bone); }
 .diagram .d-flow { color: var(--accent); font-weight: 500; }
