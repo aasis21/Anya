@@ -835,7 +835,8 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 @media (max-width: 880px) {
   .nav-links { gap: 18px; }
   .nav-links a:first-child,
-  .nav-links a:nth-child(2) { display: none; }
+  .nav-links a:nth-child(2),
+  .nav-links a:nth-child(4) { display: none; }
   .feature-grid { grid-template-columns: 1fr 1fr; }
   .feature-grid li:nth-child(3n) { border-right: 1px solid var(--rule); }
   .feature-grid li:nth-child(2n) { border-right: none; }
