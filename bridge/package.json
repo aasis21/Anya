@@ -1,0 +1,25 @@
+{
+  "name": "agentedge-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "AgentEdge bridge — Native Messaging host wrapping @github/copilot-sdk",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "tsx src/host.ts",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
+    "start": "node dist/host.js",
+    "test": "node test/ping-test.mjs"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

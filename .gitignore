@@ -1,0 +1,22 @@
+# Build outputs
+dist/
+node_modules/
+
+# Logs
+*.log
+
+# Extension keypair (NEVER commit private key)
+.extension-key.pem
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment
+.env
+.env.local
+
+# Bridge runtime artifacts
+bridge.log

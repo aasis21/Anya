@@ -1,0 +1,25 @@
+{
+  "name": "agentedge-extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "AgentEdge Edge sidebar extension (Lit + xterm.js)",
+  "scripts": {
+    "prebuild": "node scripts/gen-icons.js",
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\""
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "lit": "^3.2.0",
+    "marked": "^18.0.2"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
