@@ -245,16 +245,24 @@
       </ol>
 
       <h4>Options</h4>
-      <table class="switches">
+      <table class="switches" data-shell="pwsh">
         <tr><td><code>-InstallDir &lt;path&gt;</code></td><td>where to clone (default <code>~/Anya</code>)</td></tr>
         <tr><td><code>-Branch &lt;name&gt;</code></td><td>track a non-main branch</td></tr>
         <tr><td><code>-Browsers edge,chrome</code></td><td>register only specific browsers</td></tr>
       </table>
+      <table class="switches" data-shell="bash" hidden>
+        <tr><td><code>--install-dir &lt;path&gt;</code></td><td>where to clone (default <code>~/Anya</code>)</td></tr>
+        <tr><td><code>--branch &lt;name&gt;</code></td><td>track a non-main branch</td></tr>
+        <tr><td><code>--browsers chrome,brave</code></td><td>register only specific browsers</td></tr>
+      </table>
 
       <h4>Want to hack on it?</h4>
-      <pre class="mini"><span class="comment"># developing locally — clone manually</span>
+      <pre class="mini" data-shell="pwsh"><span class="comment"># developing locally — clone manually</span>
 <span class="prompt">&gt;</span> git clone https://github.com/aasis21/Anya
-<span class="prompt">&gt;</span> cd Anya; ./setup.ps1   <span class="comment"># or ./setup.sh</span></pre>
+<span class="prompt">&gt;</span> cd Anya; ./setup.ps1</pre>
+      <pre class="mini" data-shell="bash" hidden><span class="comment"># developing locally — clone manually</span>
+<span class="prompt">$</span> git clone https://github.com/aasis21/Anya
+<span class="prompt">$</span> cd Anya &amp;&amp; ./setup.sh</pre>
     </aside>
   </div>
 </section>
