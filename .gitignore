@@ -20,3 +20,6 @@ Thumbs.db
 
 # Bridge runtime artifacts
 bridge.log
+
+# playwright-cli scratch (defensive — should now go to %LOCALAPPDATA%\AgentEdge\playwright)
+bridge/.playwright-cli/

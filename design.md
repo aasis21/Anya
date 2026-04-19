@@ -1,367 +1,435 @@
-# AgentEdge — Design Document
+# AgentEdge — Design
 
-> **One-liner:** GitHub Copilot CLI, reborn as a Microsoft Edge sidebar app — agentic AI that lives next to your tabs, can read and drive them, and can act on a whitelisted slice of your file system.
+> **One line.** GitHub Copilot's CLI agent, repackaged as a Microsoft Edge
+> sidebar app, so it lives next to your tabs, can see and drive them, and
+> inherits every MCP server you have already configured for the terminal.
+
+This document describes the system as it stands today: what each piece does,
+why it exists, and the contracts between them. It is the spec — read this
+before changing architecture.
 
 ---
 
-## 1. What AgentEdge is
+## 1. Goals
 
-AgentEdge is a **general-purpose agentic surface inside Microsoft Edge**.
+- **Same Copilot, different surface.** Reuse `@github/copilot-sdk` so we get
+  streaming, tool calls, MCP, slash commands, and authentication for free.
+  AgentEdge is a UI shell, not a model integration.
+- **Browser context is implicit.** The agent should always know what tab the
+  user is looking at without being asked. Open tabs, selection, page content,
+  and bookmarks are first-class inputs.
+- **Drive the real, logged-in browser.** When the user says "click that
+  button," it should click the button on _their_ Edge — same cookies, same
+  SSO, same session — not some headless instance.
+- **Multi-thread by default.** Pinning, tagging, switching between unrelated
+  conversations should be instant. Each thread keeps its own state on the
+  bridge side.
+- **Local-first, secret-aware.** No cloud beyond what Copilot itself uses. No
+  telemetry. The Playwright extension token never leaves the machine.
 
-It is the same `copilot` CLI you run in a terminal, presented as a persistent sidebar that:
+### Non-goals
 
-- knows what page you are looking at without being told,
-- can pull in any open tab, bookmark, selection, or page snapshot on request,
-- can drive the real, logged-in browser (click, type, screenshot, extract),
-- can read and write files inside folders you have explicitly whitelisted,
-- inherits every MCP server and auth token your terminal `copilot` already has.
+- Polished marketplace distribution. AgentEdge is loaded unpacked.
+- Cross-browser support. Edge sidePanel is baked in.
+- Replacing the terminal `copilot` CLI. AgentEdge is a peer surface; the CLI
+  remains the source of truth for auth, MCP config, and prompt files.
 
-Anything you can express to Copilot CLI in words — investigate a page, scrape a table, summarise tabs, edit a file in a project, fill a form, file a bug, organise bookmarks, generate a Playwright script — is in scope on day one. AgentEdge does not ship features; it ships **capability**.
+---
 
 ## 2. Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  Microsoft Edge (MV3 extension, sidePanel API)               │
-│                                                              │
-│  ┌─────────────────────────┐    ┌─────────────────────────┐  │
-│  │  AgentEdge Sidebar      │    │  Your tabs / pages      │  │
-│  │  (Lit + marked)         │    │                         │  │
-│  │  ─────────────────────  │    │   github.com/foo/bar    │  │
-│  │  > review this PR       │    │   dev.azure.com/...     │  │
-│  │  ▍ Reading PR diff…     │    │   localhost:3000        │  │
-│  │                         │    │                         │  │
-│  │  ┌───────────────────┐  │    └─────────────────────────┘  │
-│  │  │ chrome.tabs       │  │              ▲                  │
-│  │  │ chrome.bookmarks  │  │              │ drives           │
-│  │  │ chrome.scripting  │  │              │ (real Edge,      │
-│  │  │ chrome.sidePanel  │  │              │  real logins)    │
-│  │  └───────────────────┘  │    ┌─────────────────────────┐  │
-│  │                         │    │ Playwright MCP Bridge   │  │
-│  │  Native Messaging       │    │ extension (Microsoft)   │  │
-│  └────────────┬────────────┘    └────────────┬────────────┘  │
-└───────────────┼──────────────────────────────┼───────────────┘
-                │ JSON frames                  │ localhost + token
+┌───────────────────────────────────────────────────────────────┐
+│  Microsoft Edge — MV3 sidePanel                               │
+│                                                               │
+│  ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│  │  AgentEdge sidebar      │    │  Your tabs / pages      │   │
+│  │  (Lit + marked)         │    │                         │   │
+│  │  ─────────────────────  │    │   github.com/foo/bar    │   │
+│  │  > review this PR       │    │   dev.azure.com/...     │   │
+│  │  ▍ streaming reply…     │    │   localhost:3000        │   │
+│  │                         │    └─────────────────────────┘   │
+│  │  reads via              │              ▲                   │
+│  │  chrome.tabs            │              │ drives via        │
+│  │  chrome.scripting       │              │ Playwright         │
+│  │  chrome.bookmarks       │    ┌─────────────────────────┐   │
+│  │                         │    │  Playwright MCP Bridge  │   │
+│  │  Native Messaging       │    │  extension (MS)         │   │
+│  └────────────┬────────────┘    └────────────┬────────────┘   │
+└───────────────┼──────────────────────────────┼────────────────┘
+                │ length-prefixed JSON         │ localhost + token
                 ▼                              │
-┌─────────────────────────────────────────────────────────────┐
-│  Local machine — AgentEdge Bridge (Node.js)                │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  bridge host                                         │   │
-│  │                                                      │   │
-│  │  • CopilotClient (one)                               │   │
-│  │  • CopilotSession per sidebar thread                 │   │
-│  │  • onPreToolUse → inject browser context             │   │
-│  │  • Custom tools (defineTool):                        │   │
-│  │      get_active_tab    list_tabs                     │   │
-│  │      get_selection     get_tab_content               │   │
-│  │      browser  ── shells out to ──┐                   │   │
-│  └──────────────────────┬───────────┼───────────────────┘   │
-│                         │           │                       │
-│           @github/      │           ▼                       │
-│           copilot-sdk   │   ┌──────────────────────────┐    │
-│                         ▼   │  playwright-cli daemon   │────┘
-│  ┌──────────────────────────┤  (@playwright/cli)       │
-│  │  copilot CLI             │  • headed, persistent    │
-│  │  (bundled @github/copilot)│ • attach --extension    │
-│  │  + GitHub / MS Docs /    │  • driving user's Edge   │
-│  │    ADO MCP servers       └──────────────────────────┘
-│  │    (auto-loaded from                                │   │
-│  │     ~/.copilot/mcp-config.json)                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┼────────────────┐
+│  AgentEdge Bridge — Node.js                 │                │
+│                                              │                │
+│  ┌──────────────────────────────────────────┴──────────────┐  │
+│  │  host.ts        : NM stdio loop, frame router            │  │
+│  │  copilot-bridge : SessionManager (one CopilotSession      │  │
+│  │                   per chat id, on top of one CopilotClient│ │
+│  │  sessions.ts    : single bound Playwright tab + polling   │  │
+│  │  tools.ts       : context tools + browser tool definitions│ │
+│  │  tool-rpc.ts    : bridge → extension RPC for chrome.*     │  │
+│  └──────────────────┬────────────────────────────────────────┘  │
+│                     │                                           │
+│   @github/copilot-  │                          ┌──────────────┐ │
+│   sdk               ▼                          │ playwright-  │ │
+│  ┌────────────────────────┐                    │ cli daemon    │─┘
+│  │ Copilot agent process  │ ── browser tool ──▶│ (headed Edge) │
+│  │  + MCP servers from    │                    └──────────────┘
+│  │   ~/.copilot/...       │
+│  └────────────────────────┘
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### The four pieces
-
-| # | Component | Tech | Purpose |
-|---|---|---|---|
-| 1 | **Sidebar UI** | Lit + `marked` | Chat input, streaming Markdown bubbles, status line, theme toggle, mention autocomplete |
-| 2 | **Extension layer** | Chrome APIs (`tabs`, `bookmarks`, `scripting`, `sidePanel`, `nativeMessaging`) | Capture browser context, expose 4 lightweight context tools, mediate with bridge |
-| 3 | **Bridge host** | Node.js + `@github/copilot-sdk` | One `CopilotClient`, one `CopilotSession` per sidebar thread; defines custom tools; shells out to `playwright-cli` for browser automation |
-| 4 | **`copilot` CLI + `playwright-cli`** | bundled by SDK + `@playwright/cli` + Playwright MCP Bridge ext (Microsoft) | The actual agent + browser-driving capability. `playwright-cli attach --extension` connects to the user's **real Edge** (same tabs, same logins) |
-
-The heavy lifting (model calls, browser automation, file system, MCP) is done by tools the user already has. AgentEdge is a thin shell that wires them to browser context.
-
-### Why `@github/copilot-sdk`
-
-The SDK is GitHub's official embedding API for Copilot, and its abstractions match AgentEdge's needs directly:
-
-- **`onPermissionRequest(request)`** with `request.kind ∈ {shell, write, read, mcp, url, custom-tool, memory}` — exactly the categories we want for approval cards.
-- **`assistant.message_delta`** events stream tokens, perfect for xterm.
-- **One `CopilotClient` → many `CopilotSession`s** — one CLI process, multiple parallel conversations.
-- **`onPreToolUse`** lets us inject browser context (active tab URL, page snapshot) into tool args before the agent acts.
-- **`defineTool({...})`** registers custom tools; that is how `chrome.tabs`, `chrome.bookmarks`, etc. become first-class agent capabilities.
-- **`useLoggedInUser: true`** (default) reuses the user's existing `copilot` login.
-- **MCP servers** auto-load from `~/.copilot/mcp-config.json`.
-- **CLI is bundled** as `@github/copilot` — installer ships everything in one shot.
-
-## 3. Tab and session model
-
-**Mental model: tabs are files, the sidebar is the chat panel.** Direct port of VS Code Copilot Chat.
-
-| VS Code Copilot Chat | AgentEdge |
-|---|---|
-| Workspace (folder) | Edge window |
-| Editor file | Browser tab |
-| Active editor | Active tab |
-| Selection | Highlighted text on page |
-| Chat panel | Sidebar |
-| Chat thread | Chat thread (one per sidebar, survives tab switches) |
-| `+ New Chat` | `+ New Chat` |
-| `#file` mention | `@tab` mention |
-| `#selection` | `@selection` |
-| Agent reads/edits N files in one turn | Agent reads/operates on N tabs in one turn |
-
-### Rules
-
-- **One sidebar = one chat panel = one `CopilotSession`** at a time.
-- **Tab switches do not reset the thread.** The active tab is just a moving reference; the conversation persists.
-- **`+ New Chat`** spins up a fresh `CopilotSession` and a fresh per-session working directory at `%LOCALAPPDATA%\AgentEdge\sessions\s-<ts>\`.
-- **Chat history list** in the sidebar lets the user hop between past threads (persisted via `chrome.storage.local`).
-- **Per-window scoping.** Each Edge window has its own sidebar; threads are scoped to the window. Different windows = different conversations. Same as VS Code workspaces.
-- **All browser tools accept an optional `tabId`.** Default is the active tab. The agent can operate across multiple tabs in a single turn (just like reading multiple files in VS Code).
-- **Closed tabs become unreachable to tools** but remain referenced in conversation history.
-
-### Why not per-tab sessions
-
-Per-tab threads were considered and rejected. They break the "ask about my open tabs collectively" workflow, force the user to babysit which thread belongs to which tab, and create dead conversations every time a tab closes. The notebook-style sidebar mirrors how the user already thinks about Copilot in VS Code.
-
-## 4. Approval model
-
-Every action the agent takes falls into one of these categories:
-
-| Category | Examples |
-|---|---|
-| **Read** | Page snapshot, screenshot, FS read inside whitelist, read-only eval, GET requests |
-| **FS write** | Create / modify / delete files inside the whitelist |
-| **Shell** | `npm install`, `git`, `rm`, `mv`, build commands |
-| **Browser write** | Form submit, click on a tagged destructive element, navigation away from a dirty form |
-| **Network write** | POST / PUT / DELETE from a generated script |
-
-By default, **reads are auto-approved** and every other category prompts the user before executing. The agent renders an inline approval card in the sidebar showing exactly what it is about to do; the user clicks **Approve** / **Deny** / **Always-approve-this-kind**.
-
-### Auto-approve toggles
-
-The settings panel has one checkbox per category to skip the prompt for that category:
-
-```
-[ ] Auto-approve FS writes inside whitelisted folders
-[ ] Auto-approve shell commands
-[ ] Auto-approve browser writes
-[ ] Auto-approve network writes
-```
-
-Any toggle that is on shows up as a small chip in the sidebar header (`auto: shell, fs`) so the elevated trust is always visible. Toggles **reset on browser restart** — auto-approval is sticky-session-only, never the persisted default.
-
-A "🔥 Auto-approve all" master toggle exists for short bursts of unattended work; flipping it on shows a red banner until it is flipped off or the session ends.
-
-## 5. Browser context
-
-Three layers of context delivery.
-
-### Implicit (always sent with every prompt)
-- Active tab URL
-- Active tab title
-- Active tab `<meta>` tags (description, `og:*`)
-- A short structured snapshot (title + h1/h2/h3 only, ~500 tokens)
-
-### Explicit `@`-mentions in the input box
-
-| Mention | Expands to |
-|---|---|
-| `@page` | Full page text content of active tab (Readability-extracted, truncated at ~3k tokens) |
-| `@tab:<idx>` | Same, but for a specific tab from `@tabs` list |
-| `@selection` | Currently selected text on the active tab |
-| `@tabs` | All open tab URLs + titles (numbered) |
-| `@bookmarks` | Bookmark tree (folder structure + URLs) — *v2+* |
-| `@history` | Last N visited URLs — *v2+* |
-| `@cookies` | Cookies for current domain — *v2+* |
-
-### Standing capabilities (always available to the agent)
-
-#### AgentEdge-native tools (defined in the bridge, backed by the extension)
-
-These four tools are the unique contribution of AgentEdge — fast, sidebar-native, no MCP roundtrip:
-
-| Tool | Signature | Returns |
-|---|---|---|
-| `get_active_tab` | `()` | `{tabId, url, title, favIconUrl}` |
-| `list_tabs` | `(windowId?)` | `[{tabId, url, title}]` |
-| `get_selection` | `(tabId?)` | `{text, tabId}` |
-| `get_tab_content` | `(tabId?)` | `{markdown, url, title}` (Readability extraction) |
-
-`tabId?` always defaults to the active tab. Uses Chrome's `chrome.tabs.Tab.id` (numeric, in-session only).
-
-#### Browser automation — `playwright-cli`
-
-A single bridge tool, `browser`, shells out to `playwright-cli` (which runs as a persistent daemon). Playwright is **attached to the user's real Edge** via `playwright-cli attach --extension` and the **Playwright MCP Bridge extension** (Microsoft, installed once by the user). All snapshot, click, fill, type, navigate, screenshot, eval, network and storage commands are reachable through that one tool.
-
-```ts
-defineTool({
-  name: 'browser',
-  description: 'Drive the user\'s Edge via playwright-cli. See `browser install --skills`.',
-  parameters: { argv: z.array(z.string()) },
-  run: async ({ argv }) => exec('playwright-cli', argv, { cwd: sessionDir })
-})
-```
-
-**Why `playwright-cli`, not Playwright MCP:** the official docs identify CLI as the right shape for "coding agents working with Copilot CLI" — concise output, skills loaded on demand, daemon-backed, lower token cost than MCP's tool-schema-per-turn overhead. Both options support `attach --extension`; the CLI is simply better fit for our context budget. Captured in §13 open questions if we ever need to switch.
-
-#### Other capabilities
-
-- **FS read/write** — scoped to whitelisted folders (bridge enforces via SDK's `onPermissionRequest`).
-- **Shell** — for builds, installs, git, etc. (denied by default; user enables in settings).
-- **Any MCP server** the user already has configured for `copilot` (Microsoft Docs, GitHub, ADO, etc.). Auto-loaded from `~/.copilot/mcp-config.json`.
-
-## 6. The whitelist
-
-A list of absolute folder paths the agent is allowed to read and write. **Enforcement happens at the SDK's permission callback** in the bridge, which is the only chokepoint that all FS access flows through.
-
-### Configuration
-Two synced surfaces:
-- **Sidebar settings panel** — visual editor (add / remove folders, enable / disable each).
-- **`whitelist.json`** at `%APPDATA%\AgentEdge\whitelist.json` — what the bridge reads.
-
-The settings UI writes the JSON; the bridge watches it for changes.
-
-### Enforcement
-- Every `write` / `read` permission request from the SDK carries `request.fileName`.
-- bridge resolves the absolute path and checks it against the whitelist.
-- Outside the whitelist → auto-denied; surfaced as "blocked by whitelist" in the sidebar.
-- Inside the whitelist → goes through the normal approval flow (auto-approved if FS auto-toggle is on, else prompts the user).
-- `cd` cannot escape because the check is on the resolved absolute path.
-
-### Default
-Empty. Folders must be added explicitly.
-
-## 7. Auth
-
-Zero setup beyond what the user already has.
-
-| Service | Source |
-|---|---|
-| Copilot subscription | `useLoggedInUser: true` (SDK default) — uses existing `copilot` CLI login |
-| GitHub API | `gh auth` token |
-| Browser sessions | Live Edge cookies via `playwright-cli attach --extension` (real user profile) |
-| MCP servers | Existing user-level `~/.copilot/mcp-config.json` (auto-loaded by SDK) |
-
-The bridge runs the SDK as the user, so all existing auth flows just work. No tokens are stored in the extension or bridge config; no third-party API key fields exist in settings.
-
-## 8. UI
-
-- **Edge MV3 extension using the `sidePanel` API** — vertical sidebar, persistent within a window.
-- **Lit** for components — small bundle, web-standards, fast Edge Add-ons review.
-- **`marked`** renders Markdown bubbles (headings, lists, fenced code blocks). Both dark and light palettes are first-class; the only hardcoded colors are CSS variables (`--strong`, `--code-bg`, `--code-fg`, etc.) defined in both themes.
-- **One textarea input** at the bottom with a `›` sigil and `SEND ↵` button (disabled until input is non-empty). `@`-mention autocomplete planned.
-- **Header** shows `VER`/`PID`/`LIVE` status line and a `☀ LIGHT` / `☾ DARK` theme toggle (persisted via `chrome.storage.local`).
-- **Empty state** is invitational (`what's on your mind?`); chat history flows above the input.
-- **Edge titlebar** — `manifest.default_title: "AgentEdge"` is the brand surface (Edge owns it; we don't restyle).
-- **Inline approval cards** above the input when the agent is waiting on a permission. *(Deferred — auto-allow during build-out; see §12.)*
-- **Stop button** sends a cancel signal to the active `CopilotSession`.
-
-The mental model matches VS Code Copilot Chat — same `@`-mention vocabulary, same back-and-forth rhythm. The differences: real Markdown bubbles instead of an editor diff, and context that automatically follows the active tab.
-
-## 9. v1 scope (MVP)
-
-**Phase 1 — Walking skeleton (✅ complete)**
-- Edge MV3 extension with `sidePanel` API (Lit shell, `marked` Markdown bubbles).
-- Bridge host (Node.js) using `@github/copilot-sdk`; one `CopilotClient`, one `CopilotSession`.
-- Native Messaging between extension and bridge (4-byte LE length-prefixed JSON frames; structured event model).
-- Streaming `assistant.message_delta` chunks rendered as Markdown bubbles.
-- Per-session working dir at `%LOCALAPPDATA%\AgentEdge\sessions\s-<ts>\`.
-- Dark/light theme with persistence; clean status line (`VER`, `PID`, `LIVE`).
-
-**Phase 2 — Browser context and automation (next)**
-- Implicit context: active tab URL + title prefixed to every prompt.
-- 4 AgentEdge-native tools: `get_active_tab`, `list_tabs`, `get_selection`, `get_tab_content` via `defineTool`.
-- `@page`, `@selection`, `@tabs`, `@tab:<idx>` mention parser in sidebar input.
-- `playwright-cli` integration: bridge `browser` tool shells out to the daemon; user installs Playwright MCP Bridge ext + runs `playwright-cli attach --extension` once.
-- Tabs-as-files session model: thread persists across tab switches; `+ New Chat` button.
-- Auto-allow all tool categories during this phase (approval UI deferred).
-
-**Phase 3 — Trust, whitelist, polish**
-- Inline approval cards for `write` / `shell` / `mcp` / `url` permission kinds.
-- Per-category auto-approve toggles (sticky-session-only) + master "auto-approve all" with red banner.
-- Whitelist settings panel + JSON sync + bridge enforcement (auto-deny FS outside whitelist).
-- Shell **denied by default**; toggle in settings to enable.
-- Auto-follows Edge dark/light theme (currently a manual toggle).
-
-Everything else (full `@`-mention vocabulary including `@bookmarks`/`@history`/`@cookies`, saved skill snippets, multi-window thread sync, history panel, per-folder read-vs-write granularity, BYOM, telemetry) is v2+.
-
-## 10. Security & trust
-
-| Risk | Mitigation |
-|---|---|
-| Agent writes outside intended folder | Whitelist auto-denies FS writes outside it via SDK's `onPermissionRequest`; default empty |
-| Agent runs `rm -rf /` | `shell` is denied by default; user must enable; auto-approve is sticky-session-only with header chips |
-| Agent leaks page content to third parties | Only the user's existing Copilot backend is called; no third-party API key fields |
-| Hostile page tricks the agent | Page text is delivered as content, never auto-executed; shell/write goes through approval gate |
-| Native Messaging abuse from another extension | Native Messaging manifest restricts `allowed_origins` to AgentEdge's extension ID only |
-| Auto-approve left on by accident | All toggles reset on browser restart; header chips visible during session; master toggle shows red banner |
-| SDK breaking changes (preview status) | bridge isolates the SDK behind a small interface; swap to a different agent backend later means rewriting one file |
-
-## 11. Edge Add-ons store
-
-Publishing requires:
-- Privacy policy (no data leaves the user's machine except via their own GitHub Copilot subscription).
-- Justification for each `permissions:` entry in the store listing.
-- Disclosure of the bridge (the extension cannot install it; ship a separate signed `agentedge-install.exe` that drops the bridge binary, the Native Messaging manifest, and the HKCU registry entry pointing Edge at it).
-
-**Permissions to declare:**
-```json
-{
-  "permissions": [
-    "sidePanel",
-    "nativeMessaging",
-    "tabs",
-    "activeTab",
-    "bookmarks",
-    "history",
-    "storage"
-  ],
-  "host_permissions": ["<all_urls>"],
-  "key": "<stable extension public key — pinned so the ID does not drift>"
-}
-```
-
-**Windows install notes:**
-- Native Messaging manifest installed under `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\<host_name>` (no admin required).
-- The manifest's `path` must point to a launcher (`.cmd` or `.exe`); it cannot directly invoke `node host.js`.
-- `allowed_origins` in the manifest must list the extension ID only.
-- bridge logs to **stderr only** — stdout is owned by the Native Messaging protocol.
-
-## 12. Implementation milestones
-
-**Phase 1 — walking skeleton (✅ complete)**
-1. **M1 — Hello sidebar.** Edge MV3 extension with `sidePanel`, Lit + Markdown shell, stable extension ID via manifest `key`. ✅
-2. **M2 — Bridge handshake.** Node.js bridge registered as Native Messaging host (HKCU + `.cmd` launcher). Sidebar ↔ bridge JSON frames. ✅
-3. **M3 — SDK one-shot.** Bridge wires `@github/copilot-sdk`: `CopilotClient.start()` → `createSession()` → `send({prompt})` → stream `assistant.message_delta` to sidebar. ✅
-4. **M3.5 — UI polish.** Markdown bubbles, dark/light theme toggle with persistence, clean status line, invitational empty state. ✅
-
-**Phase 2 — browser context and automation (next)**
-5. **M4 — AgentEdge-native tools.** `defineTool` for `get_active_tab`, `list_tabs`, `get_selection`, `get_tab_content`. Bridge ↔ extension RPC channel for chrome.tabs / chrome.scripting calls.
-6. **M5 — Implicit context.** Active tab URL/title prefixed to every prompt via `onPreToolUse` or system prompt prefix.
-7. **M6 — Mention parser.** `@page`, `@selection`, `@tabs`, `@tab:<idx>` autocomplete and expansion in sidebar input.
-8. **M7 — `playwright-cli` integration.** User installs Playwright MCP Bridge ext + `npm i -g @playwright/cli`. Bridge `browser` tool shells out via `playwright-cli attach --extension`. Smoke test: "summarize this PR and post a comment" end-to-end.
-9. **M8 — Session model.** `+ New Chat` button, thread persistence in `chrome.storage.local`, history list, per-thread `CopilotSession`.
-
-**Phase 3 — trust, install, ship**
-10. **M9 — Whitelist.** Settings panel + JSON config + bridge's `onPermissionRequest` auto-denies FS outside whitelist.
-11. **M10 — Approval flow.** Inline approval cards for `write` / `shell` / `mcp` / `url` permission kinds; per-category auto-approve toggles; master toggle with red banner.
-12. **M11 — Installer.** One-click signed installer that drops the bridge binary, Native Messaging manifest, HKCU entry, and prompts to install Playwright MCP Bridge ext + `@playwright/cli`.
-13. **M12 — Edge Add-ons submission.** Privacy policy, store listing, screenshots, internal review.
-
-## 13. Open questions
-
-- **Multi-window Edge:** the bridge is per-install but may be invoked by multiple sidebar instances. Plan: one `CopilotSession` per sidebar instance, multiplexed over a single `CopilotClient`. Validated at M2; revisit at M8 when threads persist.
-- **`browser` tool shape:** expose as a single shell-passthrough (`browser <argv...>`) or as N explicit `defineTool`s mirroring CLI commands? Single passthrough wins on token cost (one schema vs ~50) but loses LLM-friendly per-command parameter docs. Decision deferred to M7; start with passthrough.
-- **Skill discovery:** `playwright-cli install --skills` exposes capability files. Should the bridge auto-run that on first launch, or surface a settings toggle? Decision at M7.
-- **MCP Bridge pairing UX:** the Playwright MCP Bridge extension requires a one-time token pairing with `playwright-cli`. Document in setup, or detect-and-prompt from the sidebar?
-- **Headed vs headless default:** `playwright-cli` defaults to headless. With `attach --extension` it's irrelevant (it's the user's already-running Edge). Confirm at M7.
-- **Telemetry:** the SDK exposes `telemetry: { otlpEndpoint, ... }`. v2 question: minimum honest disclosure?
-- **Subscription detection:** how do we surface "you do not have a Copilot subscription" gracefully on first launch? SDK's `client.start()` failure mode TBD.
+### Five components
+
+| # | Component                | Tech                             | What it does                                                  |
+| - | ------------------------ | -------------------------------- | ------------------------------------------------------------- |
+| 1 | Sidebar UI               | Lit, `marked`                    | Chat surface, drawer, mentions, slash commands, debug panel   |
+| 2 | Extension layer          | `chrome.tabs/scripting/...`      | Captures browser context; mediates the bridge connection      |
+| 3 | Native Messaging bridge  | Node + `@github/copilot-sdk`     | Owns Copilot sessions, runs tools, persists state             |
+| 4 | Playwright control plane | `@playwright/cli` + MS extension | Drives the user's real Edge tab                               |
+| 5 | Config + logs            | `~/.agentedge/`, `bridge.log`    | Local-only state, optional auto-attach token, live trace      |
+
+The boundary that matters most is **(2) ↔ (3)**: a length-prefixed JSON
+channel via Edge's Native Messaging API. Everything is asynchronous; everything
+is JSON. There is no shared memory, no Web Worker, no bundled SDK in the
+extension.
 
 ---
 
-*Last updated: see git history.*
+## 3. The wire protocol
+
+The extension and bridge speak frames over Native Messaging. Each frame is a
+JSON object with a `type` discriminator. There is no schema validation today
+beyond TypeScript types — the assumption is that both sides ship together.
+
+### Extension → bridge
+
+| `type`              | Payload                                          | Purpose                                       |
+| ------------------- | ------------------------------------------------ | --------------------------------------------- |
+| `hello`             | `{ version }`                                    | Sent on connect                               |
+| `prompt`            | `{ chatId, text }`                               | Send a user message into a chat               |
+| `chat-delete`       | `{ chatId }`                                     | Tear down the bridge-side session for a chat  |
+| `tool-result`       | `{ requestId, ok, result?, error? }`             | Reply to a tool RPC from the bridge           |
+| `pw-bind`           | `{ hint? }`                                      | Spawn a new bound Playwright tab              |
+| `pw-unbind`         | `{}`                                             | Release the bound tab                         |
+| `pw-status`         | `{}`                                             | Force-refresh the bound tab snapshot          |
+
+### Bridge → extension
+
+| `type`             | Payload                                                     | Purpose                                |
+| ------------------ | ----------------------------------------------------------- | -------------------------------------- |
+| `hello`            | `{ version, pid, logFile, playwrightToken }`                | Sent on connect                        |
+| `delta`            | `{ chatId, text }`                                          | Streaming chunk                        |
+| `message`          | `{ chatId, text }`                                          | Final assistant message text           |
+| `done`             | `{ chatId }`                                                | Stream complete                        |
+| `error`            | `{ chatId, message }`                                       | Session error                          |
+| `tool-start`       | `{ chatId, toolCallId, toolName, arguments?, mcpServerName? }` | Tool call started                   |
+| `tool-progress`    | `{ chatId, toolCallId, message }`                           | Tool emitted progress                  |
+| `tool-complete`    | `{ chatId, toolCallId, success, resultPreview?, error? }`   | Tool finished                          |
+| `tool-request`     | `{ requestId, name, args }`                                 | Bridge needs a `chrome.*` lookup       |
+| `pw-status`        | `{ tab: BoundTab }`                                         | Snapshot of the bound tab              |
+| `log`              | `{ level, summary, detail? }`                               | Mirrored bridge log line               |
+
+### Frames the user sees
+
+The 🐛 panel in the sidebar mirrors every in/out frame and every `log` line.
+Click any row to expand the JSON. This is the canonical way to debug the
+system; if behaviour looks wrong, the answer is in the panel.
+
+---
+
+## 4. Sessions and chats
+
+### One client, many sessions
+
+`SessionManager` (`bridge/src/copilot-bridge.ts`) starts exactly one
+`CopilotClient` per bridge process. The first chat to send a prompt triggers
+`client.start()`; subsequent chats reuse it. Each chat id gets its own
+`CopilotSession`, lazily created and cached in a `Map<chatId, ChatHandle>`.
+
+Why per-chat sessions instead of one shared session?
+
+- **Independent context.** The model's context window is per-session. Chats
+  shouldn't bleed into each other.
+- **Independent tool state.** A `browser` tool call in chat A shouldn't
+  surface in chat B's tool card stream.
+- **Cheap to scale.** Sessions are objects, not processes. The expensive
+  thing is the client (which spawns the agent process).
+
+`getOrCreateChat(chatId)` deduplicates concurrent creates via an in-flight
+`Promise` map (`creating: Map<chatId, Promise<ChatHandle>>`). This matters when
+the user mashes Enter twice on a brand-new chat.
+
+`stop()` clears `creating` _before_ disconnecting sessions to prevent a
+just-resolved promise from attaching listeners onto a stopped client.
+
+### Working directory per chat
+
+Each chat gets its own working directory under `~/.agentedge/sessions/<safeId>/`
+where `safeId` strips chat ids down to `[a-zA-Z0-9_-]{1..64}`. This lets the
+agent's filesystem tools operate without colliding across chats.
+
+### Persistence
+
+- **Bridge side:** session state is stateless across bridge restarts (the
+  Copilot SDK manages its own sessions). The bridge does persist the bound
+  Playwright tab to `~/.agentedge/playwright-session.json` so a bridge restart
+  doesn't kill a working tab.
+- **Extension side:** `chrome.storage.local` holds the chat list, the current
+  chat id, the theme, the debug-mode flag, and quick prompts. Writes are
+  debounced (250 ms), and `disconnectedCallback` flushes any pending write
+  synchronously so a sidebar close in the debounce window doesn't lose data.
+
+---
+
+## 5. Tool model
+
+There are two flavours of tools:
+
+### Bridge-resident tools
+
+Defined in `bridge/src/tools.ts` via the SDK's `defineTool()`. They run inside
+the bridge process. `browser` is the prime example — it shells out to
+`playwright-cli` against the bound tab.
+
+### Extension-resident tools (RPC)
+
+Some context tools need `chrome.*` APIs that only exist in the extension. The
+bridge declares them as `defineTool` but their handler sends a `tool-request`
+frame back to the extension and awaits a `tool-result`. `tool-rpc.ts`
+correlates them via `requestId` and applies a 30-second timeout.
+
+The four context tools wired this way:
+
+| Tool              | What it returns                                                |
+| ----------------- | -------------------------------------------------------------- |
+| `get_active_tab`  | URL, title, tabId, windowId for the user's active tab          |
+| `list_tabs`       | Every open tab's id, url, title, active flag                   |
+| `get_selection`   | The current text selection in the active tab                   |
+| `get_tab_content` | Plain-text body of a tab (active or `tabId`-specified)         |
+
+These are also accessible to the user via mentions (see §6).
+
+---
+
+## 6. Browser context: mentions
+
+Before any prompt is sent, the extension's `expandMentions(text)` walks the
+draft and replaces tokens with the relevant context inline. The agent sees
+plain Markdown; it doesn't have to call a tool to look at what the user is
+already pointing at.
+
+| Token        | Replacement                                                       |
+| ------------ | ----------------------------------------------------------------- |
+| `@page`      | `### Active page: <title> — <url>` + plain-text body              |
+| `@selection` | The selected text in the active tab                               |
+| `@tabs`      | A `[title](url)` list of every tab                                |
+| `@tab:N`     | Same as `@page` but for the tab whose id is `N`                   |
+| `@snapshot`  | A markdown table of all tabs (id, title, url, window, active)     |
+
+This is a deliberate design choice: **tool calls are for actions, mentions are
+for context.** Pre-expanded mentions cost zero round trips and zero tool-call
+budget.
+
+---
+
+## 7. Playwright control plane
+
+The agent drives the user's real browser via the `browser` tool. Mechanics:
+
+1. The user clicks **bind** in the sidebar's footer strip.
+2. The bridge spawns `playwright-cli attach --extension=msedge` with a
+   minted `sessionId`.
+3. The Playwright MCP Bridge extension (Microsoft, separate install) shows a
+   **Connect?** dialog. The user accepts.
+4. The bridge starts polling `playwright-cli list` to track URL/title/status.
+5. Subsequent `browser` tool calls invoke `playwright-cli` with the same
+   `sessionId`, scoping every command to that tab.
+6. **unbind** kills the child process and clears the bound state.
+
+### Why one tab at a time?
+
+Earlier versions tried multi-tab attachment with marker injection to
+disambiguate which tab the model meant. It failed: the model gets confused,
+the polling overhead multiplies, and the connect dialog flow gets
+unrecoverably messy when you have three pending dialogs at once. The current
+design — one bound tab, replace on rebind — keeps the user's mental model
+("there is _the_ browser") aligned with the bridge's.
+
+### Polling loop
+
+`startPolling()` schedules a `tick` that runs `playwright-cli list`, updates
+the bound-tab snapshot, and reschedules itself. Two safety properties:
+
+- **Sessionid capture.** `tick` captures the sessionid at start. If `bindTab`
+  replaces the binding mid-await, the orphan tick bails instead of scheduling
+  a new timer onto the new binding.
+- **Adaptive interval.** 8 s when connected, 2 s while waiting for connect.
+
+### Auto-attach token
+
+The Playwright MCP Bridge extension issues a per-machine token. If the user
+captures it once and pastes it into `~/.agentedge/config.json` or sets
+`PLAYWRIGHT_MCP_EXTENSION_TOKEN`, the connect dialog is bypassed on
+subsequent binds. The token is treated as local-only (never logged in full,
+never sent over the wire).
+
+---
+
+## 8. UI architecture
+
+### Single Lit component
+
+`<agent-edge-app>` (`extension/src/main.ts`) is a single Lit component. It
+owns all UI state, the chat store, the frame handler, the tool RPC, and the
+render tree. The original sin of putting it all in one file is mitigated by:
+
+- **`styles.ts`** — the full ~860-line CSS tagged template lives there.
+- **`types.ts`** — every shared interface and constant.
+- **Section banners** in `main.ts` mark logical groupings (`// ----- chat
+  store ------`, `// ----- frame handling ------`, etc.).
+
+If the file ever needs to grow further, the natural next splits are:
+
+- A `chat-store.ts` for `loadChats` / `persistChats` / `mutateChat` etc.
+- A `mentions.ts` for `expandMentions` and friends.
+- A `slash-commands.ts` for the `handleSlashCommand` router.
+
+### State model
+
+All UI state is reactive via Lit `@state`. Two non-reactive sets carry
+runtime-only flags:
+
+- `streamingIds: Map<chatId, messageId>` — which streaming message is
+  currently being painted for which chat.
+- `cancelledChats: Set<chatId>` — soft-cancel marker; cleared on `done`.
+
+Persistence is in `chrome.storage.local` under three keys: `agentedge-chats`,
+`agentedge-current-chat`, `agentedge-theme`. Quick prompts and the debug-mode
+flag are separate keys.
+
+### Streaming
+
+The frame handler (`handleFrame`) accumulates `delta` events into the chat's
+in-progress message. If the chat id is in `cancelledChats`, deltas are
+dropped on the floor. `done` clears the streaming flag and the cancel marker.
+
+### Tool cards
+
+Each `tool-start` frame creates a `ToolCall` record on the chat's `toolCalls`
+map. The currently-streaming assistant message tracks its tool call ids in
+`toolCallIds`, so each card stays attached to the right turn even after
+several streams have completed.
+
+---
+
+## 9. Security model
+
+- **Extension ↔ bridge channel** is Edge-managed Native Messaging. Only the
+  extension whose ID matches the bridge's manifest can connect — that's why
+  we pin the extension ID via `manifest.key`.
+- **Bridge ↔ Copilot agent** uses the SDK's standard process model. Auth comes
+  from the user's existing `copilot` login.
+- **MCP servers** are loaded from `~/.copilot/mcp-config.json` — same as the
+  CLI. AgentEdge does not introduce a new MCP config surface.
+- **Playwright auto-attach token** is local-only. If present in
+  `~/.agentedge/config.json`, the bridge logs `present (auto-attach enabled)`
+  but never logs the value itself.
+- **User content** (page text, selection, tab list) is sent only when the
+  user explicitly invokes a mention or the agent calls a tool. There is no
+  background scraping.
+
+`onPermissionRequest: approveAll` is wired up: the bridge auto-approves every
+SDK permission request because in this UI the implicit consent comes from
+binding the Playwright tab. Revisit if AgentEdge ever ships outside developer
+mode.
+
+---
+
+## 10. Lifecycle and cleanup
+
+These are easy to get wrong; they are documented here so we don't lose them.
+
+### Bridge
+
+- `host.ts` listens for `disconnect` and calls `SessionManager.stop()`.
+- `stop()` rejects all in-flight RPCs, clears the `creating` map (so just-
+  resolved sessions don't attach to a dead client), disconnects every cached
+  `CopilotSession`, and clears the `client` and `starting` refs.
+- `sessions.ts` keeps the bound Playwright child until the user explicitly
+  unbinds. Rebinding without unbinding does the right thing — it kills the
+  prior child first.
+
+### Extension
+
+`disconnectedCallback`:
+
+- Unsubscribes from `nativeBridge` message and disconnect events.
+- Removes the global `keydown` listener.
+- **Flushes** the pending `persistChats` debounce synchronously before
+  clearing the timer, so a sidebar close in the 250 ms write window doesn't
+  lose state.
+
+### Tabs being deleted
+
+`deleteChat`:
+
+- Removes from `streamingIds` and `cancelledChats` (otherwise the cancel set
+  leaks deleted ids forever).
+- Sends `chat-delete` to the bridge, which disconnects that chat's session.
+- Confirmation prompt to avoid Ctrl+Backspace mishaps.
+
+---
+
+## 11. Build, install, and runtime
+
+### Setup script
+
+`setup.ps1` is the one-shot install. It runs:
+
+1. `npm ci` in both projects (or `npm install` if no lockfile).
+2. `npm run build` in both projects.
+3. The bridge ping smoke test (sends a `hello` frame, expects a `hello`
+   reply).
+4. Native Messaging host registration (writes the manifest to the registry).
+
+`setup.ps1 -Uninstall` reverses steps 4. The user removes the unpacked
+extension manually.
+
+### Extension build
+
+`vite build` produces `dist/sidebar.js` (~150 kB) plus `dist/background.js`
+and `dist/sidebar.html`. Vite is configured to inline the entry HTML
+references. The extension's `manifest.json` carries a stable RSA `key` so the
+extension ID never drifts.
+
+### Bridge build
+
+Plain `tsc -p .`. Output goes to `bridge/dist/`. `launcher.cmd` is the entry
+point referenced by the Native Messaging manifest; it just shells to `node`.
+
+### Runtime layout
+
+| Path                                          | Contents                                       |
+| --------------------------------------------- | ---------------------------------------------- |
+| `~/.agentedge/config.json`                    | Optional Playwright token, future settings     |
+| `~/.agentedge/sessions/<chatId>/`             | Per-chat Copilot working directory             |
+| `~/.agentedge/playwright-session.json`        | Persisted bound tab snapshot                   |
+| `%LOCALAPPDATA%\AgentEdge\bridge.log`         | Append-only bridge log                         |
+| `chrome.storage.local`                        | Extension state (chats, theme, prompts, debug) |
+
+---
+
+## 12. Things deliberately out of scope
+
+- **Multiple browsers bound at once.** Tried; failed on UX grounds (see §7).
+- **Cross-machine sync.** No cloud means no sync. Use the export-to-Markdown
+  flow if you want to move a conversation.
+- **Custom agent definitions.** AgentEdge ships one custom agent
+  (`.github/agents/agentedge.agent.md`). The user can edit it, but there is
+  no UI for managing multiple.
+- **Telemetry.** None.
+- **Public marketplace listing.** Not until the project graduates from
+  developer-mode loading.

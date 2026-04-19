@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AgentEdge",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "GitHub Copilot CLI in your Edge sidebar",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr3JYodKH31+2ITOSoOAclwRp7MeczRFdBNB+d2fT3FJcu4xXNgTn6QO/+ou7vgoYESawif1RCszROWUqOxv6mj//R5UdSMxWI883JoSOzFG73CCb6yYM5Gxm3WjM93WtQ44IZPlSRtJo+IupHEjPVG0wC9g1rdp8cD4E/ZB/mvWw6HdHPsL4TGC6Ky+BarrpQw46dGtQKJ1+iIQfINORaY3IMQBear45FFDy4kcy/Xl+WNAzYoDqljA5bqH9GloauBdlLqSxs56dLUrbI0Ae2U4tBPYTzwbMc3heFUZ5CVqg3cn3s58pSlFdEXj58SbTg/5/CWISMZysUFU3aKaiPwIDAQAB",
   "icons": {
@@ -12,6 +12,6 @@
   "action": { "default_title": "Open AgentEdge" },
   "side_panel": { "default_path": "sidebar.html" },
   "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage"],
-  "host_permissions": []
+  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"]
 }

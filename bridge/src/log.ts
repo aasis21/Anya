@@ -3,6 +3,15 @@ import { join } from 'node:path';
 
 type Level = 'info' | 'warn' | 'error';
 
+export type LogSink = (entry: { ts: string; level: Level; message: string }) => void;
+
+let sink: LogSink | null = null;
+let inSink = false;
+
+export function setLogSink(fn: LogSink | null): void {
+  sink = fn;
+}
+
 const logFilePath: string | null = (() => {
   const base = process.env.LOCALAPPDATA;
   if (!base) return null;
@@ -15,7 +24,11 @@ const logFilePath: string | null = (() => {
   }
 })();
 
-function format(level: Level, args: unknown[]): string {
+export function getLogFilePath(): string | null {
+  return logFilePath;
+}
+
+function format(level: Level, args: unknown[]): { ts: string; line: string; message: string } {
   const ts = new Date().toISOString();
   const parts = args.map((a) => {
     if (a instanceof Error) return a.stack ?? a.message;
@@ -26,11 +39,12 @@ function format(level: Level, args: unknown[]): string {
       return String(a);
     }
   });
-  return `[${ts}] [${level}] ${parts.join(' ')}`;
+  const message = parts.join(' ');
+  return { ts, line: `[${ts}] [${level}] ${message}`, message };
 }
 
 function emit(level: Level, args: unknown[]): void {
-  const line = format(level, args);
+  const { ts, line, message } = format(level, args);
   try {
     process.stderr.write(line + '\n');
   } catch {
@@ -41,6 +55,16 @@ function emit(level: Level, args: unknown[]): void {
       appendFileSync(logFilePath, line + '\n', 'utf8');
     } catch {
       // ignore logfile failures
+    }
+  }
+  if (sink && !inSink) {
+    inSink = true;
+    try {
+      sink({ ts, level, message });
+    } catch {
+      // never let a sink failure break the bridge
+    } finally {
+      inSink = false;
     }
   }
 }

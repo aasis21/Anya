@@ -1,35 +1,102 @@
 import { NativeMessagingTransport } from './native-messaging.js';
 import { CopilotBridge } from './copilot-bridge.js';
-import { error, log, warn } from './log.js';
+import { error, getLogFilePath, log, setLogSink, warn } from './log.js';
+import { getConfigPath } from './config.js';
+import {
+  bindTab,
+  getBoundTab,
+  getBoundTabFile,
+  loadFromDisk,
+  setTabResolver,
+  shutdown,
+  unbindTab,
+} from './sessions.js';
 
 const transport = new NativeMessagingTransport();
 const copilot = new CopilotBridge();
 
-log('bridge started; pid=', process.pid);
+setLogSink((entry) => {
+  try {
+    transport.send({ type: 'log', ts: entry.ts, level: entry.level, message: entry.message });
+  } catch {
+    // never throw from the log sink
+  }
+});
 
-// Greet the extension immediately so its UI can flip to "connected"
-// without having to wait for the user's first message.
-transport.send({ type: 'hello', version: '0.0.1', pid: process.pid });
+log('bridge started; pid=', process.pid, 'logFile=', getLogFilePath() ?? '(none)');
+log('config:', getConfigPath());
+
+transport.send({
+  type: 'hello',
+  version: '0.0.3',
+  pid: process.pid,
+  logFile: getLogFilePath(),
+});
+
+log('bound-tab store:', getBoundTabFile());
+setTabResolver(async (sid, opts) => {
+  try {
+    const result = await copilot.callExtension<{
+      tabId?: number; url?: string; title?: string; windowId?: number;
+      ambiguous?: boolean; candidates?: number; method?: 'url' | 'marker';
+    } | null>('resolve_pw_tab', { sid, url: opts.url, title: opts.title, useMarker: opts.useMarker });
+    return result ?? null;
+  } catch (err) {
+    warn('tabResolver: resolve_pw_tab failed for', sid, err);
+    return null;
+  }
+});
+void loadFromDisk().catch((err) => warn('sessions: loadFromDisk failed:', err));
 
 copilot.onEvent((event) => {
   switch (event.type) {
     case 'delta':
-      transport.send({ type: 'delta', text: event.text });
+      transport.send({ type: 'delta', chatId: event.chatId, text: event.text });
       break;
     case 'message':
-      transport.send({ type: 'message', text: event.text });
+      log('→ message', event.chatId, `(${event.text.length} chars)`);
+      transport.send({ type: 'message', chatId: event.chatId, text: event.text });
       break;
     case 'done':
-      transport.send({ type: 'done' });
+      log('→ done', event.chatId);
+      transport.send({ type: 'done', chatId: event.chatId });
       break;
     case 'error':
-      transport.send({ type: 'error', message: event.message });
+      log('→ error', event.chatId, event.message);
+      transport.send({ type: 'error', chatId: event.chatId, message: event.message });
       break;
-    case 'permission-denied':
+    case 'tool-request':
+      log('→ tool-request', event.tool, 'id=', event.id);
+      transport.send({ type: 'tool-request', id: event.id, tool: event.tool, args: event.args });
+      break;
+    case 'tool-start':
+      log('→ tool-start', event.toolName, 'id=', event.toolCallId, 'chat=', event.chatId);
       transport.send({
-        type: 'permission-denied',
-        kind: event.kind,
-        message: `Permission '${event.kind}' is denied in Phase 1.`,
+        type: 'tool-start',
+        chatId: event.chatId,
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        arguments: event.arguments,
+        mcpServerName: event.mcpServerName,
+      });
+      break;
+    case 'tool-progress':
+      transport.send({
+        type: 'tool-progress',
+        chatId: event.chatId,
+        toolCallId: event.toolCallId,
+        message: event.message,
+      });
+      break;
+    case 'tool-complete':
+      log('→ tool-complete', event.toolCallId, 'success=', event.success);
+      transport.send({
+        type: 'tool-complete',
+        chatId: event.chatId,
+        toolCallId: event.toolCallId,
+        success: event.success,
+        resultPreview: event.resultPreview,
+        error: event.error,
       });
       break;
   }
@@ -38,11 +105,16 @@ copilot.onEvent((event) => {
 interface IncomingFrame {
   type?: string;
   text?: string;
+  chatId?: string;
   [key: string]: unknown;
 }
 
 transport.onFrame(async (raw) => {
   const frame = (raw ?? {}) as IncomingFrame;
+  log('← frame', frame.type ?? '(no type)',
+    frame.type === 'prompt' ? `chat=${frame.chatId} (${(frame.text as string | undefined)?.length ?? 0} chars)`
+    : frame.type === 'tool-response' ? `id=${frame.id} ok=${frame.ok}`
+    : '');
   switch (frame.type) {
     case 'ping':
       transport.send({ type: 'pong' });
@@ -55,17 +127,69 @@ transport.onFrame(async (raw) => {
       break;
     case 'prompt': {
       const text = typeof frame.text === 'string' ? frame.text : '';
+      const chatId = typeof frame.chatId === 'string' ? frame.chatId : 'default';
       if (!text) {
-        transport.send({ type: 'error', message: 'prompt frame requires non-empty text' });
+        transport.send({ type: 'error', chatId, message: 'prompt frame requires non-empty text' });
         return;
       }
       try {
-        await copilot.sendPrompt(text);
+        await copilot.sendPrompt(chatId, text);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         error('prompt failed:', err);
-        transport.send({ type: 'error', message: msg });
+        transport.send({ type: 'error', chatId, message: msg });
       }
+      break;
+    }
+    case 'chat-delete': {
+      const chatId = typeof frame.chatId === 'string' ? frame.chatId : '';
+      if (!chatId) return;
+      await copilot.deleteChat(chatId);
+      transport.send({ type: 'chat-deleted', chatId });
+      break;
+    }
+    case 'stop': {
+      const chatId = typeof frame.chatId === 'string' ? frame.chatId : '';
+      if (!chatId) {
+        warn('stop frame missing chatId');
+        return;
+      }
+      const ok = await copilot.abortChat(chatId);
+      transport.send({ type: 'stopped', chatId, ok });
+      break;
+    }
+    case 'tool-response': {
+      const id = typeof frame.id === 'string' ? frame.id : '';
+      if (!id) {
+        warn('tool-response missing id');
+        return;
+      }
+      copilot.handleToolResponse({
+        id,
+        ok: frame.ok === true,
+        result: frame.result,
+        error: typeof frame.error === 'string' ? frame.error : undefined,
+      });
+      break;
+    }
+    case 'pw-status': {
+      transport.send({
+        type: 'pw-status-result',
+        ok: true,
+        boundTab: getBoundTab(),
+        stateFile: getBoundTabFile(),
+      });
+      break;
+    }
+    case 'pw-bind': {
+      const hint = typeof frame.hint === 'string' ? frame.hint : undefined;
+      const tab = bindTab({ hint });
+      transport.send({ type: 'pw-bind-result', ok: true, boundTab: tab });
+      break;
+    }
+    case 'pw-unbind': {
+      const ok = await unbindTab();
+      transport.send({ type: 'pw-unbind-result', ok, boundTab: null });
       break;
     }
     default:
@@ -76,6 +200,7 @@ transport.onFrame(async (raw) => {
 
 transport.onClose(() => {
   log('transport closed; shutting down');
+  shutdown();
   void copilot.stop().finally(() => process.exit(0));
 });
 
@@ -83,9 +208,7 @@ process.on('uncaughtException', (err) => {
   error('uncaughtException:', err);
   try {
     transport.send({ type: 'error', message: `uncaughtException: ${err.message}` });
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
   process.exit(1);
 });
 
@@ -94,8 +217,6 @@ process.on('unhandledRejection', (reason) => {
   error('unhandledRejection:', reason);
   try {
     transport.send({ type: 'error', message: `unhandledRejection: ${msg}` });
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
   process.exit(1);
 });
