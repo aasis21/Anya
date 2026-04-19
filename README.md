@@ -115,18 +115,37 @@ loaded by `bridge/src/copilot-bridge.ts`.
 - _Optional, for browser automation:_ `npm i -g @playwright/cli` and the
   Playwright MCP Bridge extension in your browser.
 
-### One-shot setup (recommended)
+### One-line install (recommended)
+
+PowerShell 7+ on Windows, macOS, or Linux:
+
+```pwsh
+iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
+```
+
+This clones the repo to `~/Anya` and runs `setup.ps1` for you. To customise:
+
+```pwsh
+& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) `
+    -InstallDir D:\code\Anya -Branch main -Browsers edge,chrome
+```
+
+### Manual setup
 
 Pick whichever entry point you prefer — both do the same work and produce
 the same result:
 
 ```pwsh
 # PowerShell 7+ — Windows, macOS, or Linux
+git clone https://github.com/aasis21/Anya.git
+cd Anya
 .\setup.ps1
 ```
 
 ```sh
 # bash — Windows (Git Bash / MSYS2 / Cygwin), macOS, or Linux
+git clone https://github.com/aasis21/Anya.git
+cd Anya
 ./setup.sh
 ```
 

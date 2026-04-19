@@ -170,29 +170,29 @@
 <section id="install" class="install">
   <header class="section-head">
     <span class="kicker">03 · Install</span>
-    <h2>One script. Any Chromium.</h2>
-    <p class="section-lede">Requires Node 20+, a Chromium browser with developer-mode extensions, and a logged-in Copilot CLI.</p>
+    <h2>One line. Any Chromium.</h2>
+    <p class="section-lede">Requires PowerShell 7+, Node 20+, git, and a Chromium browser with developer-mode extensions.</p>
   </header>
 
   <div class="install-grid">
     <div class="terminal">
       <div class="terminal-bar">
         <span class="t-dot"></span><span class="t-dot"></span><span class="t-dot"></span>
-        <span class="t-title">~/Anya — pwsh</span>
+        <span class="t-title">pwsh</span>
       </div>
-      <pre class="terminal-body"><span class="prompt">$</span> git clone https://github.com/aasis21/Anya.git
-<span class="prompt">$</span> cd Anya
-<span class="prompt">$</span> ./setup.ps1                <span class="comment"># or ./setup.sh</span>
+      <pre class="terminal-body"><span class="comment"># one-liner — clones to ~/Anya and sets everything up</span>
+<span class="prompt">&gt;</span> iwr -useb <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1</span> | iex
 
-<span class="comment">› installing extension/</span>
-<span class="comment">› installing bridge/</span>
+<span class="comment">› cloning aasis21/Anya → ~/Anya</span>
+<span class="comment">› building bridge/  ✓</span>
+<span class="comment">› building extension/  ✓</span>
 <span class="comment">› bridge ping → PONG</span>
 <span class="comment">› registered native-messaging host for:</span>
    ✓ Microsoft Edge
    ✓ Google Chrome
    ✓ Brave
 
-<span class="ok">done.</span> load <span class="highlight">extension/dist</span> in your browser.
+<span class="ok">done.</span> load <span class="highlight">~/Anya/extension/dist</span> in your browser.
 </pre>
     </div>
 
@@ -208,10 +208,14 @@
 
       <h4>Switches</h4>
       <table class="switches">
-        <tr><td><code>--browsers edge,chrome</code></td><td>register a subset</td></tr>
-        <tr><td><code>--quiet</code></td><td>install everything detected</td></tr>
-        <tr><td><code>--uninstall</code></td><td>remove host entries</td></tr>
+        <tr><td><code>-InstallDir &lt;path&gt;</code></td><td>where to clone (default <code>~/Anya</code>)</td></tr>
+        <tr><td><code>-Branch &lt;name&gt;</code></td><td>track a non-main branch</td></tr>
+        <tr><td><code>-Browsers edge,chrome</code></td><td>register a subset</td></tr>
       </table>
+
+      <h4>Manual</h4>
+      <pre class="mini"><span class="prompt">&gt;</span> git clone https://github.com/aasis21/Anya
+<span class="prompt">&gt;</span> cd Anya; ./setup.ps1   <span class="comment"># or ./setup.sh</span></pre>
     </aside>
   </div>
 </section>

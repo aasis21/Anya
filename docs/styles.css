@@ -598,6 +598,20 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .switches td:first-child { width: 55%; padding-right: 16px; }
 .switches tr:last-child td { border-bottom: 1px solid var(--rule); }
 
+.install-side .mini {
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font: 12px/1.7 var(--font-mono);
+  color: var(--bone-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.install-side .mini .prompt { color: var(--accent); margin-right: 8px; }
+.install-side .mini .comment { color: var(--bone-dim); }
+
 /* ─── quote ───────────────────────────────────────────── */
 .quote {
   max-width: 920px;
