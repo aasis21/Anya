@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Anya — Privacy Policy</title>
+<meta name="description" content="What Anya collects, where it goes, and what it does on your machine. Spoiler: nothing leaves your device that GitHub Copilot doesn't already see." />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="./index.html" aria-label="Anya">
+    <span class="brand-mark">A</span>
+    <span class="brand-word">Anya</span>
+  </a>
+  <nav class="nav-links">
+    <a href="./index.html">home</a>
+    <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">github ↗</a>
+  </nav>
+</header>
+
+<main id="top" style="max-width: 760px; margin: 0 auto; padding: 4rem 2rem;">
+
+<h1 style="font-family: 'Fraunces', serif; font-size: 3rem; margin-bottom: 0.5rem;">Privacy Policy</h1>
+<p style="opacity: 0.65; margin-bottom: 3rem;">Last updated: 2025-04-01</p>
+
+<h2>The short version</h2>
+<p>
+  Anya is a browser extension plus a local Node "bridge" that runs on your machine.
+  It <strong>does not have a server</strong>. There is no Anya backend, no telemetry,
+  no analytics, no crash reporter, no remote config. Every byte the extension produces
+  stays on your device, with two exceptions you opt into by using the product:
+</p>
+<ol>
+  <li>Your prompts and the page context you attach are sent to <strong>GitHub Copilot's API</strong>
+      via the official <code>@github/copilot-sdk</code>, under your existing GitHub Copilot subscription.</li>
+  <li>If you ask Anya to fetch or open a URL, your browser fetches that URL — same as if you'd typed it in.</li>
+</ol>
+
+<h2>What Anya stores locally</h2>
+<table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+  <thead>
+    <tr style="border-bottom: 1px solid currentColor;">
+      <th style="text-align:left; padding: 0.5rem;">Where</th>
+      <th style="text-align:left; padding: 0.5rem;">What</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="padding: 0.5rem;"><code>chrome.storage.local</code></td><td style="padding: 0.5rem;">Chats, settings, pinned tabs.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>%LOCALAPPDATA%\Anya\</code> (Windows)<br/><code>~/Library/Application Support/Anya/</code> (macOS)<br/><code>~/.local/share/Anya/</code> (Linux)</td><td style="padding: 0.5rem;">Bridge state: per-chat working dir, Playwright binding, log file.</td></tr>
+  </tbody>
+</table>
+<p>Both locations are on your machine. Uninstalling the extension removes <code>chrome.storage.local</code>; running the uninstall script removes the bridge data dir.</p>
+
+<h2>Data Anya can read (and why)</h2>
+<ul>
+  <li><strong>Active tab content / DOM</strong> — only when you ask. Used to summarise pages, extract selections, drive forms via Playwright.</li>
+  <li><strong>Open tabs (titles + URLs)</strong> — only when you reference them (e.g. <code>@tabs</code> or "diff what I have open"). The list never leaves your machine unless you submit it as part of a prompt.</li>
+  <li><strong>Bookmarks</strong> — only when you reference a workflow ("open the order release page") or ask Anya to reorganise. Anya never modifies bookmarks without your explicit confirmation.</li>
+  <li><strong>Clipboard</strong> — read only when you type <code>@clipboard</code> in a prompt.</li>
+  <li><strong>Local files</strong> — only when you point Anya at a project folder. The bridge spawns the same SDK toolbelt the terminal Copilot uses (read/edit/grep/shell). Files are never sent anywhere except as context to Copilot's API in turns where you reference them.</li>
+</ul>
+
+<h2>Data sent to GitHub Copilot</h2>
+<p>
+  Your messages and any context you attach (page text, selections, tab listings,
+  file contents you reference, screenshots) are sent to GitHub Copilot's API
+  through the official <code>@github/copilot-sdk</code>. Copilot's handling of
+  that data is governed by
+  <a href="https://docs.github.com/en/site-policy/privacy-policies/github-copilot-product-specific-terms" target="_blank" rel="noopener">GitHub's Copilot privacy terms</a>,
+  not by this document.
+</p>
+<p>
+  Authentication is your existing GitHub Copilot OAuth flow — Anya never sees
+  your password and stores no GitHub tokens of its own beyond what the SDK keeps.
+</p>
+
+<h2>What Anya does <em>not</em> do</h2>
+<ul>
+  <li>No analytics, telemetry, crash reporting, or A/B testing.</li>
+  <li>No remote config — the agent's behavior is fully determined by the code you can read on GitHub.</li>
+  <li>No cloud sync of chats, bookmarks, or settings.</li>
+  <li>No background reading of pages you haven't interacted with.</li>
+  <li>No selling, sharing, or transferring your data — there is no Anya company. The author is one engineer; the project is open source under the repo's license.</li>
+</ul>
+
+<h2>Permissions in plain English</h2>
+<table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+  <thead>
+    <tr style="border-bottom: 1px solid currentColor;">
+      <th style="text-align:left; padding: 0.5rem;">Permission</th>
+      <th style="text-align:left; padding: 0.5rem;">Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="padding: 0.5rem;"><code>nativeMessaging</code></td><td style="padding: 0.5rem;">Talk to the local Node bridge. The whole product depends on it.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>sidePanel</code></td><td style="padding: 0.5rem;">Render the Anya sidebar.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>tabs</code> + <code>activeTab</code></td><td style="padding: 0.5rem;">List tabs, get the active tab URL/title, focus tabs you ask for.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>scripting</code></td><td style="padding: 0.5rem;">Inject the Readability extractor on demand and run Playwright commands against a tab you bind.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>storage</code></td><td style="padding: 0.5rem;">Persist your chats and preferences locally.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>bookmarks</code></td><td style="padding: 0.5rem;">Search and (with confirmation) reorganise your bookmarks.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>clipboardRead</code></td><td style="padding: 0.5rem;">Read the clipboard only when you type <code>@clipboard</code>.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>&lt;all_urls&gt;</code></td><td style="padding: 0.5rem;">Required to read or drive a tab on any site you ask Anya to work with.</td></tr>
+  </tbody>
+</table>
+
+<h2>Children</h2>
+<p>Anya is a developer tool; it is not directed at children under 13.</p>
+
+<h2>Changes</h2>
+<p>
+  This policy may change as the product evolves. Material changes will be
+  reflected in the "Last updated" date above and called out in the GitHub
+  release notes.
+</p>
+
+<h2>Contact</h2>
+<p>
+  Open an issue on <a href="https://github.com/aasis21/Anya/issues" target="_blank" rel="noopener">github.com/aasis21/Anya</a>.
+</p>
+
+</main>
+
+</body>
+</html>

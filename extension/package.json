@@ -1,14 +1,15 @@
 {
   "name": "anya-extension",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Anya Edge sidebar extension (Lit + xterm.js)",
+  "description": "Anya Chromium sidebar extension (Lit)",
   "scripts": {
     "prebuild": "node scripts/gen-icons.js",
     "build": "vite build",
     "dev": "vite build --watch",
-    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\""
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
+    "package:store": "node scripts/package-store.js"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

@@ -221,6 +221,50 @@ In each:
   without involving the Copilot SDK.
 - Type a real prompt → streamed response with inline tool cards.
 
+### Updating
+
+Run the same one-liner you used to install:
+
+```pwsh
+irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aasis21/Anya/main/install.sh | bash
+```
+
+If the repo already exists at `~/Anya`, the installer pulls the latest
+changes (`git pull --ff-only`) and re-runs `setup.ps1` to rebuild
+everything. Same command to install and update.
+
+If you cloned manually for development:
+
+```pwsh
+cd Anya
+git pull
+.\setup.ps1
+```
+
+After updating, reload the extension in your browser
+(`edge://extensions` → Reload).
+
+### Uninstalling
+
+```pwsh
+# Remove bridge registration from all browsers
+cd ~/Anya
+.\setup.ps1 -Uninstall
+```
+
+```bash
+cd ~/Anya
+./setup.sh --uninstall
+```
+
+This removes the Native Messaging registry entries / manifest files.
+Then manually remove the unpacked extension from your browser and
+delete the `~/Anya` folder if you no longer need it.
+
 
 ---
 
