@@ -362,6 +362,18 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   background: var(--surface-1);
 }
 
+.hero-tagline {
+  margin-top: 56px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ash);
+  max-width: 640px;
+}
+.hero-tagline span {
+  color: var(--bone);
+}
+
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
