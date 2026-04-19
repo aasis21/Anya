@@ -173,6 +173,31 @@ export const sidebarStyles = css`
       text-transform: uppercase;
     }
 
+    /* Offline banner when bridge is not connected */
+    .offline-banner { padding-top: 80px; }
+    .offline-title {
+      display: block;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .offline-hint {
+      display: block;
+      color: var(--fg-dim);
+      font-size: 11px;
+      line-height: 1.6;
+      letter-spacing: 0.04em;
+    }
+    .offline-hint code {
+      background: var(--bg-bubble);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+    }
+
     .msg {
       padding: 4px 14px 14px;
       animation: slideIn 180ms ease-out;

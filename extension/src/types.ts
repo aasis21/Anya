@@ -71,6 +71,9 @@ export interface Chat {
   pinned?: boolean;
   /** Free-form labels for the tag filter bar. */
   tags?: string[];
+  /** Local folder path — when set, the bridge uses this as the SDK workingDirectory
+   *  so skills, prompts, and .copilot-instructions.md are loaded from the repo. */
+  cwd?: string;
 }
 
 /**

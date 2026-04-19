@@ -1,9 +1,10 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname } from 'node:path';
+import { logFile } from './paths.js';
 
 type Level = 'info' | 'warn' | 'error';
 
-export type LogSink = (entry: { ts: string; level: Level; message: string }) => void;
+type LogSink = (entry: { ts: string; level: Level; message: string }) => void;
 
 let sink: LogSink | null = null;
 let inSink = false;
@@ -13,12 +14,10 @@ export function setLogSink(fn: LogSink | null): void {
 }
 
 const logFilePath: string | null = (() => {
-  const base = process.env.LOCALAPPDATA;
-  if (!base) return null;
   try {
-    const dir = join(base, 'Anya');
-    mkdirSync(dir, { recursive: true });
-    return join(dir, 'bridge.log');
+    const path = logFile();
+    mkdirSync(dirname(path), { recursive: true });
+    return path;
   } catch {
     return null;
   }

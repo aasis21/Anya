@@ -142,8 +142,9 @@ transport.onFrame(async (raw) => {
         transport.send({ type: 'error', chatId, message: 'prompt frame requires non-empty text or attachments' });
         return;
       }
+      const cwd = typeof frame.cwd === 'string' && frame.cwd.trim() ? frame.cwd.trim() : undefined;
       try {
-        await copilot.sendPrompt(chatId, text, attachments.length ? attachments : undefined);
+        await copilot.sendPrompt(chatId, text, attachments.length ? attachments : undefined, cwd);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         error('prompt failed:', err);

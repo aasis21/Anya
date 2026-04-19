@@ -3,7 +3,7 @@
 > github copilot for your browser. powered by the copilot sdk.
 
 Anya is an MV3 sidebar extension for any Chromium-based browser — Edge, Chrome,
-Chromium, Brave, Vivaldi — that talks to a local Node bridge wrapping
+Chromium, Brave, Vivaldi, Arc — that talks to a local Node bridge wrapping
 [`@github/copilot-sdk`]. The result is the same agentic Copilot you run in your
 terminal — streaming output, tool calls, MCP servers — sitting next to your
 tabs, with a side helping of browser automation via Playwright.
@@ -50,10 +50,11 @@ See [`design.md`](./design.md) for the full architecture.
 ## Repo layout
 
 ```
-Anya/                              # repo dir name is still "AgentEdge" on disk
+Anya/
 ├── README.md
 ├── design.md                     # full design spec
-├── setup.ps1                     # one-shot install/build/test/register
+├── setup.ps1                     # one-shot install/build/test/register (PowerShell 7+)
+├── setup.sh                      # one-shot install/build/test/register (bash, cross-platform)
 ├── extension/                    # Chromium MV3 extension (Lit + Vite)
 │   ├── manifest.json
 │   ├── sidebar.html
@@ -66,9 +67,12 @@ Anya/                              # repo dir name is still "AgentEdge" on disk
 │       └── background.ts         # opens the side panel on action click
 └── bridge/                       # Node Native Messaging host
     ├── manifest.template.json
-    ├── launcher.cmd
-    ├── install.ps1               # multi-Chromium HKCU registration
+    ├── launcher.cmd              # Windows launcher
+    ├── launcher.sh               # POSIX launcher (macOS/Linux)
+    ├── install.ps1               # multi-Chromium NM registration (cross-platform, PS 7+)
     ├── uninstall.ps1
+    ├── install.sh                # multi-Chromium NM registration (bash, cross-platform)
+    ├── uninstall.sh
     └── src/
         ├── host.ts               # NM stdio loop + frame router
         ├── copilot-bridge.ts     # SessionManager (one Copilot session per chat)
@@ -77,6 +81,7 @@ Anya/                              # repo dir name is still "AgentEdge" on disk
         ├── tool-rpc.ts           # bridge → extension tool RPC
         ├── native-messaging.ts   # length-prefixed JSON framing
         ├── config.ts             # ~/.anya/config.json loader
+        ├── paths.ts              # cross-platform data-dir resolver
         └── log.ts                # bridge.log + debug-mirror sink
 ```
 
@@ -92,23 +97,37 @@ loaded by `bridge/src/copilot-bridge.ts`.
 
 ### Requirements
 
-- **Windows** with PowerShell 5.1+ (the install scripts are PowerShell; the
-  rest of the codebase is OS-agnostic but the Native Messaging registration
-  layer is Windows-only today).
+- **Windows, macOS, or Linux**
 - **Node 20+** (`node -v`)
-- **A Chromium-based browser** with developer-mode extensions enabled. Anya is
-  installed and tested in: **Microsoft Edge, Google Chrome, Chromium, Brave,
-  Vivaldi**. Any other Chromium-based browser that registers under
-  `HKCU:\Software\<vendor>\<browser>\NativeMessagingHosts\` should also work
-  — pass the registry root via a one-line tweak to `install.ps1`.
+- A shell to drive the installer:
+  - **PowerShell 7+** (`pwsh`) on any OS — runs `setup.ps1`. Comes with
+    Windows 11 / Server 2022; on macOS/Linux: `brew install powershell` /
+    [microsoft.com/powershell].
+  - **bash** — runs `setup.sh`. Native on macOS/Linux. On Windows use Git
+    Bash, MSYS2, or Cygwin (any of these ship `cygpath` and `reg.exe` is
+    on `PATH`). Inside WSL, `setup.sh` will install for browsers running
+    **inside WSL** — to register Windows-host browsers from WSL, invoke
+    `setup.ps1` via `pwsh.exe`/`cmd.exe` interop instead.
+- **A Chromium-based browser** with developer-mode extensions enabled. Anya
+  is installed and tested in: **Microsoft Edge, Google Chrome, Chromium,
+  Brave, Vivaldi, Arc** (Arc is Windows + macOS only — no Linux build).
 - A logged-in **Copilot CLI** (`copilot auth status`)
 - _Optional, for browser automation:_ `npm i -g @playwright/cli` and the
   Playwright MCP Bridge extension in your browser.
 
 ### One-shot setup (recommended)
 
+Pick whichever entry point you prefer — both do the same work and produce
+the same result:
+
 ```pwsh
+# PowerShell 7+ — Windows, macOS, or Linux
 .\setup.ps1
+```
+
+```sh
+# bash — Windows (Git Bash / MSYS2 / Cygwin), macOS, or Linux
+./setup.sh
 ```
 
 This runs `npm install` + `npm run build` for both projects, the bridge ping
@@ -117,12 +136,28 @@ browser detected on the machine** and prints the per-browser load
 instructions. If multiple browsers are present you'll get an interactive
 picker.
 
-| Switch              | Effect                                                              |
-| ------------------- | ------------------------------------------------------------------- |
-| `-Browsers edge`    | Register only for the named browser(s). Valid: `edge`, `chrome`, `chromium`, `brave`, `vivaldi`, `all`. |
-| `-Quiet`            | Skip the interactive picker; install for everything detected.       |
-| `-SkipTest`         | Skip the bridge ping/pong smoke test.                               |
-| `-Uninstall`        | Remove the registry entries + manifest from every Chromium browser (and clean up legacy `com.agentedge.bridge` entries from earlier versions). |
+| Switch (`setup.ps1`)| Flag (`setup.sh`)        | Effect                                                              |
+| ------------------- | ------------------------ | ------------------------------------------------------------------- |
+| `-Browsers edge`    | `--browsers edge`        | Register only for the named browser(s). Valid: `edge`, `chrome`, `chromium`, `brave`, `vivaldi`, `arc`, `all`. |
+| `-Quiet`            | `--quiet`                | Skip the interactive picker; install for everything detected.       |
+| `-SkipTest`         | `--skip-test`            | Skip the bridge ping/pong smoke test.                               |
+| `-Uninstall`        | `--uninstall`            | Remove the NM host entries from every Chromium browser. |
+
+### How registration works on each OS
+
+| OS      | Mechanism      | Where                                                                                  |
+| ------- | -------------- | -------------------------------------------------------------------------------------- |
+| Windows | HKCU registry  | `HKCU:\Software\<vendor>\<browser>\NativeMessagingHosts\com.anya.bridge` → manifest    |
+| macOS   | File drop      | `~/Library/Application Support/<vendor>/<browser>/NativeMessagingHosts/com.anya.bridge.json` |
+| Linux   | File drop      | `~/.config/<vendor>/<browser>/NativeMessagingHosts/com.anya.bridge.json`               |
+
+Bridge runtime data lives at:
+
+| OS      | Path                                             |
+| ------- | ------------------------------------------------ |
+| Windows | `%LOCALAPPDATA%\Anya\`                           |
+| macOS   | `~/Library/Application Support/Anya/`            |
+| Linux   | `${XDG_DATA_HOME:-~/.local/share}/Anya/`         |
 
 ### Load the extension in each browser
 
@@ -138,6 +173,7 @@ is granted Native Messaging access in every browser.
 | Brave     | `brave://extensions`    |
 | Vivaldi   | `vivaldi://extensions`  |
 | Chromium  | `chrome://extensions`   |
+| Arc       | `arc://extensions`      |
 
 In each:
 
@@ -333,7 +369,13 @@ cd extension && npm run dev      # Vite watches src/
 cd bridge    && npm run build    # tsc; rerun after .ts changes
 ```
 
-Logs go to `%LOCALAPPDATA%\Anya\bridge.log` (also live in the 🐛 panel).
+Logs go to the bridge log file (also live in the 🐛 panel):
+
+| OS      | Log file                                                     |
+| ------- | ------------------------------------------------------------ |
+| Windows | `%LOCALAPPDATA%\Anya\bridge.log`                             |
+| macOS   | `~/Library/Application Support/Anya/bridge.log`              |
+| Linux   | `${XDG_DATA_HOME:-~/.local/share}/Anya/bridge.log`           |
 
 The extension keypair lives at `.extension-key.pem` (gitignored). Its public
 key is baked into `extension/manifest.json` so the extension ID stays stable
@@ -377,6 +419,10 @@ whitelists exactly that ID.
 .\setup.ps1 -Uninstall
 ```
 
-Then remove the unpacked extension from `edge://extensions`.
+```sh
+./setup.sh --uninstall
+```
+
+Then remove the unpacked extension from your browser's extensions page.
 
 [`@github/copilot-sdk`]: https://www.npmjs.com/package/@github/copilot-sdk

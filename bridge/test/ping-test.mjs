@@ -51,9 +51,8 @@ child.stdout.on('data', (chunk) => {
       cleanup(0);
       return;
     }
-    console.error('[ping-test] FAIL: unexpected frame:', frame);
-    cleanup(1);
-    return;
+    // Ignore informational startup frames (hello, log, ...) — keep reading
+    // until we see the pong or the timer fires.
   }
 });
 

@@ -26,13 +26,17 @@ scripts/     One-off automation
 cd extension
 npm install
 npm run build              # vite + tsc; output in extension/dist
-# Then load extension/dist as an unpacked extension in your browser (edge://extensions, chrome://extensions, brave://extensions, vivaldi://extensions, ...).
+# Then load extension/dist as an unpacked extension in your browser (edge://extensions, chrome://extensions, brave://extensions, vivaldi://extensions, arc://extensions, ...).
 
 # Bridge
 cd bridge
 npm install
 npx tsc -p .               # output in bridge/dist
-.\install.ps1              # registers the native-messaging host manifest
+
+# Register the Native Messaging host with every detected Chromium browser.
+# Pick whichever entry point matches your shell:
+pwsh ./install.ps1         # Windows / macOS / Linux (PowerShell 7+)
+./install.sh               # macOS / Linux (bash)
 ```
 
 After changing extension code, rebuild and click "Reload" on the extension
@@ -62,7 +66,18 @@ cd bridge;    npx tsc --noEmit
   to the extension over the tool-rpc channel; Playwright driving is the
   single bound tab in `bridge/src/sessions.ts`.
 
-## Runtime layout (`%LOCALAPPDATA%\Anya\`)
+## Runtime layout (per OS)
+
+The bridge writes its scratch state under a per-OS data dir, resolved by
+`bridge/src/paths.ts`:
+
+| OS      | Data dir                                              |
+| ------- | ----------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\Anya\`                                |
+| macOS   | `~/Library/Application Support/Anya/`                 |
+| Linux   | `${XDG_DATA_HOME:-~/.local/share}/Anya/`              |
+
+Inside that dir:
 
 | Path | Purpose |
 | ---- | ------- |
@@ -70,13 +85,15 @@ cd bridge;    npx tsc --noEmit
 | `sessions/<chatId>/` | Per-chat `workingDirectory` passed to `CopilotSession`. SDK-managed checkpoints, plan.md, files. |
 | `playwright/` | `cwd` pinned for spawned `playwright-cli` processes. Holds `.playwright-cli/console-*.log` and stdout dumps from `evaluate` calls. Safe to wipe. |
 | `bridge.log` | Rolling trace of every native-messaging frame and error. |
-| `com.anya.bridge.json` | Chromium native-messaging host manifest (written by `install.ps1`). |
+| `com.anya.bridge.json` | Native-messaging host manifest (written by install scripts). On Windows the registry points at this single file; on macOS/Linux a copy is dropped into each browser's `NativeMessagingHosts/` dir. |
 | `attached-tabs.json` | Legacy multi-attach state. Safe to delete. |
 
 ## Things not to do
 
 - Don't add unrelated files to `bridge/` — pin `cwd` for any spawn so junk
-  lands in `%LOCALAPPDATA%\Anya\playwright\` instead.
+  lands in the per-OS Anya data dir under `playwright/` instead.
+- Don't hardcode `%LOCALAPPDATA%` or any OS-specific path in the bridge —
+  go through `bridge/src/paths.ts` so things keep working off Windows.
 - Don't introduce telemetry, analytics, or cloud sync.
 - Don't break the single-bound-tab invariant in `sessions.ts` — the prior
   multi-bind design is documented in `design.md` §7 as a deliberate failure.

@@ -13,13 +13,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { error, log, warn } from './log.js';
+import { boundTabFile, playwrightCwd } from './paths.js';
 
 const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';
 
-export type BindStatus = 'waiting-for-connect' | 'connected' | 'dead' | 'none';
+type BindStatus = 'waiting-for-connect' | 'connected' | 'dead' | 'none';
 
 export interface BoundTab {
   sessionId: string;
@@ -42,24 +41,14 @@ interface RuntimeBinding extends BoundTab {
 let current: RuntimeBinding | null = null;
 let counter = 0;
 
-function dataDir(): string {
-  if (process.platform === 'win32') {
-    const local = process.env.LOCALAPPDATA;
-    if (local) return join(local, 'Anya');
-  }
-  const home = homedir();
-  if (home) return join(home, '.local', 'share', 'Anya');
-  return join(tmpdir(), 'Anya');
-}
-
-const STORE_FILE = join(dataDir(), 'bound-tab.json');
+const STORE_FILE = boundTabFile();
 
 // playwright-cli auto-creates `.playwright-cli/console-*.log` and dumps the
 // stdout of `evaluate "<expr>"` calls into files named after the expression
 // (e.g. `1+1`, `{document.title`, `window.__pw_marker`). Pin its cwd to a
 // dedicated scratch dir so this junk doesn't pollute whatever directory the
 // bridge happens to be launched from. mkdirSync once at module load.
-const PLAYWRIGHT_CWD = join(dataDir(), 'playwright');
+const PLAYWRIGHT_CWD = playwrightCwd();
 try { mkdirSync(PLAYWRIGHT_CWD, { recursive: true }); } catch { /* ignore */ }
 
 export function getPlaywrightCwd(): string {
@@ -133,12 +122,12 @@ export function runPlaywrightCmd(argv: string[], sessionId?: string, timeoutMs =
 }
 
 // ---------------- chrome-tab resolver ----------------
-export interface ResolveOpts { url: string; title: string; useMarker: boolean }
-export interface ResolveResult {
+interface ResolveOpts { url: string; title: string; useMarker: boolean }
+interface ResolveResult {
   tabId?: number; url?: string; title?: string; windowId?: number;
   ambiguous?: boolean; candidates?: number; method?: 'url' | 'marker';
 }
-export type TabResolver = (sessionId: string, opts: ResolveOpts) => Promise<ResolveResult | null>;
+type TabResolver = (sessionId: string, opts: ResolveOpts) => Promise<ResolveResult | null>;
 
 let tabResolver: TabResolver | null = null;
 export function setTabResolver(fn: TabResolver | null): void { tabResolver = fn; }
@@ -274,7 +263,7 @@ function stopPolling(): void {
 }
 
 // ---------------- public API ----------------
-export interface BindOptions { hint?: string; browser?: string }
+interface BindOptions { hint?: string; browser?: string }
 
 export function bindTab(opts: BindOptions = {}): BoundTab {
   // Replace any prior binding cleanly.

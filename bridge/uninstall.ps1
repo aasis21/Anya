@@ -1,51 +1,90 @@
 <#
 .SYNOPSIS
-    Uninstalls the Anya Native Messaging host registration from every Chromium
-    browser (and cleans up the legacy AgentEdge entries).
+    Uninstalls the Anya Native Messaging host registration from every
+    Chromium browser on Windows, macOS, or Linux.
 
 .DESCRIPTION
-    - Removes HKCU registry entries for com.anya.bridge across Edge, Chrome,
-      Chromium, Brave, and Vivaldi.
-    - Also removes legacy entries for com.agentedge.bridge so users upgrading
-      from the AgentEdge name don't get a duplicate registration.
-    - Deletes the installed manifest at %LOCALAPPDATA%\Anya\com.anya.bridge.json
-      and the legacy %LOCALAPPDATA%\AgentEdge directory if present.
-    - Leaves the bridge source/build directory untouched.
+    Cross-platform PowerShell 7+ uninstaller. Mirrors install.ps1:
+
+      Windows  -> removes HKCU registry entries for com.anya.bridge across
+                  Edge, Chrome, Chromium, Brave, Vivaldi, Arc; deletes the
+                  shared manifest at %LOCALAPPDATA%\Anya\com.anya.bridge.json.
+      macOS    -> deletes ~/Library/Application Support/<vendor>/<browser>/
+                  NativeMessagingHosts/com.anya.bridge.json.
+      Linux    -> deletes ~/.config/<vendor>/<browser>/NativeMessagingHosts/
+                  com.anya.bridge.json.
+
+    The bridge source folder, logs, and chat data are not touched.
 #>
+
+#Requires -Version 7.0
 
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
 
-$Hosts        = @('com.anya.bridge', 'com.agentedge.bridge')  # current + legacy
-$RegRoots     = @(
-    'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts',
-    'HKCU:\Software\Google\Chrome\NativeMessagingHosts',
-    'HKCU:\Software\Chromium\NativeMessagingHosts',
-    'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts',
-    'HKCU:\Software\Vivaldi\NativeMessagingHosts'
-)
-
-foreach ($root in $RegRoots) {
-    foreach ($h in $Hosts) {
-        $key = Join-Path $root $h
-        if (Test-Path $key) {
-            Remove-Item -Path $key -Recurse -Force
-            Write-Host "[OK]  Removed: $key"
-        }
-    }
+if (-not ($IsWindows -or $IsMacOS -or $IsLinux)) {
+    throw 'Unsupported OS — Anya uninstall supports Windows, macOS, and Linux.'
 }
 
-$installDirs = @(
-    @{ Dir = Join-Path $env:LOCALAPPDATA 'Anya';      File = 'com.anya.bridge.json' },
-    @{ Dir = Join-Path $env:LOCALAPPDATA 'AgentEdge'; File = 'com.agentedge.bridge.json' }
-)
-foreach ($d in $installDirs) {
-    $mf = Join-Path $d.Dir $d.File
+$Hosts = @('com.anya.bridge')
+
+if ($IsWindows) {
+    $RegRoots = @(
+        'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts',
+        'HKCU:\Software\Google\Chrome\NativeMessagingHosts',
+        'HKCU:\Software\Chromium\NativeMessagingHosts',
+        'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts',
+        'HKCU:\Software\Vivaldi\NativeMessagingHosts',
+        'HKCU:\Software\TheBrowserCompany\Arc\NativeMessagingHosts'
+    )
+    foreach ($root in $RegRoots) {
+        foreach ($h in $Hosts) {
+            $key = Join-Path $root $h
+            if (Test-Path $key) {
+                Remove-Item -Path $key -Recurse -Force
+                Write-Host "[OK]  Removed: $key"
+            }
+        }
+    }
+
+    $mf = Join-Path $env:LOCALAPPDATA 'Anya\com.anya.bridge.json'
     if (Test-Path $mf) {
         Remove-Item -Path $mf -Force
         Write-Host "[OK]  Removed manifest: $mf"
+    }
+} else {
+    # macOS + Linux: per-browser manifest dirs.
+    if ($IsMacOS) {
+        $base = Join-Path $HOME 'Library/Application Support'
+        $dirs = @(
+            "$base/Microsoft Edge/NativeMessagingHosts",
+            "$base/Google/Chrome/NativeMessagingHosts",
+            "$base/Chromium/NativeMessagingHosts",
+            "$base/BraveSoftware/Brave-Browser/NativeMessagingHosts",
+            "$base/Vivaldi/NativeMessagingHosts",
+            "$base/Arc/User Data/NativeMessagingHosts"
+        )
+    } else {
+        $base = Join-Path $HOME '.config'
+        $dirs = @(
+            "$base/microsoft-edge/NativeMessagingHosts",
+            "$base/google-chrome/NativeMessagingHosts",
+            "$base/chromium/NativeMessagingHosts",
+            "$base/BraveSoftware/Brave-Browser/NativeMessagingHosts",
+            "$base/vivaldi/NativeMessagingHosts"
+        )
+    }
+
+    foreach ($dir in $dirs) {
+        foreach ($h in $Hosts) {
+            $mf = Join-Path $dir "$h.json"
+            if (Test-Path $mf) {
+                Remove-Item -Path $mf -Force
+                Write-Host "[OK]  Removed manifest: $mf"
+            }
+        }
     }
 }
 

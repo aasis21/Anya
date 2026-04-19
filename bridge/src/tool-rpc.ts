@@ -10,7 +10,7 @@
 
 import { error, warn } from './log.js';
 
-export interface ToolResponseFrame {
+interface ToolResponseFrame {
   type: 'tool-response';
   id: string;
   ok: boolean;

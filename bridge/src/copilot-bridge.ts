@@ -4,14 +4,11 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { error, log, warn } from './log.js';
+import { sessionsDir } from './paths.js';
 import { ToolRpc } from './tool-rpc.js';
 import { buildBrowserTool, buildContextTools } from './tools.js';
 
-const SESSIONS_ROOT = join(
-  process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '.', 'AppData', 'Local'),
-  'Anya',
-  'sessions',
-);
+const SESSIONS_ROOT = sessionsDir();
 
 // Custom-agent profile, in the GitHub Copilot CLI format
 // (https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-custom-agents-for-cli):
@@ -111,8 +108,9 @@ export class CopilotBridge {
     chatId: string,
     text: string,
     attachments?: Array<{ data: string; mimeType: string; displayName?: string }>,
+    cwd?: string,
   ): Promise<void> {
-    const chat = await this.getOrCreateChat(chatId);
+    const chat = await this.getOrCreateChat(chatId, cwd);
     const sdkAttachments = attachments?.map((a) => ({
       type: 'blob' as const,
       data: a.data,
@@ -170,20 +168,33 @@ export class CopilotBridge {
     return this.client;
   }
 
-  private getOrCreateChat(chatId: string): Promise<ChatHandle> {
+  private getOrCreateChat(chatId: string, cwd?: string): Promise<ChatHandle> {
     const existing = this.chats.get(chatId);
-    if (existing) return Promise.resolve(existing);
+    // If the caller supplies a cwd that differs from the existing session's
+    // workingDirectory, tear down the old session and create a fresh one so
+    // the SDK picks up skills/prompts from the new folder.
+    if (existing) {
+      if (cwd && cwd !== existing.workingDirectory) {
+        log('cwd changed for', chatId, '→ recreating session:', cwd);
+        existing.session.disconnect().catch((err) => warn('disconnect on cwd change:', err));
+        this.chats.delete(chatId);
+      } else {
+        return Promise.resolve(existing);
+      }
+    }
     const inflight = this.creating.get(chatId);
     if (inflight) return inflight;
-    const p = this.createChat(chatId).finally(() => this.creating.delete(chatId));
+    const p = this.createChat(chatId, cwd).finally(() => this.creating.delete(chatId));
     this.creating.set(chatId, p);
     return p;
   }
 
-  private async createChat(chatId: string): Promise<ChatHandle> {
+  private async createChat(chatId: string, cwd?: string): Promise<ChatHandle> {
     const client = await this.ensureClient();
     const safeId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'default';
-    const workingDirectory = join(SESSIONS_ROOT, safeId);
+    // Use the caller-supplied cwd (a real repo path) if provided; otherwise
+    // fall back to the scratch session dir so the SDK has a place to write.
+    const workingDirectory = cwd ?? join(SESSIONS_ROOT, safeId);
     mkdirSync(workingDirectory, { recursive: true });
     log('creating chat session:', chatId, 'cwd:', workingDirectory);
     const agentPrompt = loadAgentPrompt();

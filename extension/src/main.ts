@@ -24,7 +24,6 @@ import { marked } from 'marked';
 import { nativeBridge, type Frame } from './native-bridge.js';
 import { sidebarStyles } from './styles.js';
 import {
-  type Role,
   type ToolCall,
   type ChatMessage,
   type Chat,
@@ -92,7 +91,6 @@ export class AnyaApp extends LitElement {
   @state() private searchQuery = '';
   @state() private searchActiveIdx = 0;
   @state() private quickPrompts: QuickPrompt[] = [...DEFAULT_QUICK_PROMPTS];
-  @state() private chatsLoaded = false;
 
   // Drawer tag filter — null shows all chats, otherwise filters by tag.
   @state() private drawerTagFilter: string | null = null;
@@ -124,6 +122,7 @@ export class AnyaApp extends LitElement {
     { token: '/search',  description: 'open chat search (Ctrl+K)',    insert: '/search ' },
     { token: '/export',  description: 'download chat as Markdown' },
     { token: '/stop',    description: 'cancel in-flight stream (Ctrl+.)' },
+    { token: '/open',    description: 'open a folder as chat context',   insert: '/open ' },
     { token: '/help',    description: 'show this list inside chat' },
   ];
 
@@ -188,29 +187,16 @@ export class AnyaApp extends LitElement {
     };
   }
 
-  // One-time migration: read a value from the new key, falling back to the
-  // legacy `agentedge-*` key for users upgrading from the AgentEdge name.
-  // Migrated values are written under the new key and the legacy key is
-  // removed so we only pay the read cost once.
-  private async migrateStorage<T>(newKey: string, legacyKey: string): Promise<T | undefined> {
+  private async readStorage<T>(key: string): Promise<T | undefined> {
     try {
-      const cur = await chrome.storage?.local?.get?.(newKey);
-      if (cur && Object.prototype.hasOwnProperty.call(cur, newKey)) return cur[newKey] as T;
-      const old = await chrome.storage?.local?.get?.(legacyKey);
-      if (old && Object.prototype.hasOwnProperty.call(old, legacyKey)) {
-        const value = old[legacyKey] as T;
-        try {
-          await chrome.storage?.local?.set?.({ [newKey]: value });
-          await chrome.storage?.local?.remove?.(legacyKey);
-        } catch { /* ignore */ }
-        return value;
-      }
+      const cur = await chrome.storage?.local?.get?.(key);
+      if (cur && Object.prototype.hasOwnProperty.call(cur, key)) return cur[key] as T;
     } catch { /* ignore */ }
     return undefined;
   }
 
   private async loadTheme(): Promise<void> {
-    const t = await this.migrateStorage<string>('anya-theme', 'agentedge-theme');
+    const t = await this.readStorage<string>('anya-theme');
     if (t === 'light' || t === 'dark') this.theme = t;
     this.setAttribute('theme', this.theme);
   }
@@ -223,7 +209,7 @@ export class AnyaApp extends LitElement {
 
   // ----- debug mode ------------------------------------------------------
   private async loadDebug(): Promise<void> {
-    const v = await this.migrateStorage<unknown>('anya-debug', 'agentedge-debug');
+    const v = await this.readStorage<unknown>('anya-debug');
     if (v === true) this.debugOpen = true;
   }
 
@@ -304,8 +290,8 @@ export class AnyaApp extends LitElement {
   // ----- chat store ------------------------------------------------------
   private async loadChats(): Promise<void> {
     try {
-      const arr = await this.migrateStorage<any>('anya-chats', 'agentedge-chats');
-      const cur = await this.migrateStorage<string>('anya-current-chat', 'agentedge-current-chat');
+      const arr = await this.readStorage<any>('anya-chats');
+      const cur = await this.readStorage<string>('anya-current-chat');
       if (Array.isArray(arr) && arr.length > 0) {
         this.chats = arr.map((c: any) => ({
           id: String(c.id),
@@ -316,6 +302,7 @@ export class AnyaApp extends LitElement {
           updatedAt: Number(c.updatedAt) || Date.now(),
           pinned: !!c.pinned,
           tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
+          ...(typeof c.cwd === 'string' && c.cwd ? { cwd: c.cwd } : {}),
         }));
         this.currentChatId = typeof cur === 'string' && this.chats.some((c) => c.id === cur)
           ? cur : this.chats[0].id;
@@ -326,7 +313,6 @@ export class AnyaApp extends LitElement {
       console.warn('[Anya] loadChats failed', err);
       this.startNewChat();
     }
-    this.chatsLoaded = true;
   }
 
   private persistChats(): void {
@@ -506,7 +492,7 @@ export class AnyaApp extends LitElement {
   // ----- quick prompts ---------------------------------------------------
   private async loadQuickPrompts(): Promise<void> {
     try {
-      const arr = await this.migrateStorage<any>('anya-quick-prompts', 'agentedge-quick-prompts');
+      const arr = await this.readStorage<any>('anya-quick-prompts');
       if (Array.isArray(arr) && arr.length > 0) {
         this.quickPrompts = arr.map((p: any) => ({
           id: String(p.id),
@@ -515,10 +501,6 @@ export class AnyaApp extends LitElement {
         }));
       }
     } catch { /* ignore */ }
-  }
-
-  private persistQuickPrompts(): void {
-    try { chrome.storage?.local?.set?.({ 'anya-quick-prompts': this.quickPrompts }); } catch { /* ignore */ }
   }
 
   private insertQuickPrompt = (qp: QuickPrompt): void => {
@@ -1329,6 +1311,7 @@ export class AnyaApp extends LitElement {
           '  /stop                 cancel the in-flight response\n' +
           '  /export               export current chat as markdown\n' +
           '  /search [query]       open search (optionally pre-filled)\n' +
+          '  /open <folder>        open new chat rooted in a folder\n' +
           '\n' +
           '  /help                 this message\n' +
           '\n' +
@@ -1351,6 +1334,18 @@ export class AnyaApp extends LitElement {
       case 'stop':
         if (this.currentChatId) this.cancelStream(this.currentChatId);
         return true;
+      case 'open': {
+        if (!arg) {
+          this.pushSystem(this.currentChatId, 'Usage: /open <folder-path>\n\nOpens a new chat rooted in the given folder so the SDK loads skills, prompts, and .copilot-instructions.md from that repo.', 'normal');
+          return true;
+        }
+        const folderName = arg.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? arg;
+        const id = this.startNewChat();
+        this.chats = this.chats.map((c) => c.id === id ? { ...c, title: folderName, cwd: arg } : c);
+        this.pushSystem(id, `Opened **${arg}**\nThe SDK will load context from this folder.`, 'normal');
+        this.persistChats();
+        return true;
+      }
       case 'tag': {
         if (!this.currentChatId) return true;
         const sub = (rest[0] || '').toLowerCase();
@@ -1395,6 +1390,10 @@ export class AnyaApp extends LitElement {
     }
 
     const frame: Record<string, unknown> = { type: 'prompt', chatId, text: prompt };
+    // Pass cwd on every prompt so the bridge can use it when lazily creating
+    // the session.  After the first prompt the bridge ignores it (session exists).
+    const chat = this.chats.find((c) => c.id === chatId);
+    if (chat?.cwd) frame.cwd = chat.cwd;
     if (attachments.length > 0) {
       frame.attachments = attachments.map((a, i) => ({
         data: a.data,
@@ -1403,7 +1402,7 @@ export class AnyaApp extends LitElement {
       }));
     }
     const ok = this.bridgeSend(frame);
-    if (!ok) this.pushSystem(chatId, 'not connected to bridge', 'error');
+    if (!ok) this.pushSystem(chatId, 'bridge disconnected — waiting to reconnect…', 'error');
   }
 
   // Replace @-mentions inline so the user can be explicit about context.
@@ -1986,7 +1985,14 @@ export class AnyaApp extends LitElement {
       ${this.debugOpen ? this.renderDebugPanel() : nothing}
 
       <main>
-        ${this.messages.length === 0
+        ${!online
+          ? html`<div class="empty offline-banner">
+              <span class="glyph">⚡</span>
+              <span class="offline-title">bridge offline</span>
+              <span class="offline-hint">Anya can't reach the local bridge process.<br/>
+                Run <code>./setup.ps1</code> to register it, then reload the extension.</span>
+            </div>`
+          : this.messages.length === 0
           ? html`<div class="empty">
               <span class="glyph">/</span>
               what's on your mind?
@@ -2042,7 +2048,8 @@ export class AnyaApp extends LitElement {
               id="prompt-input"
               rows="1"
               spellcheck="false"
-              placeholder="next to your browser. what should we do?"
+              placeholder=${online ? 'next to your browser. what should we do?' : 'bridge offline — waiting to reconnect…'}
+              ?disabled=${!online}
               @keydown=${this.onKeyDown}
               @input=${this.onInput}
               @paste=${this.onPaste}
@@ -2058,7 +2065,7 @@ export class AnyaApp extends LitElement {
             : html`<button
                 class="send-btn"
                 @click=${this.send}
-                ?disabled=${this.draftEmpty && this.pendingAttachments.length === 0}
+                ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
                 title="Send (Enter)"
               >send<span class="kbd">↵</span></button>`}
         </div>
@@ -2176,6 +2183,7 @@ export class AnyaApp extends LitElement {
           </span>
           <span class="chat-meta">
             ${c.messages.length} msg · ~${tokens} tok · ${age}
+            ${c.cwd ? html`<span class="tag-chip mini" title=${c.cwd}>📁 ${c.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</span>` : ''}
             ${tags.map((t) => html`<span class="tag-chip mini">#${t}</span>`)}
           </span>
         `}
