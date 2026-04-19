@@ -269,12 +269,41 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   max-width: 760px;
 }
 .hero-install-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   font: 500 11px/1 var(--font-mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--bone-dim);
   margin: 0 0 10px 2px;
 }
+.install-tabs {
+  display: inline-flex;
+  gap: 2px;
+  letter-spacing: 0.08em;
+}
+.install-tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--bone-dim);
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.install-tab:hover { color: var(--bone); border-color: var(--bone-dim); }
+.install-tab.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(214, 58, 28, 0.08);
+}
+.install-tabs-terminal { margin-left: auto; }
 .hero-install-cmd {
   margin: 0;
   padding: 18px 22px;

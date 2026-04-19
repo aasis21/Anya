@@ -143,8 +143,9 @@ transport.onFrame(async (raw) => {
         return;
       }
       const cwd = typeof frame.cwd === 'string' && frame.cwd.trim() ? frame.cwd.trim() : undefined;
+      const mode = frame.mode === 'immediate' ? 'immediate' as const : 'enqueue' as const;
       try {
-        await copilot.sendPrompt(chatId, text, attachments.length ? attachments : undefined, cwd);
+        await copilot.sendPrompt(chatId, text, attachments.length ? attachments : undefined, cwd, mode);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         error('prompt failed:', err);

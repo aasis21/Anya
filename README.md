@@ -117,17 +117,30 @@ loaded by `bridge/src/copilot-bridge.ts`.
 
 ### One-line install (recommended)
 
-PowerShell 7+ on Windows, macOS, or Linux:
+**PowerShell 7+** on Windows, macOS, or Linux:
 
 ```pwsh
 irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
 ```
 
-This clones the repo to `~/Anya` and runs `setup.ps1` for you. To customise:
+**bash** on macOS or Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aasis21/Anya/main/install.sh | bash
+```
+
+Either clones the repo to `~/Anya` and runs `setup.ps1` / `setup.sh` for you. To customise:
 
 ```pwsh
+# PowerShell — pass through args
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) `
     -InstallDir D:\code\Anya -Branch main -Browsers edge,chrome
+```
+
+```bash
+# bash — pass through args after `--`
+curl -fsSL https://raw.githubusercontent.com/aasis21/Anya/main/install.sh | bash -s -- \
+    --install-dir ~/code/Anya --branch main --browsers chrome,brave
 ```
 
 ### Developing locally

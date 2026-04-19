@@ -1154,5 +1154,12 @@ export const sidebarStyles = css`
       border-color: var(--accent);
     }
     .send-btn.stop-btn:hover { filter: brightness(1.1); }
+
+    /* ---- send button group (visible while streaming) ---- */
+    .send-group { display: flex; gap: 4px; }
+    .send-btn.steer-btn {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
   `;
 

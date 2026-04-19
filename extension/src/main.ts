@@ -1227,7 +1227,7 @@ export class AnyaApp extends LitElement {
   };
 
   // ----- send ------------------------------------------------------------
-  private send = (): void => {
+  private send = (mode: 'enqueue' | 'immediate' = 'enqueue'): void => {
     const ta = this.textarea ?? (this.renderRoot.querySelector('#prompt-input') as HTMLTextAreaElement | null);
     if (!ta) return;
     const text = ta.value.trim();
@@ -1263,7 +1263,7 @@ export class AnyaApp extends LitElement {
     this.pendingAttachments = [];
     this.scrollToBottom();
 
-    void this.dispatchPrompt(chatId, text, attachments);
+    void this.dispatchPrompt(chatId, text, attachments, mode);
   };
 
   /**
@@ -1369,6 +1369,7 @@ export class AnyaApp extends LitElement {
     chatId: string,
     text: string,
     attachments: ImageAttachment[] = [],
+    mode: 'enqueue' | 'immediate' = 'enqueue',
   ): Promise<void> {
     let prompt = text;
     try {
@@ -1389,7 +1390,7 @@ export class AnyaApp extends LitElement {
       prompt = `(${attachments.length} image${attachments.length === 1 ? '' : 's'} attached — please look at ${attachments.length === 1 ? 'it' : 'them'}.)`;
     }
 
-    const frame: Record<string, unknown> = { type: 'prompt', chatId, text: prompt };
+    const frame: Record<string, unknown> = { type: 'prompt', chatId, text: prompt, mode };
     // Pass cwd on every prompt so the bridge can use it when lazily creating
     // the session.  After the first prompt the bridge ignores it (session exists).
     const chat = this.chats.find((c) => c.id === chatId);
@@ -1585,7 +1586,9 @@ export class AnyaApp extends LitElement {
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      this.send();
+      // Ctrl+Enter while streaming = steer (immediate); plain Enter = enqueue.
+      const isStreaming = this.currentChatId && this.streamingIds.has(this.currentChatId);
+      this.send(isStreaming && e.ctrlKey ? 'immediate' : 'enqueue');
     }
   };
 
@@ -2057,14 +2060,28 @@ export class AnyaApp extends LitElement {
             ></textarea>
           </div>
           ${this.currentChatId && this.streamingIds.has(this.currentChatId)
-            ? html`<button
-                class="send-btn stop-btn"
-                @click=${() => this.cancelStream(this.currentChatId)}
-                title="Stop generating (Ctrl+.)"
-              >stop<span class="kbd">⎋</span></button>`
+            ? html`<span class="send-group">
+                <button
+                  class="send-btn"
+                  @click=${() => this.send('enqueue')}
+                  ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
+                  title="Queue after current turn (Enter)"
+                >queue<span class="kbd">↵</span></button>
+                <button
+                  class="send-btn steer-btn"
+                  @click=${() => this.send('immediate')}
+                  ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
+                  title="Send immediately, interrupt current turn (Ctrl+Enter)"
+                >steer<span class="kbd">⌃↵</span></button>
+                <button
+                  class="send-btn stop-btn"
+                  @click=${() => this.cancelStream(this.currentChatId)}
+                  title="Stop generating (Ctrl+.)"
+                >stop<span class="kbd">⎋</span></button>
+              </span>`
             : html`<button
                 class="send-btn"
-                @click=${this.send}
+                @click=${() => this.send()}
                 ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
                 title="Send (Enter)"
               >send<span class="kbd">↵</span></button>`}

@@ -109,6 +109,7 @@ export class CopilotBridge {
     text: string,
     attachments?: Array<{ data: string; mimeType: string; displayName?: string }>,
     cwd?: string,
+    mode?: 'enqueue' | 'immediate',
   ): Promise<void> {
     const chat = await this.getOrCreateChat(chatId, cwd);
     const sdkAttachments = attachments?.map((a) => ({
@@ -117,7 +118,7 @@ export class CopilotBridge {
       mimeType: a.mimeType,
       displayName: a.displayName,
     }));
-    await chat.session.send({ prompt: text, attachments: sdkAttachments });
+    await chat.session.send({ prompt: text, attachments: sdkAttachments, mode: mode ?? 'enqueue' });
   }
 
   async deleteChat(chatId: string): Promise<void> {

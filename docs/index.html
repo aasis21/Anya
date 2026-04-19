@@ -75,8 +75,15 @@
   </p>
 
   <div class="hero-install">
-    <div class="hero-install-label">Install — one line, PowerShell 7+</div>
-    <pre class="hero-install-cmd"><span class="prompt">&gt;</span> irm <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1</span> | iex</pre>
+    <div class="hero-install-label">
+      <span>Install — one line</span>
+      <span class="install-tabs" role="tablist" aria-label="Installer shell">
+        <button type="button" class="install-tab is-active" data-shell="pwsh" role="tab" aria-selected="true">PowerShell 7+</button>
+        <button type="button" class="install-tab" data-shell="bash" role="tab" aria-selected="false">macOS / Linux</button>
+      </span>
+    </div>
+    <pre class="hero-install-cmd" data-shell="pwsh"><span class="prompt">&gt;</span> irm <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1</span> | iex</pre>
+    <pre class="hero-install-cmd" data-shell="bash" hidden><span class="prompt">$</span> curl -fsSL <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.sh</span> | bash</pre>
   </div>
 
   <div class="hero-cta">
@@ -187,16 +194,21 @@
   <header class="section-head">
     <span class="kicker">03 · Install</span>
     <h2>One line. Any Chromium.</h2>
-    <p class="section-lede">PowerShell 7+ on Windows, macOS, or Linux. Works in Edge, Chrome, Brave, Vivaldi, Arc, Chromium.</p>
+    <p class="section-lede">PowerShell 7+ on Windows, or bash on macOS / Linux. Works in Edge, Chrome, Brave, Vivaldi, Arc, Chromium.</p>
   </header>
 
   <div class="install-grid">
     <div class="terminal">
       <div class="terminal-bar">
         <span class="t-dot"></span><span class="t-dot"></span><span class="t-dot"></span>
-        <span class="t-title">pwsh</span>
+        <span class="t-title" data-shell="pwsh">pwsh</span>
+        <span class="t-title" data-shell="bash" hidden>bash</span>
+        <span class="install-tabs install-tabs-terminal" role="tablist" aria-label="Installer shell">
+          <button type="button" class="install-tab is-active" data-shell="pwsh" role="tab" aria-selected="true">PowerShell</button>
+          <button type="button" class="install-tab" data-shell="bash" role="tab" aria-selected="false">Bash</button>
+        </span>
       </div>
-      <pre class="terminal-body"><span class="comment"># clones to ~/Anya and sets everything up</span>
+      <pre class="terminal-body" data-shell="pwsh"><span class="comment"># clones to ~/Anya and sets everything up</span>
 <span class="prompt">&gt;</span> irm <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1</span> | iex
 
 <span class="comment">› cloning aasis21/Anya → ~/Anya</span>
@@ -207,6 +219,20 @@
    ✓ Microsoft Edge
    ✓ Google Chrome
    ✓ Brave
+
+<span class="ok">done.</span> load <span class="highlight">~/Anya/extension/dist</span> in your browser.
+</pre>
+      <pre class="terminal-body" data-shell="bash" hidden><span class="comment"># clones to ~/Anya and sets everything up</span>
+<span class="prompt">$</span> curl -fsSL <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.sh</span> | bash
+
+<span class="comment">› cloning aasis21/Anya → ~/Anya</span>
+<span class="comment">› building bridge/  ✓</span>
+<span class="comment">› building extension/  ✓</span>
+<span class="comment">› bridge ping → PONG</span>
+<span class="comment">› registered native-messaging host for:</span>
+   ✓ Google Chrome
+   ✓ Brave
+   ✓ Vivaldi
 
 <span class="ok">done.</span> load <span class="highlight">~/Anya/extension/dist</span> in your browser.
 </pre>
@@ -294,6 +320,33 @@
       document.documentElement.setAttribute('data-theme', next);
       try { localStorage.setItem('anya-theme', next); } catch (e) {}
     });
+  })();
+
+  // Install-shell tabs (PowerShell / Bash). All tabs sync.
+  (function () {
+    var DEFAULT = (navigator.platform || '').toLowerCase().indexOf('win') === 0 ? 'pwsh' : 'bash';
+    var saved;
+    try { saved = localStorage.getItem('anya-shell'); } catch (e) {}
+    var active = (saved === 'pwsh' || saved === 'bash') ? saved : DEFAULT;
+
+    function apply(shell) {
+      active = shell;
+      try { localStorage.setItem('anya-shell', shell); } catch (e) {}
+      document.querySelectorAll('[data-shell]').forEach(function (el) {
+        var matches = el.getAttribute('data-shell') === shell;
+        if (el.classList.contains('install-tab')) {
+          el.classList.toggle('is-active', matches);
+          el.setAttribute('aria-selected', matches ? 'true' : 'false');
+        } else {
+          el.hidden = !matches;
+        }
+      });
+    }
+
+    document.querySelectorAll('.install-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () { apply(btn.getAttribute('data-shell')); });
+    });
+    apply(active);
   })();
 </script>
 
