@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Anya — GitHub Copilot, in your browser</title>
+<meta name="description" content="A Chromium sidebar Copilot agent that wraps @github/copilot-sdk via a local native-messaging bridge. Real streaming, real tools, your real browser." />
+<meta property="og:title" content="Anya" />
+<meta property="og:description" content="GitHub Copilot, in your browser. Powered by the Copilot SDK." />
+<meta property="og:type" content="website" />
+<meta name="theme-color" content="#0c0d0f" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<header class="nav">
+  <a class="brand" href="#top" aria-label="Anya">
+    <span class="brand-mark">A</span>
+    <span class="brand-word">anya</span>
+  </a>
+  <nav class="nav-links">
+    <a href="#what">what</a>
+    <a href="#language">language</a>
+    <a href="#install">install</a>
+    <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">github ↗</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span class="dot"></span>
+    <span>v0 · build-out mode</span>
+  </div>
+
+  <h1 class="hero-title">
+    <span class="line line-1">GitHub <em>Copilot</em>,</span>
+    <span class="line line-2">sitting next to</span>
+    <span class="line line-3">your <span class="accent">tabs</span>.</span>
+  </h1>
+
+  <p class="hero-sub">
+    Anya is an MV3 sidebar extension for any Chromium browser — Edge, Chrome, Brave, Vivaldi, Arc — talking to a local Node bridge that wraps <code>@github/copilot-sdk</code>. The same agentic Copilot you run in your terminal — streaming, tools, MCP — with a side helping of Playwright over <em>your real, logged-in</em> browser.
+  </p>
+
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="#install">
+      <span>Install Anya</span>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 7h8m0 0L7.5 3.5M11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">Source on GitHub</a>
+  </div>
+
+  <div class="hero-meta">
+    <span><b>0kb</b> telemetry</span>
+    <span><b>0</b> cloud sync</span>
+    <span><b>1</b> local bridge</span>
+    <span><b>∞</b> tabs</span>
+  </div>
+</section>
+
+<section class="diagram-section">
+  <pre class="diagram" aria-label="Architecture diagram">
+<span class="d-box">┌────────────────────┐</span>    <span class="d-flow">JSON frames</span>    <span class="d-box">┌────────────────────┐</span>
+<span class="d-box">│  Browser sidebar   │ ◀─────────────▶   │  Node bridge       │</span>
+<span class="d-box">│  (Lit + marked)    │  Native Messaging │  @github/copilot-  │</span>
+<span class="d-box">│                    │                   │  sdk + tools       │</span>
+<span class="d-box">└────────────────────┘                   └────────────────────┘</span>
+        │                                          │
+        │ chrome.tabs / scripting                  │ shells out to
+        ▼                                          ▼
+   <span class="d-leaf">browser context</span>                          <span class="d-leaf">playwright-cli</span>
+  </pre>
+</section>
+
+<section id="what" class="features">
+  <header class="section-head">
+    <span class="kicker">01 · What you get</span>
+    <h2>The terminal Copilot, ported to&nbsp;your&nbsp;tabs.</h2>
+  </header>
+
+  <ol class="feature-grid">
+    <li>
+      <span class="feat-num">01</span>
+      <h3>Real Copilot, real streaming.</h3>
+      <p>One <code>CopilotClient</code> and one <code>CopilotSession</code> per chat thread. Token-by-token streaming with proper tool-call lifecycle events.</p>
+    </li>
+    <li>
+      <span class="feat-num">02</span>
+      <h3>Multi-chat with persistence.</h3>
+      <p>Drawer of chats, each with its own bridge-side session. Pin, tag, search, rename, delete, export to Markdown. Survives restarts via <code>chrome.storage.local</code>.</p>
+    </li>
+    <li>
+      <span class="feat-num">03</span>
+      <h3>Browser context as input.</h3>
+      <p>The composer speaks three languages — <code>/</code> for client commands, <code>@</code> for ambient browser context, <code>#</code> for named references.</p>
+    </li>
+    <li>
+      <span class="feat-num">04</span>
+      <h3>Playwright in your real browser.</h3>
+      <p>A <code>drive_tab</code> tool shells out to <code>playwright-cli</code>. Click, type, screenshot, extract — with the same auth your tabs already have.</p>
+    </li>
+    <li>
+      <span class="feat-num">05</span>
+      <h3>Inline tool cards.</h3>
+      <p>Every tool call renders as a VS Code-style card with args, progress, and a result preview. Click to expand.</p>
+    </li>
+    <li>
+      <span class="feat-num">06</span>
+      <h3>Live debug panel.</h3>
+      <p>A 🐛 button opens a trace of every Native Messaging frame and bridge log line. Click any row for the full payload.</p>
+    </li>
+  </ol>
+</section>
+
+<section id="language" class="language">
+  <header class="section-head">
+    <span class="kicker">02 · Composer language</span>
+    <h2>Three prefixes. <br/>Three cognitive moves.</h2>
+    <p class="section-lede">Most chat UIs lump commands, context, and references into one mushy textbox. Anya splits them — because the user's <em>intent</em> is different in each case.</p>
+  </header>
+
+  <div class="prefix-row">
+    <article class="prefix">
+      <div class="prefix-glyph slash">/</div>
+      <h3>commands</h3>
+      <p class="prefix-meaning">"Do something to the sidebar."</p>
+      <p class="prefix-detail">Client-only. Never reaches the model. Keeps your prompt transcript clean.</p>
+      <ul class="prefix-list">
+        <li><code>/new</code> · <code>/clear</code> · <code>/rename</code></li>
+        <li><code>/pin</code> · <code>/tag add ux</code> · <code>/search</code></li>
+        <li><code>/export</code> · <code>/stop</code> · <code>/help</code></li>
+      </ul>
+    </article>
+
+    <article class="prefix">
+      <div class="prefix-glyph at">@</div>
+      <h3>context</h3>
+      <p class="prefix-meaning">"Look at what I'm looking at."</p>
+      <p class="prefix-detail">Ambient browser state. Expanded inline before the bridge sees the prompt.</p>
+      <ul class="prefix-list">
+        <li><code>@tab</code> · <code>@selection</code></li>
+        <li><code>@tabs</code> · <code>@tab:<i>id|query</i></code></li>
+        <li><code>@url</code> · <code>@title</code> · <code>@clipboard</code></li>
+      </ul>
+    </article>
+
+    <article class="prefix planned">
+      <div class="prefix-glyph hash">#</div>
+      <h3>references</h3>
+      <p class="prefix-meaning">"Look up the thing I labelled X."</p>
+      <p class="prefix-detail">Named, curated lookups — bookmarks, files, prior chats. Reserved namespace.</p>
+      <ul class="prefix-list">
+        <li><code>#bookmark/&hellip;</code></li>
+        <li><code>#chat/&hellip;</code></li>
+        <li class="muted">— planned —</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<section id="install" class="install">
+  <header class="section-head">
+    <span class="kicker">03 · Install</span>
+    <h2>One script. Any Chromium.</h2>
+    <p class="section-lede">Requires Node 20+, a Chromium browser with developer-mode extensions, and a logged-in Copilot CLI.</p>
+  </header>
+
+  <div class="install-grid">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="t-dot"></span><span class="t-dot"></span><span class="t-dot"></span>
+        <span class="t-title">~/Anya — pwsh</span>
+      </div>
+      <pre class="terminal-body"><span class="prompt">$</span> git clone https://github.com/aasis21/Anya.git
+<span class="prompt">$</span> cd Anya
+<span class="prompt">$</span> ./setup.ps1                <span class="comment"># or ./setup.sh</span>
+
+<span class="comment">› installing extension/</span>
+<span class="comment">› installing bridge/</span>
+<span class="comment">› bridge ping → PONG</span>
+<span class="comment">› registered native-messaging host for:</span>
+   ✓ Microsoft Edge
+   ✓ Google Chrome
+   ✓ Brave
+
+<span class="ok">done.</span> load <span class="highlight">extension/dist</span> in your browser.
+</pre>
+    </div>
+
+    <aside class="install-side">
+      <h4>Then, in each browser</h4>
+      <ol class="steps">
+        <li>Open <code>edge://extensions</code> (or your browser's equivalent)</li>
+        <li>Toggle <em>Developer mode</em></li>
+        <li><em>Load unpacked</em> → pick <code>extension/dist/</code></li>
+        <li>Pin the action icon → click → sidebar opens</li>
+        <li>Type <code>ping</code> → expect <code>PONG</code></li>
+      </ol>
+
+      <h4>Switches</h4>
+      <table class="switches">
+        <tr><td><code>--browsers edge,chrome</code></td><td>register a subset</td></tr>
+        <tr><td><code>--quiet</code></td><td>install everything detected</td></tr>
+        <tr><td><code>--uninstall</code></td><td>remove host entries</td></tr>
+      </table>
+    </aside>
+  </div>
+</section>
+
+<section class="quote">
+  <p>
+    <span class="quote-mark">“</span>The browser is the user's primary workspace.<br/>
+    Most requests are about the page — so I look there <em>first</em>.<span class="quote-mark">”</span>
+  </p>
+  <cite>— Anya, system prompt</cite>
+</section>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <div class="foot-brand">
+      <span class="brand-mark sm">A</span>
+      <span>anya</span>
+    </div>
+    <div class="foot-links">
+      <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/aasis21/Anya/blob/main/design.md" target="_blank" rel="noopener">Design</a>
+      <a href="https://github.com/aasis21/Anya/blob/main/AGENTS.md" target="_blank" rel="noopener">Agents</a>
+      <a href="https://github.com/aasis21/Anya/blob/main/README.md" target="_blank" rel="noopener">README</a>
+    </div>
+    <div class="foot-meta">
+      Built by <a href="https://github.com/aasis21" target="_blank" rel="noopener">@aasis21</a>. No telemetry, no cloud sync — every byte stays local.
+    </div>
+  </div>
+</footer>
+
+</main>
+
+</body>
+</html>
