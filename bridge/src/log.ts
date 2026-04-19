@@ -16,7 +16,7 @@ const logFilePath: string | null = (() => {
   const base = process.env.LOCALAPPDATA;
   if (!base) return null;
   try {
-    const dir = join(base, 'AgentEdge');
+    const dir = join(base, 'Anya');
     mkdirSync(dir, { recursive: true });
     return join(dir, 'bridge.log');
   } catch {

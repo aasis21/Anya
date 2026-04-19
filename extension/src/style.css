@@ -24,7 +24,7 @@ html, body {
   overflow: hidden;
 }
 
-agent-edge-app {
+anya-app {
   display: flex;
   flex-direction: column;
   height: 100vh;

@@ -1,15 +1,16 @@
-# AgentEdge
+# Anya
 
-> GitHub Copilot, living in the Microsoft Edge sidebar.
+> github copilot for your browser. powered by the copilot sdk.
 
-AgentEdge is an Edge MV3 extension that talks to a local Node bridge wrapping
+Anya is an MV3 sidebar extension for any Chromium-based browser — Edge, Chrome,
+Chromium, Brave, Vivaldi — that talks to a local Node bridge wrapping
 [`@github/copilot-sdk`]. The result is the same agentic Copilot you run in your
 terminal — streaming output, tool calls, MCP servers — sitting next to your
 tabs, with a side helping of browser automation via Playwright.
 
 ```
 ┌────────────────────┐    JSON frames    ┌────────────────────┐
-│  Edge sidebar      │ ◀─────────────▶   │  Node bridge       │
+│  Browser sidebar   │ ◀─────────────▶   │  Node bridge       │
 │  (Lit + marked)    │  Native Messaging │  @github/copilot-  │
 │                    │                   │  sdk + tools       │
 └────────────────────┘                   └────────────────────┘
@@ -32,8 +33,8 @@ tabs, with a side helping of browser automation via Playwright.
 - **Browser context as first-class input.** The composer speaks three
   languages — `/` for client commands, `@` for ambient browser context,
   `#` (planned) for named references. See [Composer language](#composer-language).
-- **Playwright automation built in.** A `browser` tool shells out to
-  `playwright-cli` so the agent can drive your real, logged-in Edge — click,
+- **Playwright automation built in.** A `drive_tab` tool shells out to
+  `playwright-cli` so the agent can drive your real, logged-in browser — click,
   type, screenshot, extract — with the same auth your tabs already have.
 - **Inline tool cards.** Every tool call renders as a VS Code-style card with
   args, progress, and result preview. Click to expand.
@@ -49,16 +50,16 @@ See [`design.md`](./design.md) for the full architecture.
 ## Repo layout
 
 ```
-AgentEdge/
+Anya/                              # repo dir name is still "AgentEdge" on disk
 ├── README.md
 ├── design.md                     # full design spec
 ├── setup.ps1                     # one-shot install/build/test/register
-├── extension/                    # Edge MV3 extension (Lit + Vite)
+├── extension/                    # Chromium MV3 extension (Lit + Vite)
 │   ├── manifest.json
 │   ├── sidebar.html
 │   ├── vite.config.ts
 │   └── src/
-│       ├── main.ts               # the <agent-edge-app> Lit component
+│       ├── main.ts               # the <anya-app> Lit component
 │       ├── styles.ts             # extracted CSS for the sidebar
 │       ├── types.ts              # Chat / ChatMessage / ToolCall / ...
 │       ├── native-bridge.ts      # chrome.runtime.connectNative wrapper
@@ -66,23 +67,24 @@ AgentEdge/
 └── bridge/                       # Node Native Messaging host
     ├── manifest.template.json
     ├── launcher.cmd
-    ├── install.ps1
+    ├── install.ps1               # multi-Chromium HKCU registration
+    ├── uninstall.ps1
     └── src/
         ├── host.ts               # NM stdio loop + frame router
         ├── copilot-bridge.ts     # SessionManager (one Copilot session per chat)
         ├── sessions.ts           # single-bound Playwright tab + polling
         ├── tools.ts              # context tools + browser tool definitions
-
-`AGENTS.md` at the repo root onboards any AI agent (Copilot CLI, Cursor,
-etc.) working **on** the codebase. The AgentEdge product agent's own system
-prompt is `.github/agents/agentedge.agent.md` — a Copilot CLI
-[custom-agent profile](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-custom-agents-for-cli)
-loaded by `bridge/src/copilot-bridge.ts`.
         ├── tool-rpc.ts           # bridge → extension tool RPC
         ├── native-messaging.ts   # length-prefixed JSON framing
-        ├── config.ts             # ~/.agentedge/config.json loader
+        ├── config.ts             # ~/.anya/config.json loader
         └── log.ts                # bridge.log + debug-mirror sink
 ```
+
+`AGENTS.md` at the repo root onboards any AI agent (Copilot CLI, Cursor,
+etc.) working **on** the codebase. Anya's own system prompt is
+`.github/agents/anya.agent.md` — a Copilot CLI
+[custom-agent profile](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-custom-agents-for-cli)
+loaded by `bridge/src/copilot-bridge.ts`.
 
 ---
 
@@ -90,36 +92,66 @@ loaded by `bridge/src/copilot-bridge.ts`.
 
 ### Requirements
 
-- Node 20+ (`node -v`)
-- Edge with developer-mode extensions enabled
-- A logged-in Copilot CLI (`copilot auth status`)
+- **Windows** with PowerShell 5.1+ (the install scripts are PowerShell; the
+  rest of the codebase is OS-agnostic but the Native Messaging registration
+  layer is Windows-only today).
+- **Node 20+** (`node -v`)
+- **A Chromium-based browser** with developer-mode extensions enabled. Anya is
+  installed and tested in: **Microsoft Edge, Google Chrome, Chromium, Brave,
+  Vivaldi**. Any other Chromium-based browser that registers under
+  `HKCU:\Software\<vendor>\<browser>\NativeMessagingHosts\` should also work
+  — pass the registry root via a one-line tweak to `install.ps1`.
+- A logged-in **Copilot CLI** (`copilot auth status`)
 - _Optional, for browser automation:_ `npm i -g @playwright/cli` and the
-  Playwright MCP Bridge extension in Edge
+  Playwright MCP Bridge extension in your browser.
 
-### One-shot setup
+### One-shot setup (recommended)
 
 ```pwsh
 .\setup.ps1
 ```
 
-This installs deps, builds both projects, runs the bridge ping smoke test, and
-registers the Native Messaging host. Use `-SkipTest` to skip the smoke test or
-`-Uninstall` to tear down.
+This runs `npm install` + `npm run build` for both projects, the bridge ping
+smoke test, then registers the Native Messaging host **for every Chromium
+browser detected on the machine** and prints the per-browser load
+instructions. If multiple browsers are present you'll get an interactive
+picker.
 
-### Load the extension
+| Switch              | Effect                                                              |
+| ------------------- | ------------------------------------------------------------------- |
+| `-Browsers edge`    | Register only for the named browser(s). Valid: `edge`, `chrome`, `chromium`, `brave`, `vivaldi`, `all`. |
+| `-Quiet`            | Skip the interactive picker; install for everything detected.       |
+| `-SkipTest`         | Skip the bridge ping/pong smoke test.                               |
+| `-Uninstall`        | Remove the registry entries + manifest from every Chromium browser (and clean up legacy `com.agentedge.bridge` entries from earlier versions). |
 
-1. Open `edge://extensions`.
-2. Toggle **Developer mode**.
-3. **Load unpacked** → pick `extension/dist/`.
-4. Confirm the extension ID is `oopdnihjfloclgnbbkebgeiipfadebid` (pinned via
-   the manifest `key` so it survives reloads).
-5. Click the AgentEdge icon → sidebar opens.
+### Load the extension in each browser
+
+Once the bridge is registered you need to load the unpacked extension in each
+browser you plan to use Anya in. The manifest pins a deterministic extension
+ID (`oopdnihjfloclgnbbkebgeiipfadebid`) via its `key` field, so the same ID
+is granted Native Messaging access in every browser.
+
+| Browser   | Extensions URL          |
+| --------- | ----------------------- |
+| Edge      | `edge://extensions`     |
+| Chrome    | `chrome://extensions`   |
+| Brave     | `brave://extensions`    |
+| Vivaldi   | `vivaldi://extensions`  |
+| Chromium  | `chrome://extensions`   |
+
+In each:
+
+1. Toggle **Developer mode**.
+2. **Load unpacked** → pick `extension/dist/`.
+3. Confirm the extension ID matches `oopdnihjfloclgnbbkebgeiipfadebid`.
+4. Pin the action icon → click it → sidebar opens.
 
 ### Smoke test
 
 - Type `ping` → should answer `PONG`. This validates the bridge handshake
   without involving the Copilot SDK.
 - Type a real prompt → streamed response with inline tool cards.
+
 
 ---
 
@@ -249,7 +281,7 @@ not yet expose `abort()` — so we just stop painting.
 
 ## Browser automation (Playwright)
 
-AgentEdge can drive your real, logged-in Edge browser. The flow:
+Anya can drive your real, logged-in Edge browser. The flow:
 
 1. Sidebar shows a "BOUND TAB" strip in the footer with status.
 2. Click **bind** → bridge spawns `playwright-cli attach --extension=msedge`.
@@ -267,7 +299,7 @@ Each accept produces a token. To auto-attach next time:
 
 1. Trigger the dialog once and copy the long token from
    `PLAYWRIGHT_MCP_EXTENSION_TOKEN=…` shown in the panel.
-2. Paste it into `~/.agentedge/config.json`:
+2. Paste it into `~/.anya/config.json`:
    ```json
    { "playwrightExtensionToken": "<paste-here>" }
    ```
@@ -284,7 +316,7 @@ The token is a local secret. Treat it like an SSH key. Setting
 Click 🐛 in the header for a live trace of every Native Messaging frame and
 every `log()` line from the bridge. Click any row to expand its JSON. The
 bridge log file path is shown at the top — click to copy. From DevTools:
-`agentEdge.debug()`.
+`anya.debug()`.
 
 For terminal tailing:
 
@@ -301,7 +333,7 @@ cd extension && npm run dev      # Vite watches src/
 cd bridge    && npm run build    # tsc; rerun after .ts changes
 ```
 
-Logs go to `%LOCALAPPDATA%\AgentEdge\bridge.log` (also live in the 🐛 panel).
+Logs go to `%LOCALAPPDATA%\Anya\bridge.log` (also live in the 🐛 panel).
 
 The extension keypair lives at `.extension-key.pem` (gitignored). Its public
 key is baked into `extension/manifest.json` so the extension ID stays stable
@@ -312,7 +344,7 @@ whitelists exactly that ID.
 
 **Extension (`extension/src/`):**
 
-- `main.ts` — `<agent-edge-app>` Lit component. Owns all UI state, the chat
+- `main.ts` — `<anya-app>` Lit component. Owns all UI state, the chat
   store, the frame handler, the tool RPC, and the render tree.
 - `styles.ts` — extracted CSS (one big `css` tagged template).
 - `types.ts` — `Chat`, `ChatMessage`, `ToolCall`, `BoundTab`, `QuickPrompt`,
@@ -334,7 +366,7 @@ whitelists exactly that ID.
   to `playwright-cli`.
 - `tool-rpc.ts` — request/response correlation for bridge → extension tool
   calls (where the bridge needs `chrome.*` data).
-- `config.ts` — loads `~/.agentedge/config.json`.
+- `config.ts` — loads `~/.anya/config.json`.
 - `log.ts` — appends to `bridge.log` and mirrors to the debug panel.
 
 ---

@@ -1,4 +1,4 @@
-// Reads ~/.agentedge/config.json. Lets the user set a Playwright MCP extension
+// Reads ~/.anya/config.json. Lets the user set a Playwright MCP extension
 // token once (copied from the extension's "connect" dialog) so playwright-cli
 // auto-attaches to the user's browser without manual approval.
 
@@ -7,21 +7,21 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { log, warn } from './log.js';
 
-export interface AgentEdgeConfig {
+export interface AnyaConfig {
   /** Token from the Playwright MCP extension connect dialog. */
   playwrightExtensionToken?: string;
 }
 
-const CONFIG_DIR = join(homedir(), '.agentedge');
+const CONFIG_DIR = join(homedir(), '.anya');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
-let cached: AgentEdgeConfig | null = null;
+let cached: AnyaConfig | null = null;
 
 export function getConfigPath(): string {
   return CONFIG_FILE;
 }
 
-export function loadConfig(): AgentEdgeConfig {
+export function loadConfig(): AnyaConfig {
   if (cached) return cached;
   try {
     if (!existsSync(CONFIG_FILE)) {
@@ -30,7 +30,7 @@ export function loadConfig(): AgentEdgeConfig {
       return cached;
     }
     const raw = readFileSync(CONFIG_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as AgentEdgeConfig;
+    const parsed = JSON.parse(raw) as AnyaConfig;
     cached = parsed && typeof parsed === 'object' ? parsed : {};
   } catch (err) {
     warn('config load failed:', err);

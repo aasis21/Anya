@@ -1,9 +1,9 @@
 /**
- * AgentEdge sidebar — the Lit component that wires Edge to the local Copilot bridge.
+ * Anya sidebar — the Lit component that wires the browser to the local Copilot bridge.
  *
  * High-level layout (top → bottom of the file):
  *   1. Imports + small pure helpers (escapeRegExp, summariseTab).
- *   2. AgentEdgeApp (`<agent-edge-app>`):
+ *   2. AnyaApp (`<anya-app>`):
  *        - reactive @state fields (UI + chat store + debug + bound tab)
  *        - lifecycle: connectedCallback / disconnectedCallback
  *        - chat store: load / persist / new / switch / delete / rename / pin / tag
@@ -62,8 +62,8 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-@customElement('agent-edge-app')
-export class AgentEdgeApp extends LitElement {
+@customElement('anya-app')
+export class AnyaApp extends LitElement {
   static styles = sidebarStyles;
 
   @state() private connected = false;
@@ -72,6 +72,11 @@ export class AgentEdgeApp extends LitElement {
   @state() private bridgeLogFile: string | null = null;
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private draftEmpty = true;
+  /** Mirror of textarea content. Drives the highlight overlay so recognised
+   *  `@-mentions` show the accent colour as the user types. Kept in sync with
+   *  the textarea via `syncDraft()` (called from `onInput`, `send()`,
+   *  `applyAutocomplete()`, quick-prompt insert, etc.). */
+  @state() private composerText = '';
   @state() private debugOpen = false;
   @state() private debugEntries: DebugEntry[] = [];
   @state() private toolExpanded: Set<string> = new Set();
@@ -99,7 +104,39 @@ export class AgentEdgeApp extends LitElement {
 
   // Pending pasted/dropped images attached to the next outbound message.
   @state() private pendingAttachments: ImageAttachment[] = [];
-  /** Native messaging Edge→host caps frames near 4MB. base64 inflates ~1.33×. */
+
+  // Inline autocomplete for `/` and `@` triggers.
+  @state() private autocomplete: {
+    kind: 'slash' | 'at';
+    startIdx: number;     // index of the `/` or `@` char in the textarea value
+    query: string;        // chars typed after the trigger (lowercased on use)
+    selectedIdx: number;  // currently highlighted item in the filtered list
+  } | null = null;
+
+  // Static catalogs — keep in sync with /help and the README composer table.
+  private static readonly SLASH_CATALOG: ReadonlyArray<{ token: string; description: string; insert?: string }> = [
+    { token: '/new',     description: 'start a fresh chat (Ctrl+N)' },
+    { token: '/clear',   description: 'wipe current chat (Ctrl+L)' },
+    { token: '/rename',  description: 'rename current chat',          insert: '/rename ' },
+    { token: '/delete',  description: 'delete current chat' },
+    { token: '/pin',     description: 'toggle pin on current chat' },
+    { token: '/tag',     description: 'add | rm | list tags',         insert: '/tag ' },
+    { token: '/search',  description: 'open chat search (Ctrl+K)',    insert: '/search ' },
+    { token: '/export',  description: 'download chat as Markdown' },
+    { token: '/stop',    description: 'cancel in-flight stream (Ctrl+.)' },
+    { token: '/help',    description: 'show this list inside chat' },
+  ];
+
+  private static readonly AT_CATALOG: ReadonlyArray<{ token: string; description: string; insert?: string }> = [
+    { token: '@tab',        description: 'active tab as Markdown' },
+    { token: '@selection',  description: 'highlighted text on the active tab' },
+    { token: '@url',        description: 'active tab URL' },
+    { token: '@title',      description: 'active tab title' },
+    { token: '@clipboard',  description: 'system clipboard text' },
+    { token: '@tabs',       description: 'markdown table of every open tab' },
+    { token: '@tab:',       description: 'one tab — id or substring of title/url', insert: '@tab:' },
+  ];
+  /** Native messaging caps frames near 4MB. base64 inflates ~1.33×. */
   private static readonly ATTACHMENT_TOTAL_LIMIT = 3 * 1024 * 1024;
 
   // Single bound Playwright tab (was: array of sessions).
@@ -143,7 +180,7 @@ export class AgentEdgeApp extends LitElement {
     void this.loadQuickPrompts();
     window.addEventListener('keydown', this.onGlobalKey);
     // Hidden dev escape hatch — invisible to users
-    (window as any).agentEdge = {
+    (window as any).anya = {
       ping: () => this.bridgeSend({ type: 'ping' }),
       echo: (text: string) => this.bridgeSend({ type: 'echo', text }),
       debug: () => this.toggleDebug(),
@@ -151,34 +188,48 @@ export class AgentEdgeApp extends LitElement {
     };
   }
 
-  private async loadTheme(): Promise<void> {
+  // One-time migration: read a value from the new key, falling back to the
+  // legacy `agentedge-*` key for users upgrading from the AgentEdge name.
+  // Migrated values are written under the new key and the legacy key is
+  // removed so we only pay the read cost once.
+  private async migrateStorage<T>(newKey: string, legacyKey: string): Promise<T | undefined> {
     try {
-      const stored = await chrome.storage?.local?.get?.('agentedge-theme');
-      const t = stored?.['agentedge-theme'];
-      if (t === 'light' || t === 'dark') {
-        this.theme = t;
+      const cur = await chrome.storage?.local?.get?.(newKey);
+      if (cur && Object.prototype.hasOwnProperty.call(cur, newKey)) return cur[newKey] as T;
+      const old = await chrome.storage?.local?.get?.(legacyKey);
+      if (old && Object.prototype.hasOwnProperty.call(old, legacyKey)) {
+        const value = old[legacyKey] as T;
+        try {
+          await chrome.storage?.local?.set?.({ [newKey]: value });
+          await chrome.storage?.local?.remove?.(legacyKey);
+        } catch { /* ignore */ }
+        return value;
       }
     } catch { /* ignore */ }
+    return undefined;
+  }
+
+  private async loadTheme(): Promise<void> {
+    const t = await this.migrateStorage<string>('anya-theme', 'agentedge-theme');
+    if (t === 'light' || t === 'dark') this.theme = t;
     this.setAttribute('theme', this.theme);
   }
 
   private toggleTheme(): void {
     this.theme = this.theme === 'dark' ? 'light' : 'dark';
     this.setAttribute('theme', this.theme);
-    try { chrome.storage?.local?.set?.({ 'agentedge-theme': this.theme }); } catch { /* ignore */ }
+    try { chrome.storage?.local?.set?.({ 'anya-theme': this.theme }); } catch { /* ignore */ }
   }
 
   // ----- debug mode ------------------------------------------------------
   private async loadDebug(): Promise<void> {
-    try {
-      const stored = await chrome.storage?.local?.get?.('agentedge-debug');
-      if (stored?.['agentedge-debug'] === true) this.debugOpen = true;
-    } catch { /* ignore */ }
+    const v = await this.migrateStorage<unknown>('anya-debug', 'agentedge-debug');
+    if (v === true) this.debugOpen = true;
   }
 
   private toggleDebug(): void {
     this.debugOpen = !this.debugOpen;
-    try { chrome.storage?.local?.set?.({ 'agentedge-debug': this.debugOpen }); } catch { /* ignore */ }
+    try { chrome.storage?.local?.set?.({ 'anya-debug': this.debugOpen }); } catch { /* ignore */ }
   }
 
   private clearDebug(): void {
@@ -240,11 +291,11 @@ export class AgentEdgeApp extends LitElement {
       this.persistTimer = null;
       try {
         chrome.storage?.local?.set?.({
-          'agentedge-chats': this.chats.map((c) => ({
+          'anya-chats': this.chats.map((c) => ({
             ...c,
             messages: c.messages.map((m) => ({ ...m, pending: false })),
           })),
-          'agentedge-current-chat': this.currentChatId,
+          'anya-current-chat': this.currentChatId,
         });
       } catch { /* ignore */ }
     }
@@ -253,9 +304,8 @@ export class AgentEdgeApp extends LitElement {
   // ----- chat store ------------------------------------------------------
   private async loadChats(): Promise<void> {
     try {
-      const stored = await chrome.storage?.local?.get?.(['agentedge-chats', 'agentedge-current-chat']);
-      const arr = stored?.['agentedge-chats'];
-      const cur = stored?.['agentedge-current-chat'];
+      const arr = await this.migrateStorage<any>('anya-chats', 'agentedge-chats');
+      const cur = await this.migrateStorage<string>('anya-current-chat', 'agentedge-current-chat');
       if (Array.isArray(arr) && arr.length > 0) {
         this.chats = arr.map((c: any) => ({
           id: String(c.id),
@@ -273,7 +323,7 @@ export class AgentEdgeApp extends LitElement {
         this.startNewChat();
       }
     } catch (err) {
-      console.warn('[AgentEdge] loadChats failed', err);
+      console.warn('[Anya] loadChats failed', err);
       this.startNewChat();
     }
     this.chatsLoaded = true;
@@ -284,12 +334,12 @@ export class AgentEdgeApp extends LitElement {
     this.persistTimer = window.setTimeout(() => {
       try {
         chrome.storage?.local?.set?.({
-          'agentedge-chats': this.chats.map((c) => ({
+          'anya-chats': this.chats.map((c) => ({
             ...c,
             // Strip pending flag so reloads don't show stuck spinners
             messages: c.messages.map((m) => ({ ...m, pending: false })),
           })),
-          'agentedge-current-chat': this.currentChatId,
+          'anya-current-chat': this.currentChatId,
         });
       } catch { /* storage may be unavailable */ }
     }, 250);
@@ -456,8 +506,7 @@ export class AgentEdgeApp extends LitElement {
   // ----- quick prompts ---------------------------------------------------
   private async loadQuickPrompts(): Promise<void> {
     try {
-      const stored = await chrome.storage?.local?.get?.('agentedge-quick-prompts');
-      const arr = stored?.['agentedge-quick-prompts'];
+      const arr = await this.migrateStorage<any>('anya-quick-prompts', 'agentedge-quick-prompts');
       if (Array.isArray(arr) && arr.length > 0) {
         this.quickPrompts = arr.map((p: any) => ({
           id: String(p.id),
@@ -469,14 +518,14 @@ export class AgentEdgeApp extends LitElement {
   }
 
   private persistQuickPrompts(): void {
-    try { chrome.storage?.local?.set?.({ 'agentedge-quick-prompts': this.quickPrompts }); } catch { /* ignore */ }
+    try { chrome.storage?.local?.set?.({ 'anya-quick-prompts': this.quickPrompts }); } catch { /* ignore */ }
   }
 
   private insertQuickPrompt = (qp: QuickPrompt): void => {
     const ta = this.textarea ?? (this.renderRoot.querySelector('#prompt-input') as HTMLTextAreaElement | null);
     if (!ta) return;
     ta.value = qp.body;
-    this.draftEmpty = ta.value.length === 0;
+    this.syncDraft(ta.value);
     ta.focus();
     this.chatDrawerOpen = false;
   };
@@ -588,10 +637,10 @@ export class AgentEdgeApp extends LitElement {
         break;
       }
       case 'pong':
-        console.debug('[AgentEdge] pong');
+        console.debug('[Anya] pong');
         break;
       case 'echo-reply':
-        console.debug('[AgentEdge] echo:', String(data.text ?? ''));
+        console.debug('[Anya] echo:', String(data.text ?? ''));
         break;
       case 'delta':
         if (chatId && !this.cancelledChats.has(chatId)) this.appendDelta(chatId, String(data.text ?? ''));
@@ -621,7 +670,7 @@ export class AgentEdgeApp extends LitElement {
         const tool = String(data.tool ?? '');
         const args = (data.args ?? {}) as Record<string, unknown>;
         if (!id || !tool) {
-          console.warn('[AgentEdge] malformed tool-request:', data);
+          console.warn('[Anya] malformed tool-request:', data);
           return;
         }
         void this.handleToolRequest(id, tool, args);
@@ -701,7 +750,7 @@ export class AgentEdgeApp extends LitElement {
         // Bridge confirmed deletion; no action needed (UI already updated).
         break;
       default:
-        console.debug('[AgentEdge] unknown frame:', f);
+        console.debug('[Anya] unknown frame:', f);
     }
   }
 
@@ -711,7 +760,7 @@ export class AgentEdgeApp extends LitElement {
     tool: string,
     args: Record<string, unknown>,
   ): Promise<void> {
-    console.debug('[AgentEdge] tool-request', tool, args);
+    console.debug('[Anya] tool-request', tool, args);
     try {
       const result = await this.executeTool(tool, args);
       nativeBridge.send({ type: 'tool-response', id, ok: true, result });
@@ -725,7 +774,7 @@ export class AgentEdgeApp extends LitElement {
       // Tool failures are routine (restricted pages, closed tabs) — log at
       // debug level only. The error surfaces back to the model via the
       // tool-response frame so the model can react.
-      console.debug('[AgentEdge] tool failed', tool, msg);
+      console.debug('[Anya] tool failed', tool, msg);
       nativeBridge.send({ type: 'tool-response', id, ok: false, error: msg });
       this.recordDebug({
         kind: 'out',
@@ -795,7 +844,7 @@ export class AgentEdgeApp extends LitElement {
         const tab = await chrome.tabs.update(tabId, { active: true });
         if (tab && typeof tab.windowId === 'number') {
           try { await chrome.windows.update(tab.windowId, { focused: true }); }
-          catch (e) { console.warn('[AgentEdge] focus window failed:', e); }
+          catch (e) { console.warn('[Anya] focus window failed:', e); }
         }
         return tab ? summariseTab(tab) : { tabId };
       }
@@ -806,7 +855,7 @@ export class AgentEdgeApp extends LitElement {
         const tab = await chrome.tabs.create({ url, active: !background });
         if (!background && typeof tab.windowId === 'number') {
           try { await chrome.windows.update(tab.windowId, { focused: true }); }
-          catch (e) { console.warn('[AgentEdge] focus window failed:', e); }
+          catch (e) { console.warn('[Anya] focus window failed:', e); }
         }
         return summariseTab(tab);
       }
@@ -885,14 +934,14 @@ export class AgentEdgeApp extends LitElement {
                   let parts = '';
                   try { parts += String((window as Window).name ?? ''); } catch { /* ignore */ }
                   parts += '|';
-                  try { parts += String(document.documentElement?.getAttribute('data-agentedge-sid') ?? ''); } catch { /* ignore */ }
+                  try { parts += String(document.documentElement?.getAttribute('data-anya-sid') ?? ''); } catch { /* ignore */ }
                   parts += '|';
-                  try { parts += String(sessionStorage.getItem('__agentedge_sid') ?? ''); } catch { /* ignore */ }
+                  try { parts += String(sessionStorage.getItem('__anya_sid') ?? ''); } catch { /* ignore */ }
                   return parts;
                 },
               });
             const s = String(result ?? '');
-            if (s.includes('agentedge:' + sid) || s.split('|').includes(sid)) {
+            if (s.includes('anya:' + sid) || s.split('|').includes(sid)) {
               return {
                 tabId: t.id,
                 url: t.url,
@@ -1207,7 +1256,7 @@ export class AgentEdgeApp extends LitElement {
     if (text.startsWith('/')) {
       if (this.handleSlashCommand(text)) {
         ta.value = '';
-        this.draftEmpty = true;
+        this.syncDraft('');
         return;
       }
     }
@@ -1228,7 +1277,7 @@ export class AgentEdgeApp extends LitElement {
     });
     if (text) this.autoTitleIfNeeded(chatId, text);
     ta.value = '';
-    this.draftEmpty = true;
+    this.syncDraft('');
     this.pendingAttachments = [];
     this.scrollToBottom();
 
@@ -1336,7 +1385,7 @@ export class AgentEdgeApp extends LitElement {
         prompt = `[Active tab: ${url} — ${title}]\n\n${prompt}`;
       }
     } catch (err) {
-      console.warn('[AgentEdge] context prep failed; sending raw prompt', err);
+      console.warn('[Anya] context prep failed; sending raw prompt', err);
     }
 
     // Default caption when only images were sent so the model has something
@@ -1497,13 +1546,44 @@ export class AgentEdgeApp extends LitElement {
         const rx = new RegExp(escapeRegExp(r.token), 'gi');
         result = result.replace(rx, value);
       } catch (err) {
-        console.debug('[AgentEdge] mention expansion skipped for', r.token, err);
+        console.debug('[Anya] mention expansion skipped for', r.token, err);
       }
     }
     return result;
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // If the autocomplete popup is open with at least one match, intercept
+    // navigation/commit keys before any other handler sees them.
+    if (this.autocomplete) {
+      const items = this.filteredAutocomplete();
+      if (items.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          this.autocomplete = { ...this.autocomplete, selectedIdx: (this.autocomplete.selectedIdx + 1) % items.length };
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          this.autocomplete = { ...this.autocomplete, selectedIdx: (this.autocomplete.selectedIdx - 1 + items.length) % items.length };
+          return;
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+          e.preventDefault();
+          this.applyAutocomplete(items[this.autocomplete.selectedIdx]);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.autocomplete = null;
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.autocomplete = null;
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       this.send();
@@ -1511,9 +1591,107 @@ export class AgentEdgeApp extends LitElement {
   };
 
   private onInput = (e: Event): void => {
-    const v = (e.target as HTMLTextAreaElement).value;
-    this.draftEmpty = v.length === 0;
+    const ta = e.target as HTMLTextAreaElement;
+    this.syncDraft(ta.value);
+    this.maybeOpenAutocomplete(ta);
   };
+
+  /** Keep the highlight overlay scrolled in lock-step with the textarea
+   *  (only matters once the user types past `max-height: 160px`). */
+  private onComposerScroll = (e: Event): void => {
+    const ta = e.target as HTMLTextAreaElement;
+    const mirror = ta.parentElement?.querySelector('.composer-mirror') as HTMLElement | null;
+    if (mirror) mirror.scrollTop = ta.scrollTop;
+  };
+
+  /** Single point of truth for "the textarea changed". Updates both the
+   *  emptiness flag (drives the send button) and the mirror text (drives the
+   *  highlight overlay behind the textarea). */
+  private syncDraft(value: string): void {
+    this.draftEmpty = value.length === 0;
+    this.composerText = value;
+  }
+
+  /**
+   * Decide whether the caret is sitting in a `/` or `@` autocomplete
+   * context, and update `this.autocomplete` accordingly.
+   *
+   *  - Slash: only when the textarea begins with `/` and the caret is
+   *    inside that first run of non-whitespace chars (matches the actual
+   *    slash-command dispatch in `send()`).
+   *  - At: when the caret is at the end of an `@\S*` run preceded by
+   *    start-of-string or whitespace.
+   */
+  private maybeOpenAutocomplete(ta: HTMLTextAreaElement): void {
+    const caret = ta.selectionStart ?? ta.value.length;
+    const before = ta.value.slice(0, caret);
+
+    const slashMatch = /^\/(\S*)$/.exec(before);
+    if (slashMatch) {
+      const query = slashMatch[1];
+      const prev = this.autocomplete;
+      this.autocomplete = {
+        kind: 'slash',
+        startIdx: 0,
+        query,
+        selectedIdx: prev?.kind === 'slash' && prev.query === query ? prev.selectedIdx : 0,
+      };
+      return;
+    }
+
+    const atMatch = /(?:^|\s)(@\S*)$/.exec(before);
+    if (atMatch) {
+      const tokenStart = caret - atMatch[1].length;
+      const query = atMatch[1].slice(1);
+      const prev = this.autocomplete;
+      this.autocomplete = {
+        kind: 'at',
+        startIdx: tokenStart,
+        query,
+        selectedIdx: prev?.kind === 'at' && prev.query === query ? prev.selectedIdx : 0,
+      };
+      return;
+    }
+
+    this.autocomplete = null;
+  }
+
+  /**
+   * Filtered, sorted catalog entries for the current trigger.
+   * Items where the bare token (stripped of `/` or `@`) starts with the
+   * query are listed first; substring matches come after. Empty query
+   * shows the whole catalog.
+   */
+  private filteredAutocomplete(): ReadonlyArray<{ token: string; description: string; insert?: string }> {
+    const ac = this.autocomplete;
+    if (!ac) return [];
+    const cat = ac.kind === 'slash' ? AnyaApp.SLASH_CATALOG : AnyaApp.AT_CATALOG;
+    const q = ac.query.toLowerCase();
+    if (!q) return cat;
+    const starts: typeof cat[number][] = [];
+    const contains: typeof cat[number][] = [];
+    for (const it of cat) {
+      const bare = it.token.slice(1).toLowerCase();
+      if (bare.startsWith(q)) starts.push(it);
+      else if (bare.includes(q)) contains.push(it);
+    }
+    return [...starts, ...contains];
+  }
+
+  /** Replace the trigger run with the chosen completion text. */
+  private applyAutocomplete(item: { token: string; insert?: string }): void {
+    const ac = this.autocomplete;
+    const ta = this.textarea;
+    if (!ac || !ta) return;
+    const caret = ta.selectionStart ?? ta.value.length;
+    const insertText = item.insert ?? item.token;
+    ta.value = ta.value.slice(0, ac.startIdx) + insertText + ta.value.slice(caret);
+    const newCaret = ac.startIdx + insertText.length;
+    ta.selectionStart = ta.selectionEnd = newCaret;
+    ta.focus();
+    this.syncDraft(ta.value);
+    this.autocomplete = null;
+  }
 
   /** Intercept clipboard images on the textarea. */
   private onPaste = (e: ClipboardEvent): void => {
@@ -1529,19 +1707,19 @@ export class AgentEdgeApp extends LitElement {
 
   /** Read a File as data URL + base64 and push into the pending strip. */
   private async addImageAttachment(file: File): Promise<void> {
-    if (file.size > AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT) {
+    if (file.size > AnyaApp.ATTACHMENT_TOTAL_LIMIT) {
       this.pushSystem(
         this.currentChatId || this.startNewChat(),
-        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max ~${(AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB per attachment.`,
+        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max ~${(AnyaApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB per attachment.`,
         'error',
       );
       return;
     }
     const totalSoFar = this.pendingAttachments.reduce((n, a) => n + a.bytes, 0);
-    if (totalSoFar + file.size > AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT) {
+    if (totalSoFar + file.size > AnyaApp.ATTACHMENT_TOTAL_LIMIT) {
       this.pushSystem(
         this.currentChatId || this.startNewChat(),
-        `Total attachments would exceed ~${(AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB. Send what you have, then attach more.`,
+        `Total attachments would exceed ~${(AnyaApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB. Send what you have, then attach more.`,
         'error',
       );
       return;
@@ -1552,7 +1730,7 @@ export class AgentEdgeApp extends LitElement {
       r.onerror = () => reject(r.error);
       r.readAsDataURL(file);
     }).catch((err) => {
-      console.warn('[AgentEdge] read image failed:', err);
+      console.warn('[Anya] read image failed:', err);
       return '';
     });
     if (!dataUrl) return;
@@ -1629,6 +1807,29 @@ export class AgentEdgeApp extends LitElement {
     `;
   }
 
+  /**
+   * Split user-bubble text into a sequence of plain strings and
+   * `<span class="mention">…</span>` lit fragments so the operator can see
+   * at a glance which `@-tokens` were recognised by the composer.
+   *
+   * Mirrors the regex in `expandMentions`. We intentionally do NOT highlight
+   * tokens the regex doesn't accept — that would lie to the user about what
+   * actually got expanded.
+   */
+  private renderMentionedText(text: string) {
+    const rx = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?)(?=$|[\s.,;!?])/gi;
+    const parts: Array<unknown> = [];
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = rx.exec(text)) !== null) {
+      if (m.index > last) parts.push(text.slice(last, m.index));
+      parts.push(html`<span class="mention" title="recognised mention">${m[0]}</span>`);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return parts.length === 0 ? text : parts;
+  }
+
   private renderBubble(m: ChatMessage) {
     if (m.role === 'system') {
       return html`<div class="bubble">${m.text}</div>`;
@@ -1646,7 +1847,7 @@ export class AgentEdgeApp extends LitElement {
               `)}
             </div>
           ` : nothing}
-          ${m.text ? html`<div class="msg-text">${m.text}</div>` : nothing}
+          ${m.text ? html`<div class="msg-text">${this.renderMentionedText(m.text)}</div>` : nothing}
         </div>
       `;
     }
@@ -1817,6 +2018,7 @@ export class AgentEdgeApp extends LitElement {
       </main>
 
       <footer>
+        ${this.autocomplete ? this.renderAutocomplete() : nothing}
         ${this.pendingAttachments.length > 0 ? html`
           <div class="att-strip" title="Attachments queued for next message">
             ${this.pendingAttachments.map((a, i) => html`
@@ -1834,15 +2036,19 @@ export class AgentEdgeApp extends LitElement {
         ` : nothing}
         <div class="composer-row">
           <span class="sigil">›</span>
-          <textarea
-            id="prompt-input"
-            rows="1"
-            spellcheck="false"
-            placeholder="next to your browser. what should we do?"
-            @keydown=${this.onKeyDown}
-            @input=${this.onInput}
-            @paste=${this.onPaste}
-          ></textarea>
+          <div class="composer-input">
+            <div class="composer-mirror" aria-hidden="true">${this.renderMentionedText(this.composerText)}${this.composerText.endsWith('\n') ? ' ' : ''}</div>
+            <textarea
+              id="prompt-input"
+              rows="1"
+              spellcheck="false"
+              placeholder="next to your browser. what should we do?"
+              @keydown=${this.onKeyDown}
+              @input=${this.onInput}
+              @paste=${this.onPaste}
+              @scroll=${this.onComposerScroll}
+            ></textarea>
+          </div>
           ${this.currentChatId && this.streamingIds.has(this.currentChatId)
             ? html`<button
                 class="send-btn stop-btn"
@@ -1859,6 +2065,37 @@ export class AgentEdgeApp extends LitElement {
       </footer>
 
       ${this.renderPwStrip()}
+    `;
+  }
+
+  private renderAutocomplete() {
+    const items = this.filteredAutocomplete();
+    if (items.length === 0) return nothing;
+    const ac = this.autocomplete!;
+    const heading = ac.kind === 'slash' ? 'slash commands' : '@-mentions';
+    return html`
+      <div class="ac-popup" role="listbox" aria-label=${heading}>
+        <div class="ac-head">${heading}${ac.query ? html` · matching <em>${ac.query}</em>` : nothing}</div>
+        ${items.map((it, i) => html`
+          <div
+            class=${i === ac.selectedIdx ? 'ac-item ac-item--sel' : 'ac-item'}
+            role="option"
+            aria-selected=${i === ac.selectedIdx ? 'true' : 'false'}
+            @mousedown=${(e: Event) => {
+              // mousedown (not click) so we win the focus race against blur
+              e.preventDefault();
+              this.applyAutocomplete(it);
+            }}
+            @mouseenter=${() => {
+              if (this.autocomplete) this.autocomplete = { ...this.autocomplete, selectedIdx: i };
+            }}
+          >
+            <span class="ac-tok">${it.token}</span>
+            <span class="ac-desc">${it.description}</span>
+          </div>
+        `)}
+        <div class="ac-foot">↑↓ navigate · ↵/⇥ insert · esc dismiss</div>
+      </div>
     `;
   }
 
@@ -2140,6 +2377,6 @@ export class AgentEdgeApp extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'agent-edge-app': AgentEdgeApp;
+    'anya-app': AnyaApp;
   }
 }

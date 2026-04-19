@@ -1,10 +1,15 @@
 <#
 .SYNOPSIS
-    Uninstalls the AgentEdge Native Messaging host registration.
+    Uninstalls the Anya Native Messaging host registration from every Chromium
+    browser (and cleans up the legacy AgentEdge entries).
 
 .DESCRIPTION
-    - Removes the HKCU registry entry for com.agentedge.bridge
-    - Deletes the installed manifest at %LOCALAPPDATA%\AgentEdge\com.agentedge.bridge.json
+    - Removes HKCU registry entries for com.anya.bridge across Edge, Chrome,
+      Chromium, Brave, and Vivaldi.
+    - Also removes legacy entries for com.agentedge.bridge so users upgrading
+      from the AgentEdge name don't get a duplicate registration.
+    - Deletes the installed manifest at %LOCALAPPDATA%\Anya\com.anya.bridge.json
+      and the legacy %LOCALAPPDATA%\AgentEdge directory if present.
     - Leaves the bridge source/build directory untouched.
 #>
 
@@ -13,26 +18,37 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$HostName     = 'com.agentedge.bridge'
-$InstallDir   = Join-Path $env:LOCALAPPDATA 'AgentEdge'
-$ManifestPath = Join-Path $InstallDir "$HostName.json"
-$RegKey       = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\$HostName"
+$Hosts        = @('com.anya.bridge', 'com.agentedge.bridge')  # current + legacy
+$RegRoots     = @(
+    'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts',
+    'HKCU:\Software\Google\Chrome\NativeMessagingHosts',
+    'HKCU:\Software\Chromium\NativeMessagingHosts',
+    'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts',
+    'HKCU:\Software\Vivaldi\NativeMessagingHosts'
+)
 
-if (Test-Path $RegKey) {
-    Remove-Item -Path $RegKey -Recurse -Force
-    Write-Host "[OK] Removed registry key: $RegKey"
-}
-else {
-    Write-Host "[skip] Registry key not present: $RegKey"
+foreach ($root in $RegRoots) {
+    foreach ($h in $Hosts) {
+        $key = Join-Path $root $h
+        if (Test-Path $key) {
+            Remove-Item -Path $key -Recurse -Force
+            Write-Host "[OK]  Removed: $key"
+        }
+    }
 }
 
-if (Test-Path $ManifestPath) {
-    Remove-Item -Path $ManifestPath -Force
-    Write-Host "[OK] Removed manifest: $ManifestPath"
-}
-else {
-    Write-Host "[skip] Manifest not present: $ManifestPath"
+$installDirs = @(
+    @{ Dir = Join-Path $env:LOCALAPPDATA 'Anya';      File = 'com.anya.bridge.json' },
+    @{ Dir = Join-Path $env:LOCALAPPDATA 'AgentEdge'; File = 'com.agentedge.bridge.json' }
+)
+foreach ($d in $installDirs) {
+    $mf = Join-Path $d.Dir $d.File
+    if (Test-Path $mf) {
+        Remove-Item -Path $mf -Force
+        Write-Host "[OK]  Removed manifest: $mf"
+    }
 }
 
 Write-Host ''
-Write-Host 'AgentEdge bridge uninstalled. The bridge source folder was not touched.'
+Write-Host 'Anya bridge unregistered from all detected Chromium browsers.'
+Write-Host 'The bridge source folder, logs, and chat data were not touched.'

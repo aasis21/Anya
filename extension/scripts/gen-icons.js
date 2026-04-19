@@ -1,7 +1,6 @@
-// Generates placeholder PNG icons (16/48/128) for the AgentEdge extension.
-// Solid Edge-blue (#0078D4) background with a white "A" glyph.
-//
-// Pure-Node implementation using `pngjs` (devDep). No browser/canvas needed.
+// Generates placeholder PNG icons (16/48/128) for the Anya extension.
+// Solid blue (#0078D4) background with a white "A" glyph. Pure-Node
+// implementation using `pngjs` (devDep). No browser/canvas needed.
 
 import { PNG } from 'pngjs';
 import { mkdirSync, writeFileSync } from 'node:fs';

@@ -1,13 +1,13 @@
 import { css } from 'lit';
 
 /**
- * AgentEdge sidebar styles.
+ * Anya sidebar styles.
  * Editorial-brutalist: bone on near-black, signal-red accent, monospace.
  * Extracted from main.ts to keep the component file focused on behaviour.
  */
 export const sidebarStyles = css`
     /* ===========================================================
-       AGENTEDGE / editorial-brutalist chat
+       ANYA / editorial-brutalist chat
        Bone on near-black. Signal-red as the only accent.
        Monospace everything. No rounded corners.
        =========================================================== */
@@ -339,11 +339,76 @@ export const sidebarStyles = css`
       border-top: 1px solid var(--bg-rule);
       background: var(--bg);
       flex: 0 0 auto;
+      position: relative;
     }
     .composer-row {
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: stretch;
+    }
+    .ac-popup {
+      position: absolute;
+      bottom: 100%;
+      left: 8px;
+      right: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      background: var(--bg-soft, var(--bg));
+      border: 1px solid var(--bg-rule);
+      border-radius: 8px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      margin-bottom: 6px;
+      font-size: 12.5px;
+      z-index: 30;
+    }
+    .ac-head, .ac-foot {
+      padding: 4px 10px;
+      color: var(--fg-dim);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .ac-head {
+      border-bottom: 1px solid var(--bg-rule);
+      text-transform: uppercase;
+    }
+    .ac-head em { color: var(--fg); font-style: normal; }
+    .ac-foot {
+      border-top: 1px solid var(--bg-rule);
+      text-align: right;
+    }
+    .ac-item {
+      display: grid;
+      grid-template-columns: minmax(120px, max-content) 1fr;
+      gap: 12px;
+      padding: 6px 10px 6px 8px;
+      cursor: pointer;
+      align-items: baseline;
+      border-left: 2px solid transparent;
+    }
+    .ac-item--sel {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      border-left-color: var(--accent);
+    }
+    .ac-item--sel .ac-tok { color: var(--accent); font-weight: 700; }
+    .ac-item--sel .ac-desc { color: var(--fg); }
+    .ac-tok {
+      font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+      color: var(--fg);
+    }
+    .ac-desc {
+      color: var(--fg-dim);
+    }
+
+    /* Recognised @-mentions in the user bubble. */
+    .msg.user .mention {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+      border-radius: 3px;
+      padding: 0 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+      font-size: 0.92em;
+      white-space: nowrap;
     }
     .att-strip {
       display: flex;
@@ -424,7 +489,8 @@ export const sidebarStyles = css`
       min-height: 44px;
       max-height: 160px;
       background: transparent;
-      color: var(--fg);
+      color: transparent;
+      -webkit-text-fill-color: transparent;
       border: none;
       padding: 12px 6px;
       font-family: inherit;
@@ -432,8 +498,56 @@ export const sidebarStyles = css`
       line-height: 1.5;
       outline: none;
       caret-color: var(--accent);
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      display: block;
     }
-    textarea::placeholder { color: var(--fg-faint); }
+    textarea::placeholder { color: var(--fg-faint); -webkit-text-fill-color: var(--fg-faint); }
+    /* When user selects text in the (transparent) textarea, the browser would
+       normally show only the selection rectangle. Force the selection to also
+       paint the text in a contrasting colour so it stays readable. */
+    textarea::selection {
+      background: color-mix(in srgb, var(--accent) 35%, transparent);
+      color: var(--fg);
+      -webkit-text-fill-color: var(--fg);
+    }
+
+    /* ---------- COMPOSER HIGHLIGHT OVERLAY ---------- */
+    /* The textarea is rendered with transparent text on top of a mirror div
+       that holds the same text wrapped in span.mention for any recognised
+       at-token. The mirror is purely visual; clicks/selection still hit the
+       textarea. Padding / font-metrics MUST match exactly. */
+    .composer-input {
+      position: relative;
+      display: block;
+      min-width: 0;
+    }
+    .composer-mirror {
+      position: absolute;
+      inset: 0;
+      padding: 12px 6px;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      color: var(--fg);
+      pointer-events: none;
+      user-select: none;
+      overflow: hidden;
+      z-index: 0;
+    }
+    /* IMPORTANT: do NOT add padding/border/margin/font-weight to this rule —
+       any width change vs. the un-decorated character would shift the
+       textarea/mirror alignment by even a sub-pixel and the overlay would
+       drift. Colour-only highlight keeps the glyph metrics identical. */
+    .composer-mirror .mention {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-radius: 2px;
+    }
 
     .send-btn {
       display: flex; align-items: center; gap: 8px;

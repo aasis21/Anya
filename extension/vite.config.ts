@@ -7,7 +7,7 @@ const distDir = resolve(root, 'dist');
 
 function copyStaticAssets() {
   return {
-    name: 'agentedge-copy-static',
+    name: 'anya-copy-static',
     closeBundle() {
       mkdirSync(distDir, { recursive: true });
 

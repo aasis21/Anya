@@ -1,4 +1,4 @@
-# AgentEdge — Design
+# Anya — Design
 
 > **One line.** GitHub Copilot's CLI agent, repackaged as a Microsoft Edge
 > sidebar app, so it lives next to your tabs, can see and drive them, and
@@ -14,7 +14,7 @@ before changing architecture.
 
 - **Same Copilot, different surface.** Reuse `@github/copilot-sdk` so we get
   streaming, tool calls, MCP, slash commands, and authentication for free.
-  AgentEdge is a UI shell, not a model integration.
+  Anya is a UI shell, not a model integration.
 - **Browser context is implicit.** The agent should always know what tab the
   user is looking at without being asked. Open tabs, selection, page content,
   and bookmarks are first-class inputs.
@@ -29,9 +29,9 @@ before changing architecture.
 
 ### Non-goals
 
-- Polished marketplace distribution. AgentEdge is loaded unpacked.
+- Polished marketplace distribution. Anya is loaded unpacked.
 - Cross-browser support. Edge sidePanel is baked in.
-- Replacing the terminal `copilot` CLI. AgentEdge is a peer surface; the CLI
+- Replacing the terminal `copilot` CLI. Anya is a peer surface; the CLI
   remains the source of truth for auth, MCP config, and prompt files.
 
 ---
@@ -43,7 +43,7 @@ before changing architecture.
 │  Microsoft Edge — MV3 sidePanel                               │
 │                                                               │
 │  ┌─────────────────────────┐    ┌─────────────────────────┐   │
-│  │  AgentEdge sidebar      │    │  Your tabs / pages      │   │
+│  │  Anya sidebar      │    │  Your tabs / pages      │   │
 │  │  (Lit + marked)         │    │                         │   │
 │  │  ─────────────────────  │    │   github.com/foo/bar    │   │
 │  │  > review this PR       │    │   dev.azure.com/...     │   │
@@ -60,7 +60,7 @@ before changing architecture.
                 │ length-prefixed JSON         │ localhost + token
                 ▼                              │
 ┌──────────────────────────────────────────────┼────────────────┐
-│  AgentEdge Bridge — Node.js                 │                │
+│  Anya Bridge — Node.js                 │                │
 │                                              │                │
 │  ┌──────────────────────────────────────────┴──────────────┐  │
 │  │  host.ts        : NM stdio loop, frame router            │  │
@@ -89,7 +89,7 @@ before changing architecture.
 | 2 | Extension layer          | `chrome.tabs/scripting/...`      | Captures browser context; mediates the bridge connection      |
 | 3 | Native Messaging bridge  | Node + `@github/copilot-sdk`     | Owns Copilot sessions, runs tools, persists state             |
 | 4 | Playwright control plane | `@playwright/cli` + MS extension | Drives the user's real Edge tab                               |
-| 5 | Config + logs            | `~/.agentedge/`, `bridge.log`    | Local-only state, optional auto-attach token, live trace      |
+| 5 | Config + logs            | `~/.anya/`, `bridge.log`    | Local-only state, optional auto-attach token, live trace      |
 
 The boundary that matters most is **(2) ↔ (3)**: a length-prefixed JSON
 channel via Edge's Native Messaging API. Everything is asynchronous; everything
@@ -167,7 +167,7 @@ just-resolved promise from attaching listeners onto a stopped client.
 
 ### Working directory per chat
 
-Each chat gets its own working directory under `~/.agentedge/sessions/<safeId>/`
+Each chat gets its own working directory under `~/.anya/sessions/<safeId>/`
 where `safeId` strips chat ids down to `[a-zA-Z0-9_-]{1..64}`. This lets the
 agent's filesystem tools operate without colliding across chats.
 
@@ -175,7 +175,7 @@ agent's filesystem tools operate without colliding across chats.
 
 - **Bridge side:** session state is stateless across bridge restarts (the
   Copilot SDK manages its own sessions). The bridge does persist the bound
-  Playwright tab to `~/.agentedge/playwright-session.json` so a bridge restart
+  Playwright tab to `~/.anya/playwright-session.json` so a bridge restart
   doesn't kill a working tab.
 - **Extension side:** `chrome.storage.local` holds the chat list, the current
   chat id, the theme, the debug-mode flag, and quick prompts. Writes are
@@ -273,7 +273,7 @@ the bound-tab snapshot, and reschedules itself. Two safety properties:
 ### Auto-attach token
 
 The Playwright MCP Bridge extension issues a per-machine token. If the user
-captures it once and pastes it into `~/.agentedge/config.json` or sets
+captures it once and pastes it into `~/.anya/config.json` or sets
 `PLAYWRIGHT_MCP_EXTENSION_TOKEN`, the connect dialog is bypassed on
 subsequent binds. The token is treated as local-only (never logged in full,
 never sent over the wire).
@@ -284,7 +284,7 @@ never sent over the wire).
 
 ### Single Lit component
 
-`<agent-edge-app>` (`extension/src/main.ts`) is a single Lit component. It
+`<anya-app>` (`extension/src/main.ts`) is a single Lit component. It
 owns all UI state, the chat store, the frame handler, the tool RPC, and the
 render tree. The original sin of putting it all in one file is mitigated by:
 
@@ -308,8 +308,8 @@ runtime-only flags:
   currently being painted for which chat.
 - `cancelledChats: Set<chatId>` — soft-cancel marker; cleared on `done`.
 
-Persistence is in `chrome.storage.local` under three keys: `agentedge-chats`,
-`agentedge-current-chat`, `agentedge-theme`. Quick prompts and the debug-mode
+Persistence is in `chrome.storage.local` under three keys: `anya-chats`,
+`anya-current-chat`, `anya-theme`. Quick prompts and the debug-mode
 flag are separate keys.
 
 ### Streaming
@@ -335,9 +335,9 @@ several streams have completed.
 - **Bridge ↔ Copilot agent** uses the SDK's standard process model. Auth comes
   from the user's existing `copilot` login.
 - **MCP servers** are loaded from `~/.copilot/mcp-config.json` — same as the
-  CLI. AgentEdge does not introduce a new MCP config surface.
+  CLI. Anya does not introduce a new MCP config surface.
 - **Playwright auto-attach token** is local-only. If present in
-  `~/.agentedge/config.json`, the bridge logs `present (auto-attach enabled)`
+  `~/.anya/config.json`, the bridge logs `present (auto-attach enabled)`
   but never logs the value itself.
 - **User content** (page text, selection, tab list) is sent only when the
   user explicitly invokes a mention or the agent calls a tool. There is no
@@ -345,7 +345,7 @@ several streams have completed.
 
 `onPermissionRequest: approveAll` is wired up: the bridge auto-approves every
 SDK permission request because in this UI the implicit consent comes from
-binding the Playwright tab. Revisit if AgentEdge ever ships outside developer
+binding the Playwright tab. Revisit if Anya ever ships outside developer
 mode.
 
 ---
@@ -416,10 +416,10 @@ point referenced by the Native Messaging manifest; it just shells to `node`.
 
 | Path                                          | Contents                                       |
 | --------------------------------------------- | ---------------------------------------------- |
-| `~/.agentedge/config.json`                    | Optional Playwright token, future settings     |
-| `~/.agentedge/sessions/<chatId>/`             | Per-chat Copilot working directory             |
-| `~/.agentedge/playwright-session.json`        | Persisted bound tab snapshot                   |
-| `%LOCALAPPDATA%\AgentEdge\bridge.log`         | Append-only bridge log                         |
+| `~/.anya/config.json`                    | Optional Playwright token, future settings     |
+| `~/.anya/sessions/<chatId>/`             | Per-chat Copilot working directory             |
+| `~/.anya/playwright-session.json`        | Persisted bound tab snapshot                   |
+| `%LOCALAPPDATA%\Anya\bridge.log`         | Append-only bridge log                         |
 | `chrome.storage.local`                        | Extension state (chats, theme, prompts, debug) |
 
 ---
@@ -429,8 +429,8 @@ point referenced by the Native Messaging manifest; it just shells to `node`.
 - **Multiple browsers bound at once.** Tried; failed on UX grounds (see §7).
 - **Cross-machine sync.** No cloud means no sync. Use the export-to-Markdown
   flow if you want to move a conversation.
-- **Custom agent definitions.** AgentEdge ships one custom agent
-  (`.github/agents/agentedge.agent.md`). The user can edit it, but there is
+- **Custom agent definitions.** Anya ships one custom agent
+  (`.github/agents/anya.agent.md`). The user can edit it, but there is
   no UI for managing multiple.
 - **Telemetry.** None.
 - **Public marketplace listing.** Not until the project graduates from

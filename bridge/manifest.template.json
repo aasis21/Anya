@@ -1,6 +1,6 @@
 {
-  "name": "com.agentedge.bridge",
-  "description": "AgentEdge bridge — connects the Edge sidebar to the Copilot SDK",
+  "name": "com.anya.bridge",
+  "description": "Anya bridge — connects the Anya browser sidebar to the Copilot SDK",
   "path": "__LAUNCHER_PATH__",
   "type": "stdio",
   "allowed_origins": [

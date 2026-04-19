@@ -1,9 +1,9 @@
 {
-  "name": "agentedge-bridge",
+  "name": "anya-bridge",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "AgentEdge bridge — Native Messaging host wrapping @github/copilot-sdk",
+  "description": "Anya bridge — Native Messaging host wrapping @github/copilot-sdk",
   "engines": {
     "node": ">=20"
   },

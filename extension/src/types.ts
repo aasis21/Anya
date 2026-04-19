@@ -1,5 +1,5 @@
 /**
- * Shared types for the AgentEdge sidebar UI.
+ * Shared types for the Anya sidebar UI.
  *
  * Anything stored in `chrome.storage.local` is shaped by these interfaces, so
  * be careful when changing field names — `loadChats()` validates and coerces

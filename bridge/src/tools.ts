@@ -15,7 +15,7 @@ import { error, log, warn } from './log.js';
 import type { ToolRpc } from './tool-rpc.js';
 import { bindTab, getBoundTab, getBoundTabFile, getPlaywrightCwd, unbindTab } from './sessions.js';
 
-const PLAYWRIGHT_CLI = process.env.AGENTEDGE_PLAYWRIGHT_CLI ?? 'playwright-cli';
+const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';
 const PLAYWRIGHT_TIMEOUT_MS = 60_000;
 
 const tabIdSchema = {
@@ -82,7 +82,7 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
     defineTool('open_tab', {
       description:
         'Open a new browser tab in the user\'s Edge at the given URL. The tab opens in their ' +
-        'real Edge window so they can interact with it. Use this to navigate to a page.',
+        'real browser window so they can interact with it. Use this to navigate to a page.',
       parameters: {
         type: 'object',
         properties: {
@@ -181,7 +181,7 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
     // ---------------- tab binding ----------------
     defineTool('bind_tab', {
       description:
-        'Open a Playwright connect dialog so the user can pick which Edge tab to bind for ' +
+        'Open a Playwright connect dialog so the user can pick which browser tab to bind for ' +
         'browser automation. Only ONE tab can be bound at a time — calling `bind_tab` again ' +
         'replaces the prior binding. After the user clicks Connect on a tab, that tab becomes ' +
         'driveable via `drive_tab`. Use the optional `hint` to label this binding so you can ' +
@@ -245,7 +245,7 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
 export function buildBrowserTool(): Tool {
   return defineTool('drive_tab', {
     description:
-      'Drive the currently bound Edge tab via playwright-cli (replaces the old `browser` tool). ' +
+      'Drive the currently bound browser tab via playwright-cli (replaces the old `browser` tool). ' +
       'Required: `argv` — playwright-cli arguments, e.g. ["snapshot"], ["click","e15"], ' +
       '["type","hello"], ["navigate","https://example.com"], ["screenshot"]. ' +
       'Pre-flight: check `bound_tab` first. If it returns null, status="dead", or the URL is ' +

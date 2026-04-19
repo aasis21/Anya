@@ -17,7 +17,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { error, log, warn } from './log.js';
 
-const PLAYWRIGHT_CLI = process.env.AGENTEDGE_PLAYWRIGHT_CLI ?? 'playwright-cli';
+const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';
 
 export type BindStatus = 'waiting-for-connect' | 'connected' | 'dead' | 'none';
 
@@ -45,11 +45,11 @@ let counter = 0;
 function dataDir(): string {
   if (process.platform === 'win32') {
     const local = process.env.LOCALAPPDATA;
-    if (local) return join(local, 'AgentEdge');
+    if (local) return join(local, 'Anya');
   }
   const home = homedir();
-  if (home) return join(home, '.local', 'share', 'AgentEdge');
-  return join(tmpdir(), 'AgentEdge');
+  if (home) return join(home, '.local', 'share', 'Anya');
+  return join(tmpdir(), 'Anya');
 }
 
 const STORE_FILE = join(dataDir(), 'bound-tab.json');
@@ -145,9 +145,9 @@ export function setTabResolver(fn: TabResolver | null): void { tabResolver = fn;
 
 async function injectMarker(sessionId: string): Promise<boolean> {
   const expr =
-    `() => { try { window.name = 'agentedge:' + ${JSON.stringify(sessionId)}; } catch {}; ` +
-    `try { document.documentElement.setAttribute('data-agentedge-sid', ${JSON.stringify(sessionId)}); } catch {}; ` +
-    `try { sessionStorage.setItem('__agentedge_sid', ${JSON.stringify(sessionId)}); } catch {}; ` +
+    `() => { try { window.name = 'anya:' + ${JSON.stringify(sessionId)}; } catch {}; ` +
+    `try { document.documentElement.setAttribute('data-anya-sid', ${JSON.stringify(sessionId)}); } catch {}; ` +
+    `try { sessionStorage.setItem('__anya_sid', ${JSON.stringify(sessionId)}); } catch {}; ` +
     `return 'ok'; }`;
   const r = await runPlaywrightCmd(['eval', expr], sessionId, 8_000);
   return r.ok;
@@ -156,8 +156,8 @@ async function injectMarker(sessionId: string): Promise<boolean> {
 async function removeMarker(sessionId: string): Promise<void> {
   const expr =
     `() => { try { window.name = ''; } catch {}; ` +
-    `try { document.documentElement.removeAttribute('data-agentedge-sid'); } catch {}; ` +
-    `try { sessionStorage.removeItem('__agentedge_sid'); } catch {}; ` +
+    `try { document.documentElement.removeAttribute('data-anya-sid'); } catch {}; ` +
+    `try { sessionStorage.removeItem('__anya_sid'); } catch {}; ` +
     `return 'ok'; }`;
   await runPlaywrightCmd(['eval', expr], sessionId, 8_000);
 }

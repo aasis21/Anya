@@ -1,4 +1,4 @@
-// Native messaging bridge to com.agentedge.bridge with auto-reconnect.
+// Native messaging bridge to com.anya.bridge with auto-reconnect.
 
 export type Frame =
   | { type: 'prompt'; text: string }
@@ -11,7 +11,7 @@ export type Frame =
 type MessageHandler = (frame: Frame) => void;
 type DisconnectHandler = (err?: string) => void;
 
-const HOST_NAME = 'com.agentedge.bridge';
+const HOST_NAME = 'com.anya.bridge';
 const RECONNECT_DELAY_MS = 2000;
 
 class NativeBridge {
@@ -26,23 +26,23 @@ class NativeBridge {
     try {
       this.port = chrome.runtime.connectNative(HOST_NAME);
     } catch (err) {
-      console.error('[AgentEdge] connectNative threw:', err);
+      console.error('[Anya] connectNative threw:', err);
       this.scheduleReconnect();
       return;
     }
 
     this.port.onMessage.addListener((msg: Frame) => {
       for (const h of this.messageHandlers) {
-        try { h(msg); } catch (e) { console.error('[AgentEdge] handler error:', e); }
+        try { h(msg); } catch (e) { console.error('[Anya] handler error:', e); }
       }
     });
 
     this.port.onDisconnect.addListener(() => {
       const lastError = chrome.runtime.lastError?.message;
-      if (lastError) console.warn('[AgentEdge] native port disconnected:', lastError);
+      if (lastError) console.warn('[Anya] native port disconnected:', lastError);
       this.port = null;
       for (const h of this.disconnectHandlers) {
-        try { h(lastError); } catch (e) { console.error('[AgentEdge] disconnect handler error:', e); }
+        try { h(lastError); } catch (e) { console.error('[Anya] disconnect handler error:', e); }
       }
       if (this.shouldReconnect) this.scheduleReconnect();
     });
@@ -62,7 +62,7 @@ class NativeBridge {
       this.port.postMessage(frame);
       return true;
     } catch (err) {
-      console.error('[AgentEdge] postMessage failed:', err);
+      console.error('[Anya] postMessage failed:', err);
       return false;
     }
   }

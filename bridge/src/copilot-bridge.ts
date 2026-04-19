@@ -9,7 +9,7 @@ import { buildBrowserTool, buildContextTools } from './tools.js';
 
 const SESSIONS_ROOT = join(
   process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '.', 'AppData', 'Local'),
-  'AgentEdge',
+  'Anya',
   'sessions',
 );
 
@@ -21,9 +21,9 @@ const SESSIONS_ROOT = join(
 const AGENT_PROFILE_PATH = (() => {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    return join(here, '..', '..', '.github', 'agents', 'agentedge.agent.md');
+    return join(here, '..', '..', '.github', 'agents', 'anya.agent.md');
   } catch {
-    return join(process.cwd(), '.github', 'agents', 'agentedge.agent.md');
+    return join(process.cwd(), '.github', 'agents', 'anya.agent.md');
   }
 })();
 
@@ -45,7 +45,7 @@ function loadAgentPrompt(): string {
     return stripFrontmatter(readFileSync(AGENT_PROFILE_PATH, 'utf8'));
   } catch (err) {
     warn('failed to read agent profile at', AGENT_PROFILE_PATH, err);
-    return 'You are AgentEdge, a Copilot agent embedded in the user\'s Microsoft Edge sidebar.';
+    return 'You are Anya, a Copilot agent embedded in the user\'s browser sidebar.';
   }
 }
 
@@ -189,17 +189,17 @@ export class CopilotBridge {
     const agentPrompt = loadAgentPrompt();
     const tools = [...buildContextTools(this.rpc), buildBrowserTool()];
     const session = await client.createSession({
-      clientName: 'AgentEdge',
+      clientName: 'Anya',
       streaming: true,
       workingDirectory,
       tools,
       customAgents: [{
-        name: 'agentedge',
-        displayName: 'AgentEdge',
-        description: 'Copilot embedded in the Microsoft Edge sidebar.',
+        name: 'anya',
+        displayName: 'Anya',
+        description: 'Copilot embedded in the browser sidebar.',
         prompt: agentPrompt,
       }],
-      agent: 'agentedge',
+      agent: 'anya',
       onPermissionRequest: approveAll,
     });
     log('chat session created:', chatId, 'sessionId=', session.sessionId);

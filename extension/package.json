@@ -1,9 +1,9 @@
 {
-  "name": "agentedge-extension",
+  "name": "anya-extension",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "AgentEdge Edge sidebar extension (Lit + xterm.js)",
+  "description": "Anya Edge sidebar extension (Lit + xterm.js)",
   "scripts": {
     "prebuild": "node scripts/gen-icons.js",
     "build": "vite build",
