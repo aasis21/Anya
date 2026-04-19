@@ -29,9 +29,9 @@ tabs, with a side helping of browser automation via Playwright.
 - **Multi-chat with persistence.** Drawer of chats, each with its own
   bridge-side session. Pin, tag, search, rename, delete, export to Markdown.
   Survives restarts via `chrome.storage.local`.
-- **Browser context as first-class input.** Mention `@page`, `@selection`,
-  `@tabs`, `@tab:N`, or `@snapshot` and the extension expands them inline
-  before the prompt is sent.
+- **Browser context as first-class input.** The composer speaks three
+  languages — `/` for client commands, `@` for ambient browser context,
+  `#` (planned) for named references. See [Composer language](#composer-language).
 - **Playwright automation built in.** A `browser` tool shells out to
   `playwright-cli` so the agent can drive your real, logged-in Edge — click,
   type, screenshot, extract — with the same auth your tabs already have.
@@ -144,30 +144,81 @@ registers the Native Messaging host. Use `-SkipTest` to skip the smoke test or
 - **Tag chips** — click to filter; click _all_ to clear
 - **Per-row stats** — `N msg · ~T tok · age` (relative time)
 
-### Mentions
+### Composer language
 
-| Mention      | Expands to                                                          |
-| ------------ | ------------------------------------------------------------------- |
-| `@page`      | URL + title + plain-text content of the active tab                  |
-| `@selection` | The user's current selection in the active tab                      |
-| `@tabs`      | All open tabs as `[title](url)`                                     |
-| `@tab:N`     | The tab whose id is `N`                                             |
-| `@snapshot`  | Markdown table of every open tab — title, url, window, active flag  |
+The textarea recognises three prefixes. Each has a distinct, non-overlapping
+purpose so the composer never feels ambiguous:
 
-### Slash commands
+| Prefix | Purpose | Mental model | Sent to model? |
+| ------ | ------- | ------------ | -------------- |
+| `/`    | **Commands to the client** — chat lifecycle, UI state, search | "Do something to the sidebar." | No — intercepted |
+| `@`    | **Ambient browser context** — the *here, now* state | "Look at what I'm looking at." | Yes — expanded inline |
+| `#`    | **Named, curated references** (planned) — bookmarks, files, chats by name | "Look up the thing I labelled X." | Yes — would expand inline |
 
-| Command                    | What it does                                            |
-| -------------------------- | ------------------------------------------------------- |
-| `/help`                    | List all commands and hotkeys                           |
-| `/clear`                   | Wipe the current chat (Ctrl+L)                          |
-| `/new`                     | Start a fresh chat (Ctrl+N)                             |
-| `/export`                  | Download the current chat as Markdown                   |
-| `/pin`                     | Toggle pin for the current chat                         |
-| `/stop`                    | Cancel the in-flight stream (Ctrl+.)                    |
-| `/tag add <name>`          | Add a tag to the current chat                           |
-| `/tag rm <name>`           | Remove a tag                                            |
-| `/tag list`                | Print the chat's tags                                   |
-| `/quick`                   | Cycle the input through the next quick-prompt template  |
+**Why three?** They map to three different cognitive moves the user makes:
+*manage their workspace* (`/`), *point at what's on screen right now* (`@`),
+and *cite something they curated earlier* (`#`). Lumping them together is
+what makes other chat UIs feel mushy.
+
+**Design principles:**
+
+1. **`/` never reaches the model.** Client-only — keeps the prompt
+   transcript clean and lets us add UI ops without bloating context.
+2. **`@` is for now-state.** Anything that depends on what the browser
+   is currently showing (active tab, selection, open tabs, clipboard).
+   Expanded **before** the bridge sees the prompt, so the model gets
+   real content and never needs a tool round-trip for these.
+3. **`#` is for named lookups.** Reserved for things you address by
+   name (bookmark titles, folders, file paths, prior chats). Not yet
+   implemented — see the `#` subsection below.
+4. **Ergonomics over completeness.** A token only earns its place if a
+   tool call is too high-friction for the same job. Things the model
+   can fetch on its own (most web search, ad-hoc URLs) intentionally
+   don't get a prefix.
+
+#### `/` — slash commands
+
+Client-side only. Never sent to the model.
+
+| Command                  | Action                                                  |
+| ------------------------ | ------------------------------------------------------- |
+| `/new`                   | Start a fresh chat (`Ctrl+N`)                           |
+| `/clear`                 | Wipe the current chat (`Ctrl+L`)                        |
+| `/rename [title]`        | Rename current chat (no arg → inline edit)              |
+| `/delete`                | Delete current chat                                     |
+| `/pin`                   | Toggle pin for the current chat                         |
+| `/tag add\|rm <name>`    | Add or remove a tag                                     |
+| `/tag list`              | List tags on the current chat                           |
+| `/search [query]`        | Open chat search, optionally pre-filled (`Ctrl+K`)      |
+| `/export`                | Download the current chat as Markdown                   |
+| `/stop`                  | Cancel the in-flight stream (`Ctrl+.`)                  |
+| `/help`                  | Print this list inside the chat                         |
+
+#### `@` — ambient browser context
+
+Expanded inline by the extension *before* the prompt is sent. The model
+sees the resolved content, not the literal `@token`. Restricted URLs
+and empty results return a friendly placeholder so the prompt always
+goes through.
+
+| Token                  | Resolves to                                                                 |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `@tab`                 | Active tab's content as Markdown (Readability), capped at ~30 KB            |
+| `@selection`           | Highlighted text on the active tab, blockquoted                             |
+| `@url`                 | Active tab URL only                                                         |
+| `@title`               | Active tab title only                                                       |
+| `@clipboard`           | System clipboard text in a code fence                                       |
+| `@tabs`                | Markdown table of every open tab — id, active flag, title, url              |
+| `@tab:<id\|query>`     | One specific tab — numeric chrome id OR substring of title/url (top hit; multi-match note included) |
+
+**Plus**: paste an image into the composer (`Ctrl+V`) to attach it as a
+proper SDK vision blob. Up to 3 MB total per turn.
+
+#### `#` — named references (planned)
+
+Reserved namespace. Bookmark search, file lookup, and similar named
+references will land here once we have autocomplete plus at least two
+named-thing kinds to justify the dedicated prefix.
 
 ### Hotkeys
 

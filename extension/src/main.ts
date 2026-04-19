@@ -30,6 +30,7 @@ import {
   type Chat,
   type BoundTab,
   type QuickPrompt,
+  type ImageAttachment,
   type DebugEntry,
   DEFAULT_QUICK_PROMPTS,
   DEBUG_MAX_ENTRIES,
@@ -95,6 +96,11 @@ export class AgentEdgeApp extends LitElement {
   private cancelledChats: Set<string> = new Set();
   // Per-message hover toolbar — id of the message whose ⋯ menu is open.
   @state() private msgMenuId: string | null = null;
+
+  // Pending pasted/dropped images attached to the next outbound message.
+  @state() private pendingAttachments: ImageAttachment[] = [];
+  /** Native messaging Edge→host caps frames near 4MB. base64 inflates ~1.33×. */
+  private static readonly ATTACHMENT_TOTAL_LIMIT = 3 * 1024 * 1024;
 
   // Single bound Playwright tab (was: array of sessions).
   @state() private boundTab: BoundTab | null = null;
@@ -818,6 +824,9 @@ export class AgentEdgeApp extends LitElement {
         await chrome.tabs.remove(ids);
         return { closed: ids };
       }
+      case 'manage_bookmarks': {
+        return await this.execManageBookmarks(args);
+      }
       case 'resolve_pw_tab': {
         // Bridge-internal: locate which chrome tab a Playwright session is
         // bound to. URL-first; only scans for the injected marker when
@@ -928,6 +937,165 @@ export class AgentEdgeApp extends LitElement {
       || /^https:\/\/microsoftedge\.microsoft\.com\/addons/i.test(url);
   }
 
+  /**
+   * Umbrella tool for chrome.bookmarks. One entry, many ops, mirrors the API.
+   */
+  private async execManageBookmarks(args: Record<string, unknown>): Promise<unknown> {
+    const op = String(args.op ?? '');
+    if (!op) throw new Error('manage_bookmarks: `op` is required');
+
+    const flatten = (
+      nodes: chrome.bookmarks.BookmarkTreeNode[],
+      pathParts: string[] = [],
+      out: Array<{
+        id: string;
+        parentId?: string;
+        title: string;
+        url?: string;
+        folderPath: string;
+        isFolder: boolean;
+        index?: number;
+      }> = [],
+    ) => {
+      for (const n of nodes) {
+        const here = n.title ? [...pathParts, n.title] : pathParts;
+        const isFolder = !n.url;
+        out.push({
+          id: n.id,
+          parentId: n.parentId,
+          title: n.title,
+          url: n.url,
+          folderPath: pathParts.join('/'),
+          isFolder,
+          index: n.index,
+        });
+        if (n.children) flatten(n.children, here, out);
+      }
+      return out;
+    };
+
+    switch (op) {
+      case 'list': {
+        const tree = await chrome.bookmarks.getTree();
+        // Skip the synthetic root ("") so folderPath starts with "Favorites bar"/"Other favorites".
+        let all = flatten(tree[0]?.children ?? []);
+        const folder = typeof args.folder === 'string' ? args.folder.toLowerCase() : '';
+        const query = typeof args.query === 'string' ? args.query.toLowerCase() : '';
+        if (folder) all = all.filter((n) => n.folderPath.toLowerCase().startsWith(folder));
+        if (query) {
+          all = all.filter(
+            (n) =>
+              n.title.toLowerCase().includes(query) ||
+              (n.url ?? '').toLowerCase().includes(query),
+          );
+        }
+        const limit = typeof args.limit === 'number' ? args.limit : 500;
+        return { count: all.length, items: all.slice(0, limit) };
+      }
+
+      case 'tree': {
+        const nodeId = args.nodeId !== undefined ? String(args.nodeId) : undefined;
+        const tree = nodeId
+          ? await chrome.bookmarks.getSubTree(nodeId)
+          : await chrome.bookmarks.getTree();
+        return tree;
+      }
+
+      case 'search': {
+        const query = String(args.query ?? '');
+        if (!query) throw new Error('manage_bookmarks search: `query` is required');
+        const results = await chrome.bookmarks.search(query);
+        // Decorate with folderPath by walking parents (one cache pass).
+        const all = flatten((await chrome.bookmarks.getTree())[0]?.children ?? []);
+        const byId = new Map(all.map((n) => [n.id, n] as const));
+        const limit = typeof args.limit === 'number' ? args.limit : 100;
+        return results.slice(0, limit).map((r) => ({
+          id: r.id,
+          parentId: r.parentId,
+          title: r.title,
+          url: r.url,
+          folderPath: byId.get(r.id)?.folderPath ?? '',
+        }));
+      }
+
+      case 'open': {
+        const id = String(args.id ?? '');
+        if (!id) throw new Error('manage_bookmarks open: `id` is required');
+        const [node] = await chrome.bookmarks.get(id);
+        if (!node?.url) throw new Error(`bookmark ${id} has no URL (folder?)`);
+        const background = args.background === true;
+        const tab = await chrome.tabs.create({ url: node.url, active: !background });
+        return { tabId: tab.id, url: node.url, title: node.title };
+      }
+
+      case 'create': {
+        const title = String(args.title ?? '');
+        if (!title) throw new Error('manage_bookmarks create: `title` is required');
+        const created = await chrome.bookmarks.create({
+          parentId: args.parentId !== undefined ? String(args.parentId) : undefined,
+          title,
+          url: typeof args.url === 'string' && args.url ? args.url : undefined,
+        });
+        return created;
+      }
+
+      case 'update': {
+        const id = String(args.id ?? '');
+        if (!id) throw new Error('manage_bookmarks update: `id` is required');
+        const changes: chrome.bookmarks.BookmarkChangesArg = {};
+        if (typeof args.title === 'string') changes.title = args.title;
+        if (typeof args.url === 'string') changes.url = args.url;
+        if (Object.keys(changes).length === 0) {
+          throw new Error('manage_bookmarks update: nothing to change (provide title and/or url)');
+        }
+        return await chrome.bookmarks.update(id, changes);
+      }
+
+      case 'move': {
+        // Bulk: accept `ids: string[]` or single `id: string`.
+        const ids: string[] = Array.isArray(args.ids)
+          ? (args.ids as unknown[]).map(String)
+          : args.id !== undefined
+            ? [String(args.id)]
+            : [];
+        if (ids.length === 0) throw new Error('manage_bookmarks move: `id` or `ids` required');
+        const parentId = args.parentId !== undefined ? String(args.parentId) : undefined;
+        if (!parentId) throw new Error('manage_bookmarks move: `parentId` is required');
+        const startIndex = typeof args.index === 'number' ? args.index : undefined;
+        const moved: chrome.bookmarks.BookmarkTreeNode[] = [];
+        for (let i = 0; i < ids.length; i++) {
+          const dest: chrome.bookmarks.BookmarkDestinationArg = { parentId };
+          if (startIndex !== undefined) dest.index = startIndex + i;
+          moved.push(await chrome.bookmarks.move(ids[i], dest));
+        }
+        return { moved: moved.length, items: moved };
+      }
+
+      case 'remove': {
+        const ids: string[] = Array.isArray(args.ids)
+          ? (args.ids as unknown[]).map(String)
+          : args.id !== undefined
+            ? [String(args.id)]
+            : [];
+        if (ids.length === 0) throw new Error('manage_bookmarks remove: `id` or `ids` required');
+        const recursive = args.recursive === true;
+        const removed: string[] = [];
+        for (const id of ids) {
+          if (recursive) await chrome.bookmarks.removeTree(id);
+          else await chrome.bookmarks.remove(id);
+          removed.push(id);
+        }
+        return { removed };
+      }
+
+      default:
+        throw new Error(
+          `manage_bookmarks: unknown op "${op}". ` +
+            'Valid: list, tree, search, open, create, update, move, remove.',
+        );
+    }
+  }
+
   private attachToolToStreamingMessage(chatId: string, toolCallId: string): void {
     const sid = this.streamingIds.get(chatId);
     if (!sid) {
@@ -1032,7 +1200,8 @@ export class AgentEdgeApp extends LitElement {
     const ta = this.textarea ?? (this.renderRoot.querySelector('#prompt-input') as HTMLTextAreaElement | null);
     if (!ta) return;
     const text = ta.value.trim();
-    if (!text) return;
+    const attachments = this.pendingAttachments;
+    if (!text && attachments.length === 0) return;
 
     // Slash commands are intercepted before any bridge dispatch.
     if (text.startsWith('/')) {
@@ -1051,14 +1220,19 @@ export class AgentEdgeApp extends LitElement {
     this.cancelledChats.delete(chatId);
 
     this.appendMessage(chatId, {
-      id: `u${Date.now()}`, role: 'user', text, ts: Date.now(),
+      id: `u${Date.now()}`,
+      role: 'user',
+      text,
+      ts: Date.now(),
+      attachments: attachments.length ? attachments : undefined,
     });
-    this.autoTitleIfNeeded(chatId, text);
+    if (text) this.autoTitleIfNeeded(chatId, text);
     ta.value = '';
     this.draftEmpty = true;
+    this.pendingAttachments = [];
     this.scrollToBottom();
 
-    void this.dispatchPrompt(chatId, text);
+    void this.dispatchPrompt(chatId, text, attachments);
   };
 
   /**
@@ -1091,8 +1265,35 @@ export class AgentEdgeApp extends LitElement {
         return true;
       case 'help':
         this.pushSystem(this.currentChatId,
-          'Slash commands: /new /clear /export /rename [title] /delete /search [query] /pin /tag add|rm [name] /stop /help\n' +
-          'Shortcuts: Ctrl+N new · Ctrl+K search · Ctrl+B drawer · Ctrl+L clear · Ctrl+. stop · Ctrl+1..9 switch chat · Ctrl+/ cycle quick prompts · Esc close',
+          'Slash commands\n' +
+          '\n' +
+          'Chats\n' +
+          '  /new                  start a new chat\n' +
+          '  /rename [title]       rename current chat (no arg = inline edit)\n' +
+          '  /delete               delete current chat\n' +
+          '  /pin                  pin / unpin current chat\n' +
+          '  /tag add|rm [name]    add or remove a tag\n' +
+          '  /tag list             list tags on current chat\n' +
+          '\n' +
+          'Conversation\n' +
+          '  /clear                clear messages in current chat\n' +
+          '  /stop                 cancel the in-flight response\n' +
+          '  /export               export current chat as markdown\n' +
+          '  /search [query]       open search (optionally pre-filled)\n' +
+          '\n' +
+          '  /help                 this message\n' +
+          '\n' +
+          '@-mentions  (inlined into your prompt before sending)\n' +
+          '  @tab                  markdown of the active tab\n' +
+          '  @selection            text you have highlighted\n' +
+          '  @url                  URL of the active tab\n' +
+          '  @title                title of the active tab\n' +
+          '  @clipboard            system clipboard text\n' +
+          '  @tabs                 markdown table of every open tab\n' +
+          '  @tab:<id|query>       one tab by id, or substring of title/url\n' +
+          '\n' +
+          'Other input\n' +
+          '  Ctrl+V image          paste a screenshot as a vision attachment',
           'normal');
         return true;
       case 'pin':
@@ -1120,7 +1321,11 @@ export class AgentEdgeApp extends LitElement {
     }
   }
 
-  private async dispatchPrompt(chatId: string, text: string): Promise<void> {
+  private async dispatchPrompt(
+    chatId: string,
+    text: string,
+    attachments: ImageAttachment[] = [],
+  ): Promise<void> {
     let prompt = text;
     try {
       prompt = await this.expandMentions(text);
@@ -1134,25 +1339,56 @@ export class AgentEdgeApp extends LitElement {
       console.warn('[AgentEdge] context prep failed; sending raw prompt', err);
     }
 
-    const ok = this.bridgeSend({ type: 'prompt', chatId, text: prompt });
+    // Default caption when only images were sent so the model has something
+    // textual to anchor on.
+    if (!prompt.trim() && attachments.length > 0) {
+      prompt = `(${attachments.length} image${attachments.length === 1 ? '' : 's'} attached — please look at ${attachments.length === 1 ? 'it' : 'them'}.)`;
+    }
+
+    const frame: Record<string, unknown> = { type: 'prompt', chatId, text: prompt };
+    if (attachments.length > 0) {
+      frame.attachments = attachments.map((a, i) => ({
+        data: a.data,
+        mimeType: a.mimeType,
+        displayName: a.name ?? `pasted-image-${i + 1}.${a.mimeType.split('/')[1] ?? 'png'}`,
+      }));
+    }
+    const ok = this.bridgeSend(frame);
     if (!ok) this.pushSystem(chatId, 'not connected to bridge', 'error');
   }
 
-  // Replace @page / @selection / @tabs / @tab:N inline so the user can be
-  // explicit. Tools are still available to the model for on-demand fetches.
+  // Replace @-mentions inline so the user can be explicit about context.
+  // Tools are still available to the model for on-demand fetches.
+  //
+  // Supported:
+  //   @tab               active tab content (Markdown via Readability)
+  //   @selection         highlighted text on the active tab
+  //   @url               active tab URL only
+  //   @title             active tab title only
+  //   @clipboard         system clipboard text
+  //   @tabs              markdown table of every open tab
+  //   @tab:<id|query>    one tab — numeric id OR substring of title/url
   private async expandMentions(text: string): Promise<string> {
-    if (!/@(page|selection|tabs|tab:\d+|snapshot)\b/i.test(text)) return text;
+    const tokenRegex = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?)(?=$|[\s.,;!?])/gi;
+    if (!tokenRegex.test(text)) return text;
+    tokenRegex.lastIndex = 0;
+
+    const PAGE_CAP = 30_000;
+    const cap = (s: string): string => {
+      if (s.length <= PAGE_CAP) return s;
+      return `${s.slice(0, PAGE_CAP)}\n\n…(truncated, original ${s.length.toLocaleString()} chars)`;
+    };
 
     const replacements: Array<{ token: string; getValue: () => Promise<string> }> = [];
     const seen = new Set<string>();
-    const tokenRegex = /@(page|selection|tabs|tab:\d+|snapshot)\b/gi;
     let match: RegExpExecArray | null;
     while ((match = tokenRegex.exec(text)) !== null) {
       const token = match[0];
-      if (seen.has(token.toLowerCase())) continue;
-      seen.add(token.toLowerCase());
       const lower = token.toLowerCase();
-      if (lower === '@page') {
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+
+      if (lower === '@tab') {
         replacements.push({
           token,
           getValue: async () => {
@@ -1160,9 +1396,9 @@ export class AgentEdgeApp extends LitElement {
               title?: string; url?: string; text?: string; restricted?: boolean;
             };
             if (r.restricted) {
-              return `\n\n_(@page unavailable: ${r.url ?? 'this page'} is a browser-internal URL and cannot be read by extensions)_\n\n`;
+              return `\n\n_(${token} unavailable: ${r.url ?? 'this page'} is a browser-internal URL and cannot be read by extensions)_\n\n`;
             }
-            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---\n${r.text ?? ''}\n--- end ---\n\n`;
+            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---\n${cap(r.text ?? '')}\n--- end ---\n\n`;
           },
         });
       } else if (lower === '@selection') {
@@ -1174,16 +1410,36 @@ export class AgentEdgeApp extends LitElement {
             return r.selection ? `\n\n> ${r.selection.replace(/\n/g, '\n> ')}\n\n` : '';
           },
         });
-      } else if (lower === '@tabs') {
+      } else if (lower === '@url') {
         replacements.push({
           token,
           getValue: async () => {
-            const r = (await this.executeTool('list_tabs', {})) as Array<Record<string, unknown>>;
-            return `\n\n${JSON.stringify(r, null, 2)}\n\n`;
+            const r = (await this.executeTool('get_active_tab', {})) as { url?: string };
+            return r.url ?? '';
           },
         });
-      } else if (lower === '@snapshot') {
-        // `@snapshot` → markdown table of every open tab.
+      } else if (lower === '@title') {
+        replacements.push({
+          token,
+          getValue: async () => {
+            const r = (await this.executeTool('get_active_tab', {})) as { title?: string };
+            return r.title ?? '';
+          },
+        });
+      } else if (lower === '@clipboard') {
+        replacements.push({
+          token,
+          getValue: async () => {
+            try {
+              const txt = await navigator.clipboard.readText();
+              if (!txt) return '\n\n_(@clipboard is empty)_\n\n';
+              return `\n\n\`\`\`\n${cap(txt)}\n\`\`\`\n\n`;
+            } catch (err) {
+              return `\n\n_(@clipboard unavailable: ${String((err as Error)?.message ?? err)})_\n\n`;
+            }
+          },
+        });
+      } else if (lower === '@tabs') {
         replacements.push({
           token,
           getValue: async () => {
@@ -1191,23 +1447,44 @@ export class AgentEdgeApp extends LitElement {
               id?: number; title?: string; url?: string; active?: boolean;
             }>;
             const rows = r.map((t) =>
-              `| ${t.id ?? ''} | ${t.active ? '★' : ''} | ${(t.title ?? '').replace(/\|/g, '\\|').slice(0, 60)} | ${t.url ?? ''} |`
+              `| ${t.id ?? ''} | ${t.active ? '★' : ''} | ${(t.title ?? '').replace(/\|/g, '\\|').slice(0, 80)} | ${t.url ?? ''} |`
             ).join('\n');
             return `\n\n| id | * | title | url |\n| --- | --- | --- | --- |\n${rows}\n\n`;
           },
         });
       } else if (lower.startsWith('@tab:')) {
-        const tabId = Number(lower.slice('@tab:'.length));
+        const arg = token.slice('@tab:'.length);
         replacements.push({
           token,
           getValue: async () => {
-            const r = (await this.executeTool('get_tab_content', { tabId })) as {
+            // Numeric → use as chrome tabId directly. Otherwise → fuzzy match.
+            let resolvedId: number | undefined;
+            let matchNote = '';
+            if (/^\d+$/.test(arg)) {
+              resolvedId = Number(arg);
+            } else {
+              const tabs = (await this.executeTool('list_tabs', {})) as Array<{
+                id?: number; title?: string; url?: string;
+              }>;
+              const q = arg.toLowerCase();
+              const hits = tabs.filter((t) =>
+                (t.title ?? '').toLowerCase().includes(q) || (t.url ?? '').toLowerCase().includes(q)
+              );
+              if (hits.length === 0) {
+                return `\n\n_(${token} matched no open tab)_\n\n`;
+              }
+              resolvedId = hits[0].id;
+              if (hits.length > 1) {
+                matchNote = ` _(matched ${hits.length} tabs, using top hit "${hits[0].title ?? ''}")_`;
+              }
+            }
+            const r = (await this.executeTool('get_tab_content', { tabId: resolvedId })) as {
               title?: string; url?: string; text?: string; restricted?: boolean;
             };
             if (r.restricted) {
               return `\n\n_(${token} unavailable: ${r.url ?? 'tab'} is a browser-internal URL)_\n\n`;
             }
-            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---\n${r.text ?? ''}\n--- end ---\n\n`;
+            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---${matchNote}\n${cap(r.text ?? '')}\n--- end ---\n\n`;
           },
         });
       }
@@ -1217,12 +1494,9 @@ export class AgentEdgeApp extends LitElement {
     for (const r of replacements) {
       try {
         const value = await r.getValue();
-        // Replace all occurrences, case-insensitive.
         const rx = new RegExp(escapeRegExp(r.token), 'gi');
         result = result.replace(rx, value);
       } catch (err) {
-        // Demoted to debug — restricted URLs and similar are expected;
-        // the friendly placeholder is already inlined into the prompt.
         console.debug('[AgentEdge] mention expansion skipped for', r.token, err);
       }
     }
@@ -1239,6 +1513,65 @@ export class AgentEdgeApp extends LitElement {
   private onInput = (e: Event): void => {
     const v = (e.target as HTMLTextAreaElement).value;
     this.draftEmpty = v.length === 0;
+  };
+
+  /** Intercept clipboard images on the textarea. */
+  private onPaste = (e: ClipboardEvent): void => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItems = items.filter((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    for (const it of imageItems) {
+      const file = it.getAsFile();
+      if (file) void this.addImageAttachment(file);
+    }
+  };
+
+  /** Read a File as data URL + base64 and push into the pending strip. */
+  private async addImageAttachment(file: File): Promise<void> {
+    if (file.size > AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT) {
+      this.pushSystem(
+        this.currentChatId || this.startNewChat(),
+        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max ~${(AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB per attachment.`,
+        'error',
+      );
+      return;
+    }
+    const totalSoFar = this.pendingAttachments.reduce((n, a) => n + a.bytes, 0);
+    if (totalSoFar + file.size > AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT) {
+      this.pushSystem(
+        this.currentChatId || this.startNewChat(),
+        `Total attachments would exceed ~${(AgentEdgeApp.ATTACHMENT_TOTAL_LIMIT / 1024 / 1024).toFixed(0)} MB. Send what you have, then attach more.`,
+        'error',
+      );
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result ?? ''));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    }).catch((err) => {
+      console.warn('[AgentEdge] read image failed:', err);
+      return '';
+    });
+    if (!dataUrl) return;
+    const commaIdx = dataUrl.indexOf(',');
+    const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
+    this.pendingAttachments = [
+      ...this.pendingAttachments,
+      {
+        dataUrl,
+        data: base64,
+        mimeType: file.type || 'image/png',
+        bytes: file.size,
+        name: file.name || undefined,
+      },
+    ];
+  }
+
+  private removePendingAttachment = (idx: number): void => {
+    this.pendingAttachments = this.pendingAttachments.filter((_, i) => i !== idx);
   };
 
   // ----- render ----------------------------------------------------------
@@ -1301,7 +1634,21 @@ export class AgentEdgeApp extends LitElement {
       return html`<div class="bubble">${m.text}</div>`;
     }
     if (m.role === 'user') {
-      return html`<div class="bubble">${m.text}</div>`;
+      const imgs = m.attachments ?? [];
+      return html`
+        <div class="bubble">
+          ${imgs.length > 0 ? html`
+            <div class="msg-attachments">
+              ${imgs.map((a) => html`
+                <a class="msg-img-link" href=${a.dataUrl} target="_blank" rel="noopener" title=${a.name ?? a.mimeType}>
+                  <img class="msg-img" src=${a.dataUrl} alt=${a.name ?? 'pasted image'} />
+                </a>
+              `)}
+            </div>
+          ` : nothing}
+          ${m.text ? html`<div class="msg-text">${m.text}</div>` : nothing}
+        </div>
+      `;
     }
     // assistant: tool cards (if any) above markdown body, append blinking caret while streaming
     const ids = m.toolCallIds ?? [];
@@ -1470,27 +1817,45 @@ export class AgentEdgeApp extends LitElement {
       </main>
 
       <footer>
-        <span class="sigil">›</span>
-        <textarea
-          id="prompt-input"
-          rows="1"
-          spellcheck="false"
-          placeholder="message…  (try /help)"
-          @keydown=${this.onKeyDown}
-          @input=${this.onInput}
-        ></textarea>
-        ${this.currentChatId && this.streamingIds.has(this.currentChatId)
-          ? html`<button
-              class="send-btn stop-btn"
-              @click=${() => this.cancelStream(this.currentChatId)}
-              title="Stop generating (Ctrl+.)"
-            >stop<span class="kbd">⎋</span></button>`
-          : html`<button
-              class="send-btn"
-              @click=${this.send}
-              ?disabled=${this.draftEmpty}
-              title="Send (Enter)"
-            >send<span class="kbd">↵</span></button>`}
+        ${this.pendingAttachments.length > 0 ? html`
+          <div class="att-strip" title="Attachments queued for next message">
+            ${this.pendingAttachments.map((a, i) => html`
+              <div class="att-chip">
+                <img class="att-thumb" src=${a.dataUrl} alt="" />
+                <span class="att-meta">${(a.bytes / 1024).toFixed(0)} KB</span>
+                <button
+                  class="att-x"
+                  @click=${() => this.removePendingAttachment(i)}
+                  title="Remove"
+                >×</button>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
+        <div class="composer-row">
+          <span class="sigil">›</span>
+          <textarea
+            id="prompt-input"
+            rows="1"
+            spellcheck="false"
+            placeholder="next to your browser. what should we do?"
+            @keydown=${this.onKeyDown}
+            @input=${this.onInput}
+            @paste=${this.onPaste}
+          ></textarea>
+          ${this.currentChatId && this.streamingIds.has(this.currentChatId)
+            ? html`<button
+                class="send-btn stop-btn"
+                @click=${() => this.cancelStream(this.currentChatId)}
+                title="Stop generating (Ctrl+.)"
+              >stop<span class="kbd">⎋</span></button>`
+            : html`<button
+                class="send-btn"
+                @click=${this.send}
+                ?disabled=${this.draftEmpty && this.pendingAttachments.length === 0}
+                title="Send (Enter)"
+              >send<span class="kbd">↵</span></button>`}
+        </div>
       </footer>
 
       ${this.renderPwStrip()}

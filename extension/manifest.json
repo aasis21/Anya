@@ -12,6 +12,6 @@
   "action": { "default_title": "Open AgentEdge" },
   "side_panel": { "default_path": "sidebar.html" },
   "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting"],
+  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting", "bookmarks", "clipboardRead"],
   "host_permissions": ["<all_urls>"]
 }

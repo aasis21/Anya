@@ -223,11 +223,13 @@ already pointing at.
 
 | Token        | Replacement                                                       |
 | ------------ | ----------------------------------------------------------------- |
-| `@page`      | `### Active page: <title> — <url>` + plain-text body              |
+| `@tab`       | `### Active page: <title> — <url>` + plain-text body              |
 | `@selection` | The selected text in the active tab                               |
-| `@tabs`      | A `[title](url)` list of every tab                                |
-| `@tab:N`     | Same as `@page` but for the tab whose id is `N`                   |
-| `@snapshot`  | A markdown table of all tabs (id, title, url, window, active)     |
+| `@url`       | Active tab URL                                                    |
+| `@title`     | Active tab title                                                  |
+| `@clipboard` | System clipboard text                                             |
+| `@tabs`      | A markdown table of all tabs (id, active flag, title, url)        |
+| `@tab:<id\|query>` | Same as `@tab` but for a specific tab — numeric id OR substring of title/url |
 
 This is a deliberate design choice: **tool calls are for actions, mentions are
 for context.** Pre-expanded mentions cost zero round trips and zero tool-call

@@ -128,12 +128,22 @@ transport.onFrame(async (raw) => {
     case 'prompt': {
       const text = typeof frame.text === 'string' ? frame.text : '';
       const chatId = typeof frame.chatId === 'string' ? frame.chatId : 'default';
-      if (!text) {
-        transport.send({ type: 'error', chatId, message: 'prompt frame requires non-empty text' });
+      // Optional inline blob attachments (e.g. pasted images).
+      const rawAttachments = Array.isArray(frame.attachments) ? frame.attachments : [];
+      const attachments = rawAttachments
+        .map((a) => a as { data?: unknown; mimeType?: unknown; displayName?: unknown })
+        .filter((a) => typeof a.data === 'string' && typeof a.mimeType === 'string')
+        .map((a) => ({
+          data: a.data as string,
+          mimeType: a.mimeType as string,
+          displayName: typeof a.displayName === 'string' ? a.displayName : undefined,
+        }));
+      if (!text && attachments.length === 0) {
+        transport.send({ type: 'error', chatId, message: 'prompt frame requires non-empty text or attachments' });
         return;
       }
       try {
-        await copilot.sendPrompt(chatId, text);
+        await copilot.sendPrompt(chatId, text, attachments.length ? attachments : undefined);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         error('prompt failed:', err);

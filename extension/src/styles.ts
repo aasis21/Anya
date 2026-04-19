@@ -334,13 +334,80 @@ export const sidebarStyles = css`
 
     /* ---------- COMPOSER ---------- */
     footer {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: stretch;
+      display: flex;
+      flex-direction: column;
       border-top: 1px solid var(--bg-rule);
       background: var(--bg);
       flex: 0 0 auto;
     }
+    .composer-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: stretch;
+    }
+    .att-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 10px;
+      border-bottom: 1px dashed var(--bg-rule);
+      background: var(--bg-soft, var(--bg));
+    }
+    .att-chip {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 22px 3px 3px;
+      border: 1px solid var(--bg-rule);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: 11px;
+      color: var(--fg-soft, var(--fg));
+    }
+    .att-thumb {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 4px;
+      display: block;
+    }
+    .att-meta {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.75;
+    }
+    .att-x {
+      position: absolute;
+      top: 1px;
+      right: 2px;
+      width: 18px;
+      height: 18px;
+      border: 0;
+      background: transparent;
+      color: var(--fg-soft, var(--fg));
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      opacity: 0.7;
+    }
+    .att-x:hover { opacity: 1; color: var(--accent, #f78166); }
+    .msg-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .msg-img-link { display: inline-block; line-height: 0; }
+    .msg-img {
+      max-width: 200px;
+      max-height: 160px;
+      border-radius: 6px;
+      border: 1px solid var(--bg-rule);
+      cursor: zoom-in;
+      display: block;
+    }
+    .msg-text { white-space: pre-wrap; }
     .sigil {
       display: flex;
       align-items: flex-start;

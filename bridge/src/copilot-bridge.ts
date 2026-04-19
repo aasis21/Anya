@@ -107,9 +107,19 @@ export class CopilotBridge {
     }
   }
 
-  async sendPrompt(chatId: string, text: string): Promise<void> {
+  async sendPrompt(
+    chatId: string,
+    text: string,
+    attachments?: Array<{ data: string; mimeType: string; displayName?: string }>,
+  ): Promise<void> {
     const chat = await this.getOrCreateChat(chatId);
-    await chat.session.send({ prompt: text });
+    const sdkAttachments = attachments?.map((a) => ({
+      type: 'blob' as const,
+      data: a.data,
+      mimeType: a.mimeType,
+      displayName: a.displayName,
+    }));
+    await chat.session.send({ prompt: text, attachments: sdkAttachments });
   }
 
   async deleteChat(chatId: string): Promise<void> {

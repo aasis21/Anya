@@ -39,6 +39,20 @@ export interface ChatMessage {
   ts: number;
   /** Tool call ids that ran while producing this assistant message. */
   toolCallIds?: string[];
+  /** Inline image attachments (paste / drop). User messages only. */
+  attachments?: ImageAttachment[];
+}
+
+export interface ImageAttachment {
+  /** data URL: "data:<mime>;base64,<...>" — used for in-bubble preview. */
+  dataUrl: string;
+  /** Raw base64 (no data URL prefix) — sent to bridge / SDK. */
+  data: string;
+  mimeType: string;
+  /** Encoded byte count (for the strip badge). */
+  bytes: number;
+  /** Optional original filename. */
+  name?: string;
 }
 
 /**
@@ -85,7 +99,7 @@ export interface QuickPrompt {
 
 /** Built-in starter prompts; users can add/remove their own at runtime. */
 export const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
-  { id: 'qp-summarize', label: 'Summarize page', body: 'Summarize @page in 5 bullets and end with a one-line verdict.' },
+  { id: 'qp-summarize', label: 'Summarize page', body: 'Summarize @tab in 5 bullets and end with a one-line verdict.' },
   { id: 'qp-translate', label: 'Translate selection', body: 'Translate @selection to English. Preserve formatting.' },
   { id: 'qp-explain', label: 'Explain code', body: 'Explain what the code in @selection does. Be concise and technical.' },
   { id: 'qp-reply', label: 'Draft reply', body: 'Draft a polite reply to @selection. Match the tone.' },

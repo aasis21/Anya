@@ -118,6 +118,66 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       handler: async (args) => JSON.stringify(await rpc.call('close_tab', args)),
     }),
 
+    defineTool('manage_bookmarks', {
+      description:
+        'Read and manage the user\'s Edge bookmarks via chrome.bookmarks. One umbrella tool ' +
+        'with many `op`s — pick the op you need.\n\n' +
+        'OPS:\n' +
+        '- `list` ({folder?, query?, limit?}) → flat array of {id, parentId, title, url, ' +
+        'folderPath, isFolder, index}. `folder` filters by folderPath prefix (case-insensitive); ' +
+        '`query` substring-matches title+url. Best for "show me everything" / "find by keyword".\n' +
+        '- `tree` ({nodeId?}) → nested chrome bookmark tree. Use when you need full hierarchy.\n' +
+        '- `search` ({query, limit?}) → Edge\'s native fuzzy search, decorated with folderPath.\n' +
+        '- `open` ({id, background?}) → open the bookmark\'s URL in a new tab. Folders error.\n' +
+        '- `create` ({parentId?, title, url?}) → create a bookmark; omit `url` to create a folder.\n' +
+        '- `update` ({id, title?, url?}) → rename or re-target a single bookmark/folder.\n' +
+        '- `move` ({id? | ids?, parentId, index?}) → reparent one or many. Bulk-friendly: pass ' +
+        '`ids: string[]` to move many in one call (assigned consecutive indexes from `index`).\n' +
+        '- `remove` ({id? | ids?, recursive?}) → delete one or many. `recursive:true` for ' +
+        'non-empty folders. **Destructive — confirm with the user first.**\n\n' +
+        'USE CASES: (a) AI-powered reorganize: `tree` → propose plan → confirm → bulk `move`/' +
+        '`update`/`remove`. (b) Context-aware navigation: when the user says "open the order ' +
+        'release page" or any named workflow, `search` their bookmarks for the relevant entry, ' +
+        'then `open` it instead of guessing the URL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          op: {
+            type: 'string',
+            enum: ['list', 'tree', 'search', 'open', 'create', 'update', 'move', 'remove'],
+            description: 'Which bookmark operation to perform.',
+          },
+          // list / search filters
+          folder: { type: 'string', description: '(list) Filter by folderPath prefix.' },
+          query: { type: 'string', description: '(list/search) Substring or fuzzy query.' },
+          limit: { type: 'number', description: '(list/search) Max results.' },
+          // tree
+          nodeId: { type: 'string', description: '(tree) Subtree root id; omit for full tree.' },
+          // open / update / single-target ops
+          id: { type: 'string', description: 'Bookmark/folder id (open/update/move/remove).' },
+          background: { type: 'boolean', description: '(open) Open without focusing.' },
+          // create / update
+          parentId: { type: 'string', description: 'Parent folder id (create/move).' },
+          title: { type: 'string', description: 'Title (create/update).' },
+          url: { type: 'string', description: 'URL (create/update). Omit on create for folder.' },
+          // move
+          index: { type: 'number', description: '(move) Position within parent.' },
+          // bulk move/remove
+          ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Bulk ids for move/remove.',
+          },
+          // remove
+          recursive: { type: 'boolean', description: '(remove) Allow non-empty folder delete.' },
+        },
+        required: ['op'],
+        additionalProperties: false,
+      },
+      skipPermission: true,
+      handler: async (args) => JSON.stringify(await rpc.call('manage_bookmarks', args)),
+    }),
+
     // ---------------- tab binding ----------------
     defineTool('bind_tab', {
       description:
