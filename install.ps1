@@ -8,10 +8,10 @@
   to build the bridge + extension and register the native-messaging host.
 
   Designed to be run with:
-    iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
 
   Or with arguments via:
-    & ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) -Branch dev
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) -Branch dev
 
 .PARAMETER InstallDir
   Where to clone the repo. Defaults to ~/Anya.

@@ -120,20 +120,21 @@ loaded by `bridge/src/copilot-bridge.ts`.
 PowerShell 7+ on Windows, macOS, or Linux:
 
 ```pwsh
-iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex
 ```
 
 This clones the repo to `~/Anya` and runs `setup.ps1` for you. To customise:
 
 ```pwsh
-& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) `
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1))) `
     -InstallDir D:\code\Anya -Branch main -Browsers edge,chrome
 ```
 
-### Manual setup
+### Developing locally
 
-Pick whichever entry point you prefer — both do the same work and produce
-the same result:
+If you want to **hack on Anya** (modify the bridge, the extension, the
+agent prompt, etc.), clone it manually and run `setup.ps1` directly so
+your edits aren't blown away by the bootstrap re-clone:
 
 ```pwsh
 # PowerShell 7+ — Windows, macOS, or Linux
