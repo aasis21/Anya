@@ -140,47 +140,46 @@
 
 <section id="language" class="language">
   <header class="section-head">
-    <span class="kicker">02 · How you talk to it</span>
-    <h2>Three little prefixes. <br/>That's the whole language.</h2>
-    <p class="section-lede">Just type — nothing special needed. But when you want to be precise, three characters give Anya everything it needs.</p>
+    <span class="kicker">02 · What Copilot gains</span>
+    <h2>Browser tools <br/>the editor doesn't have.</h2>
+    <p class="section-lede">Anya gives the same Copilot agent a set of browser-native tools it can call autonomously. You just talk — it decides what to use.</p>
   </header>
 
   <div class="prefix-row">
     <article class="prefix">
-      <div class="prefix-glyph at">@</div>
-      <h3>context</h3>
-      <p class="prefix-meaning">"Look at what I'm looking at."</p>
-      <p class="prefix-detail">Pulls in pieces of your browser — automatically inlined before sending.</p>
+      <div class="prefix-glyph at">👁</div>
+      <h3>see the browser</h3>
+      <p class="prefix-meaning">Read what's on screen — tabs, pages, selections, bookmarks.</p>
       <ul class="prefix-list">
-        <li><code>@tab</code> &nbsp; this page</li>
-        <li><code>@selection</code> &nbsp; what I've highlighted</li>
-        <li><code>@tabs</code> &nbsp; everything open</li>
-        <li><code>@clipboard</code> &nbsp; what I last copied</li>
+        <li><code>get_active_tab</code> &nbsp; what tab is focused</li>
+        <li><code>list_tabs</code> &nbsp; every open tab</li>
+        <li><code>get_tab_content</code> &nbsp; page text as Markdown</li>
+        <li><code>get_selection</code> &nbsp; highlighted text</li>
+        <li><code>manage_bookmarks</code> &nbsp; search, open, reorganise</li>
       </ul>
     </article>
 
     <article class="prefix">
-      <div class="prefix-glyph slash">/</div>
-      <h3>commands</h3>
-      <p class="prefix-meaning">"Do something to the sidebar."</p>
-      <p class="prefix-detail">Quick actions on your chat — never reaches the model.</p>
+      <div class="prefix-glyph slash">🖱</div>
+      <h3>drive the browser</h3>
+      <p class="prefix-meaning">Click, type, navigate, screenshot — on your real logged-in tabs.</p>
       <ul class="prefix-list">
-        <li><code>/new</code> &nbsp; start a fresh chat</li>
-        <li><code>/pin</code> · <code>/tag add ux</code></li>
-        <li><code>/search ordering</code></li>
-        <li><code>/export</code> &nbsp; save as Markdown</li>
+        <li><code>connect_browser</code> &nbsp; attach via CDP</li>
+        <li><code>drive_tab</code> &nbsp; click, type, fill, snapshot</li>
+        <li><code>open_tab</code> · <code>close_tab</code> · <code>focus_tab</code></li>
+        <li>Multi-tab: <code>tab-new</code>, <code>tab-select</code>, <code>tab-close</code></li>
       </ul>
     </article>
 
-    <article class="prefix planned">
-      <div class="prefix-glyph hash">#</div>
-      <h3>references</h3>
-      <p class="prefix-meaning">"Look up the thing I labelled X."</p>
-      <p class="prefix-detail">Named lookups — bookmarks, prior chats, saved snippets.</p>
+    <article class="prefix">
+      <div class="prefix-glyph hash">⌨</div>
+      <h3>shortcuts</h3>
+      <p class="prefix-meaning">Optional prefixes for power users — the agent works fine without them.</p>
       <ul class="prefix-list">
-        <li><code>#bookmark/&hellip;</code></li>
-        <li><code>#chat/&hellip;</code></li>
-        <li class="muted">— coming soon —</li>
+        <li><code>@tab</code> &nbsp; inline page content in your prompt</li>
+        <li><code>@selection</code> &nbsp; inline highlighted text</li>
+        <li><code>/open &lt;folder&gt;</code> &nbsp; root chat in a repo</li>
+        <li><code>/new</code> · <code>/pin</code> · <code>/export</code> · <code>/help</code></li>
       </ul>
     </article>
   </div>

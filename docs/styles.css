@@ -604,23 +604,6 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   color: var(--muted-2);
   padding-top: 4px;
 }
-.prefix.planned .prefix-glyph {
-  color: var(--muted);
-  opacity: 0.6;
-}
-.prefix.planned::after {
-  content: "planned";
-  position: absolute;
-  top: 20px; right: 20px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted-2);
-  border: 1px solid var(--muted-2);
-  padding: 3px 8px;
-  border-radius: 999px;
-}
 
 /* ─── install ─────────────────────────────────────────── */
 .install {
