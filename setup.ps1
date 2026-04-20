@@ -84,17 +84,52 @@ Ok "Detected OS: $osLabel (PowerShell $($PSVersionTable.PSVersion))"
 # Track warnings for the summary — non-fatal issues that the user should fix.
 $warnings = @()
 
-# Copilot CLI auth
-$copilotAuth = $null
-try { $copilotAuth = (& copilot auth status 2>&1) } catch {}
-if ($copilotAuth -and ($copilotAuth -match 'Logged in|authenticated')) {
-  Ok 'Copilot CLI authenticated'
-} elseif (Get-Command copilot -ErrorAction SilentlyContinue) {
-  $warnings += 'Copilot CLI found but not logged in. Run: copilot auth login'
-  Write-Host "  ⚠  Copilot CLI not logged in — run 'copilot auth login'" -ForegroundColor Yellow
-} else {
+# Copilot CLI presence + auth.
+# The CLI has no `auth status` subcommand. Login is `copilot login`, and the
+# token lands in (a) an env var, (b) the OS credential store, or (c) a plain
+# text file under ~/.copilot/. Check all three rather than shelling out.
+if (-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
   $warnings += 'Copilot CLI not found. Install: npm i -g @github/copilot'
   Write-Host "  ⚠  Copilot CLI not found — install: npm i -g @github/copilot" -ForegroundColor Yellow
+} else {
+  $copilotVer = ''
+  try {
+    $verLine = (& copilot --version 2>$null | Select-Object -First 1)
+    if ($verLine -match '\d+\.\d+\.\d+') { $copilotVer = $Matches[0] }
+  } catch {}
+  $loggedIn = $false
+
+  # 1. Env var token (headless / CI flow).
+  foreach ($v in 'COPILOT_GITHUB_TOKEN','GH_TOKEN','GITHUB_TOKEN') {
+    if ([Environment]::GetEnvironmentVariable($v)) { $loggedIn = $true; break }
+  }
+
+  # 2. OS credential store. On Windows, `cmdkey /list` shows a
+  # `copilot-cli/<host>:<user>` target after a successful `copilot login`.
+  if (-not $loggedIn -and $IsWindows) {
+    try {
+      if ((cmdkey /list 2>$null | Select-String -Pattern 'copilot-cli/' -Quiet)) {
+        $loggedIn = $true
+      }
+    } catch {}
+  }
+
+  # 3. Plain text fallback file under the config dir.
+  if (-not $loggedIn) {
+    $cfgDir = if ($env:COPILOT_CONFIG_DIR) { $env:COPILOT_CONFIG_DIR } else { Join-Path $HOME '.copilot' }
+    if (Test-Path $cfgDir) {
+      $hit = Get-ChildItem -Path $cfgDir -Filter '*token*' -File -ErrorAction SilentlyContinue |
+             Select-Object -First 1
+      if ($hit) { $loggedIn = $true }
+    }
+  }
+
+  if ($loggedIn) {
+    Ok ("Copilot CLI {0}authenticated" -f $(if ($copilotVer) { "$copilotVer " } else { '' }))
+  } else {
+    $warnings += 'Copilot CLI found but not logged in. Run: copilot login'
+    Write-Host "  ⚠  Copilot CLI not logged in — run 'copilot login'" -ForegroundColor Yellow
+  }
 }
 
 # playwright-cli
