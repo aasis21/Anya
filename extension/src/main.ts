@@ -731,7 +731,7 @@ export class AnyaApp extends LitElement {
             },
           },
         }));
-        if (existing.toolName === 'drive_tab' || existing.toolName === 'browser') this.refreshBoundTab();
+        if (existing.toolName === 'drive_tab' || existing.toolName === 'drive_browser' || existing.toolName === 'drive_context' || existing.toolName === 'drive_devtools' || existing.toolName === 'browser') this.refreshBoundTab();
         break;
       }
       case 'pw-status-result':

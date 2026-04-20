@@ -33,9 +33,11 @@ tabs, with a side helping of browser automation via Playwright.
 - **Browser context as first-class input.** The composer speaks three
   languages — `/` for client commands, `@` for ambient browser context,
   `#` (planned) for named references. See [Composer language](#composer-language).
-- **Playwright automation built in.** A `drive_tab` tool shells out to
+- **Playwright automation built in.** A `drive_*` tool family (`drive_tab`,
+  `drive_browser`, `drive_context`, `drive_devtools`) shells out to
   `playwright-cli` so the agent can drive your real, logged-in browser — click,
-  type, screenshot, extract — with the same auth your tabs already have.
+  type, screenshot, read cookies, dump console — with the same auth your tabs
+  already have.
 - **Inline tool cards.** Every tool call renders as a VS Code-style card with
   args, progress, and result preview. Click to expand.
 - **Live debug panel.** A 🐛 button opens a trace of every Native Messaging

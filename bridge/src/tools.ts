@@ -6,8 +6,19 @@
 //    tool-rpc channel. They wrap chrome.tabs / chrome.scripting. Always present.
 //
 // 2. Playwright tools — mode-dependent:
-//    - "extension" mode: bind_tab / unbind_tab / bound_tabs / drive_tab
-//    - "cdp" mode: connect_browser / disconnect_browser / bound_tabs / drive_tab
+//    - "extension" mode: bind_tab / unbind_tab / bound_tabs + drive_* family
+//    - "cdp" mode: connect_browser / disconnect_browser / bound_tabs + drive_* family
+//
+//    The drive_* family is four sibling tools, all thin wrappers over the
+//    `playwright-cli` binary. They differ ONLY in description (which
+//    subcommand subset they advertise) — same handler, same runner. The
+//    split is purely an affordance signal so the model picks the right
+//    family for the job:
+//
+//      drive_tab      — page-scoped: DOM, nav, screenshots, eval
+//      drive_browser  — browser/session/multi-tab lifecycle
+//      drive_context  — cookies, web storage, auth state, network mocking
+//      drive_devtools — debugging surface: console, network log, tracing, video
 
 import { defineTool, type Tool } from '@github/copilot-sdk';
 import { spawn } from 'node:child_process';
@@ -196,7 +207,9 @@ function buildExtensionTools(): Tool[] {
         'Open a Playwright connect dialog so the user can pick which browser tab to bind for ' +
         'browser automation. Only ONE tab can be bound at a time — calling `bind_tab` again ' +
         'replaces the prior binding. After the user clicks Connect on a tab, that tab becomes ' +
-        'driveable via `drive_tab`. Use the optional `hint` to label this binding so you can ' +
+        'driveable via the `drive_*` family (`drive_tab`, `drive_browser`, ' +
+        '`drive_context`, `drive_devtools`). Use the optional `hint` to label ' +
+        'this binding so you can ' +
         'remember which tab you wanted (e.g. "Gmail compose", "PR review"). ' +
         'After calling, prompt the user to click Connect, then poll `bound_tabs` until the ' +
         '`status` flips from "waiting-for-connect" to "connected".',
@@ -221,7 +234,7 @@ function buildExtensionTools(): Tool[] {
           message:
             'A connect dialog should now be open in the browser. Ask the user to click ' +
             'Connect on the tab they want bound, then call `bound_tabs` to confirm and ' +
-            'use `drive_tab` to act on it.',
+            'use the `drive_*` tools to act on it.',
         });
       },
     }),
@@ -248,9 +261,9 @@ function buildCdpTools(): Tool[] {
       description:
         'Attach to the user\'s browser via Chrome DevTools Protocol. This gives full control ' +
         'over all tabs — you can open new tabs, switch between them, and close them via ' +
-        '`drive_tab`. No connect dialog needed. Requires the user to have enabled remote ' +
+        '`drive_*` family. No connect dialog needed. Requires the user to have enabled remote ' +
         'debugging: open edge://inspect/#remote-debugging and check "Allow remote debugging ' +
-        'for this browser instance". Call this before `drive_tab` if `bound_tabs` shows no ' +
+        'for this browser instance". Call this before any `drive_*` tool if `bound_tabs` shows no ' +
         'connection.',
       parameters: {
         type: 'object',
@@ -289,7 +302,7 @@ function buildSharedPlaywrightTools(): Tool[] {
       description:
         'List the tabs currently under Playwright control. In extension mode this returns ' +
         'the single bound tab. In CDP mode this returns all tabs the browser has open. ' +
-        'Use to confirm a connection is active before calling `drive_tab`.',
+        'Use to confirm a connection is active before calling any `drive_*` tool.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
       skipPermission: true,
       handler: async () => {
@@ -314,20 +327,106 @@ function buildSharedPlaywrightTools(): Tool[] {
         });
       },
     }),
-    buildDriveTabTool(),
+    buildDriveTool('drive_tab', DRIVE_TAB_DESC),
+    buildDriveTool('drive_browser', DRIVE_BROWSER_DESC),
+    buildDriveTool('drive_context', DRIVE_CONTEXT_DESC),
+    buildDriveTool('drive_devtools', DRIVE_DEVTOOLS_DESC),
   ];
 }
 
-function buildDriveTabTool(): Tool {
-  return defineTool('drive_tab', {
-    description:
-      'Drive a browser tab via playwright-cli. ' +
-      'Required: `argv` — playwright-cli arguments, e.g. ["snapshot"], ["click","e15"], ' +
-      '["type","hello"], ["goto","https://example.com"], ["screenshot"]. ' +
-      'In CDP mode you can also use ["tab-new","https://..."], ["tab-select","1"], ' +
-      '["tab-close","2"], ["tab-list"]. ' +
-      'Pre-flight: call `bound_tabs` first. If no connection is active, call ' +
-      '`connect_browser` (CDP mode) or `bind_tab` (extension mode).',
+// ---- Descriptions for the drive_* family ---------------------------------
+//
+// All four tools share the same handler — they shell out to `playwright-cli`
+// with `argv` forwarded verbatim. They differ only in description, which
+// advertises a focused subset of subcommands. Pick the family that matches
+// the JOB; argv routing is unconstrained, so a wrong pick still works, but
+// the right pick gives the model better priors when constructing argv.
+//
+// Universal escape hatch: any tool accepts `["--help"]` to dump the full
+// `playwright-cli` command list.
+
+const DRIVE_TAB_DESC =
+  'Drive the currently focused page. Thin wrapper over the `playwright-cli` ' +
+  'binary — `argv` is forwarded verbatim. Use this for ANY page-scoped DOM ' +
+  'or navigation action: ' +
+  '`goto`, `click`, `dblclick`, `type`, `fill`, `press`, `hover`, `select`, ' +
+  '`check`, `uncheck`, `upload`, `drag`, mouse (`mousemove`, `mousedown`, ' +
+  '`mouseup`, `mousewheel`), keyboard (`keydown`, `keyup`), navigation ' +
+  '(`go-back`, `go-forward`, `reload`), inspection (`snapshot`, `eval`, ' +
+  '`run-code`), output (`screenshot`, `pdf`), dialogs (`dialog-accept`, ' +
+  '`dialog-dismiss`). ' +
+  'Examples: ["snapshot"], ["click","e15"], ["type","hello"], ' +
+  '["fill","e15","value"], ["goto","https://example.com"], ["screenshot"], ' +
+  '["eval","() => document.title"]. ' +
+  'For browser-wide actions (tab management, sessions) use `drive_browser`. ' +
+  'For cookies/storage/network mocking use `drive_context`. ' +
+  'For console logs / network requests / tracing use `drive_devtools`. ' +
+  'Call ["--help"] to list every supported subcommand. ' +
+  'Pre-flight: `bound_tabs` must show a connection — otherwise call ' +
+  '`connect_browser` (CDP mode) or `bind_tab` (extension mode).';
+
+const DRIVE_BROWSER_DESC =
+  'Drive the browser/session itself — anything NOT scoped to a single page. ' +
+  'Thin wrapper over the `playwright-cli` binary; `argv` is forwarded ' +
+  'verbatim. Covers: ' +
+  'tab management (`tab-list`, `tab-new`, `tab-close`, `tab-select`), ' +
+  'window (`resize`), ' +
+  'session lifecycle (`open`, `close`, `attach`, `delete-data`, `list`, ' +
+  '`close-all`, `kill-all`), ' +
+  'install (`install`, `install-browser`). ' +
+  'Examples: ["tab-list"], ["tab-new","https://..."], ["tab-select","2"], ' +
+  '["resize","1280","800"], ["list"]. ' +
+  'For page-scoped actions (click, type, snapshot) use `drive_tab`. ' +
+  'For cookies/storage use `drive_context`. ' +
+  'Call ["--help"] to list every supported subcommand. ' +
+  'Pre-flight: same as `drive_tab` — requires an active connection.';
+
+const DRIVE_CONTEXT_DESC =
+  'Manage browser-context state — cookies, web storage, auth, network ' +
+  'mocking. Thin wrapper over the `playwright-cli` binary; `argv` is ' +
+  'forwarded verbatim. State here persists across page navigations within ' +
+  'the same browser session. Covers: ' +
+  'cookies (`cookie-list`, `cookie-get <name>`, `cookie-set <name> <value>`, ' +
+  '`cookie-delete <name>`, `cookie-clear`), ' +
+  'localStorage (`localstorage-list`, `localstorage-get <key>`, ' +
+  '`localstorage-set <key> <value>`, `localstorage-delete <key>`, ' +
+  '`localstorage-clear`), ' +
+  'sessionStorage (`sessionstorage-*` mirroring localStorage), ' +
+  'auth state (`state-save [filename]`, `state-load <filename>` — useful ' +
+  'for "log in once, replay later"), ' +
+  'network mocking (`route <pattern>`, `route-list`, `unroute [pattern]`), ' +
+  'connectivity (`network-state-set online|offline`). ' +
+  'Examples: ["cookie-list"], ["state-save","auth.json"], ' +
+  '["network-state-set","offline"], ["route","**/api/**"]. ' +
+  'For page DOM actions use `drive_tab`. For tab/session lifecycle use ' +
+  '`drive_browser`. For console/network observation use `drive_devtools`. ' +
+  'Call ["--help"] to list every supported subcommand. ' +
+  'NOTE: cookie/storage operations expose sensitive data (tokens, session ' +
+  'IDs). Treat output with care.';
+
+const DRIVE_DEVTOOLS_DESC =
+  'Inspect and debug the page like a DevTools panel. Thin wrapper over the ' +
+  '`playwright-cli` binary; `argv` is forwarded verbatim. Read-only ' +
+  'observation plus tracing. Covers: ' +
+  'console (`console [min-level]` — levels: log, info, warn, error, debug — ' +
+  'returns buffered messages since page load), ' +
+  'network requests (`network` — list all requests since page load), ' +
+  'tracing (`tracing-start`, `tracing-stop` — Playwright trace zip), ' +
+  'video recording (`video-start [filename]`, `video-stop`, ' +
+  '`video-chapter <title>`), ' +
+  'live debug (`show` — open browser devtools, `pause-at <location>`, ' +
+  '`resume`, `step-over`). ' +
+  'Examples: ["console"], ["console","error"], ["network"], ' +
+  '["tracing-start"], ["tracing-stop"]. ' +
+  'For DOM actions use `drive_tab`. For network MOCKING (vs observing) use ' +
+  '`drive_context route`. ' +
+  'Call ["--help"] to list every supported subcommand. ' +
+  'NOTE: `console` and `network` are buffer dumps, not live streams — call ' +
+  'them after the action you want to observe.';
+
+function buildDriveTool(name: string, description: string): Tool {
+  return defineTool(name, {
+    description,
     parameters: {
       type: 'object',
       properties: {
@@ -349,7 +448,7 @@ function buildDriveTabTool(): Tool {
       // Try CDP session first, then extension session.
       const cdpSid = getCdpSessionId();
       if (cdpSid) {
-        return runPlaywright(a.argv as string[], cdpSid);
+        return runPlaywright(a.argv as string[], cdpSid, name);
       }
       const tab = getBoundTab();
       if (!tab) {
@@ -370,7 +469,7 @@ function buildDriveTabTool(): Tool {
           error: `Bound tab session ${tab.sessionId} is dead (tab closed or browser quit). Call \`bind_tab\` to bind a fresh tab.`,
         });
       }
-      return runPlaywright(a.argv as string[], tab.sessionId);
+      return runPlaywright(a.argv as string[], tab.sessionId, name);
     },
   });
 }
@@ -382,10 +481,10 @@ export function buildPlaywrightTools(mode: PlaywrightMode): Tool[] {
   return [...modeTools, ...buildSharedPlaywrightTools()];
 }
 
-function runPlaywright(argv: string[], sessionId: string): Promise<string> {
+function runPlaywright(argv: string[], sessionId: string, toolName = 'drive'): Promise<string> {
   return new Promise((resolve) => {
     const finalArgv = [`-s=${sessionId}`, ...argv];
-    log('drive_tab: spawning', PLAYWRIGHT_CLI, finalArgv.join(' '));
+    log(`${toolName}: spawning`, PLAYWRIGHT_CLI, finalArgv.join(' '));
     let child: ReturnType<typeof spawn>;
     try {
       // Ensure no stale token env var interferes.
@@ -394,7 +493,7 @@ function runPlaywright(argv: string[], sessionId: string): Promise<string> {
       child = spawn(PLAYWRIGHT_CLI, finalArgv, { shell: true, windowsHide: true, env, cwd: getPlaywrightCwd() });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      error('drive_tab spawn failed:', err);
+      error(`${toolName} spawn failed:`, err);
       resolve(JSON.stringify({
         ok: false,
         error: `Failed to spawn playwright-cli: ${msg}. Install with: npm install -g @playwright/cli`,
@@ -421,7 +520,7 @@ function runPlaywright(argv: string[], sessionId: string): Promise<string> {
     child.stdout?.on('data', (b: Buffer) => out.push(b));
     child.stderr?.on('data', (b: Buffer) => errOut.push(b));
     child.on('error', (err) => {
-      warn('drive_tab process error:', err);
+      warn(`${toolName} process error:`, err);
       finish({ ok: false, error: `playwright-cli process error: ${err.message}` });
     });
     child.on('close', (code) => {
