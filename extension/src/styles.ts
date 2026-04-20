@@ -228,7 +228,6 @@ export const sidebarStyles = css`
       background: var(--bg-bubble);
       border-left: 2px solid var(--bg-rule);
       color: var(--fg);
-      white-space: pre-wrap;
       word-wrap: break-word;
     }
     /* User bubbles are usually short single-line prompts — keep them
@@ -244,6 +243,7 @@ export const sidebarStyles = css`
       color: var(--fg-dim);
       font-size: 11px;
       border-left-color: var(--fg-faint);
+      white-space: pre-wrap;
     }
     .msg.system.error .bubble {
       color: var(--accent);
