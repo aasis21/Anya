@@ -404,25 +404,51 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   max-width: var(--max);
   margin: 0 auto;
   padding: 40px var(--pad-x) 80px;
-  overflow-x: auto;
 }
-.diagram {
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--muted);
+
+/* architecture diagram — CSS grid */
+.arch-diagram {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  align-items: center;
   background: linear-gradient(180deg, var(--ink-soft) 0%, var(--diagram-fade) 100%);
   border: 1px solid var(--rule);
   border-radius: 8px;
-  padding: 32px clamp(20px, 4vw, 48px);
-  margin: 0;
-  white-space: pre;
-  overflow-x: auto;
-  text-align: center;
+  padding: 40px clamp(20px, 4vw, 48px);
+  font-family: var(--mono);
+  font-size: 13px;
 }
-.diagram .d-box  { color: var(--bone); }
-.diagram .d-flow { color: var(--accent); font-weight: 500; }
-.diagram .d-leaf { color: var(--accent-2); }
+.arch-box {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 20px 24px;
+  text-align: center;
+  color: var(--bone);
+}
+.arch-box strong { display: block; font-weight: 500; margin-bottom: 4px; }
+.arch-box span { color: var(--muted); font-size: 12px; }
+.arch-wire {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 20px;
+  gap: 4px;
+}
+.arch-arrow { color: var(--accent); font-weight: 500; white-space: nowrap; font-size: 12px; }
+.arch-label { color: var(--muted); font-size: 11px; }
+.arch-leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.arch-leaf strong { color: var(--accent-2); font-weight: 500; }
+.arch-down { color: var(--muted-2); font-size: 16px; }
+.arch-leaf-spacer { /* empty middle column on row 2 */ }
 
 /* ─── section heads ───────────────────────────────────── */
 .section-head {
@@ -590,12 +616,17 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   padding: 18px 0 0;
   border-top: 1px dashed var(--rule);
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
 }
-.prefix-list li { color: var(--muted); }
-.prefix-list code { font-size: 12.5px; }
+.prefix-list li {
+  color: var(--muted);
+}
+.prefix-list code {
+  font-size: 12px;
+  white-space: nowrap;
+}
 .prefix-list .muted {
   font-family: var(--mono);
   font-size: 11px;
