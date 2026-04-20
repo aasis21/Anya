@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { error, log, warn } from './log.js';
 import { sessionsDir } from './paths.js';
 import { ToolRpc } from './tool-rpc.js';
-import { buildBrowserTool, buildContextTools } from './tools.js';
+import { buildContextTools, buildPlaywrightTools } from './tools.js';
+import { getPlaywrightMode } from './config.js';
 
 const SESSIONS_ROOT = sessionsDir();
 
@@ -197,9 +198,10 @@ export class CopilotBridge {
     // fall back to the scratch session dir so the SDK has a place to write.
     const workingDirectory = cwd ?? join(SESSIONS_ROOT, safeId);
     mkdirSync(workingDirectory, { recursive: true });
-    log('creating chat session:', chatId, 'cwd:', workingDirectory);
     const agentPrompt = loadAgentPrompt();
-    const tools = [...buildContextTools(this.rpc), buildBrowserTool()];
+    const pwMode = getPlaywrightMode();
+    const tools = [...buildContextTools(this.rpc), ...buildPlaywrightTools(pwMode)];
+    log('creating chat session:', chatId, 'playwrightMode:', pwMode);
     const session = await client.createSession({
       clientName: 'Anya',
       streaming: true,

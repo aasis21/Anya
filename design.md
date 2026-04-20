@@ -25,7 +25,8 @@ before changing architecture.
   conversations should be instant. Each thread keeps its own state on the
   bridge side.
 - **Local-first, secret-aware.** No cloud beyond what Copilot itself uses. No
-  telemetry. The Playwright extension token never leaves the machine.
+  telemetry. Everything is local — chats live in
+  `chrome.storage.local`; bridge state in the per-OS Anya data dir.
 
 ### Non-goals
 
@@ -120,7 +121,7 @@ beyond TypeScript types — the assumption is that both sides ship together.
 
 | `type`             | Payload                                                     | Purpose                                |
 | ------------------ | ----------------------------------------------------------- | -------------------------------------- |
-| `hello`            | `{ version, pid, logFile, playwrightToken }`                | Sent on connect                        |
+| `hello`            | `{ version, pid, logFile, playwrightMode }`                 | Sent on connect                        |
 | `delta`            | `{ chatId, text }`                                          | Streaming chunk                        |
 | `message`          | `{ chatId, text }`                                          | Final assistant message text           |
 | `done`             | `{ chatId }`                                                | Stream complete                        |
@@ -270,14 +271,6 @@ the bound-tab snapshot, and reschedules itself. Two safety properties:
   a new timer onto the new binding.
 - **Adaptive interval.** 8 s when connected, 2 s while waiting for connect.
 
-### Auto-attach token
-
-The Playwright MCP Bridge extension issues a per-machine token. If the user
-captures it once and pastes it into `~/.anya/config.json` or sets
-`PLAYWRIGHT_MCP_EXTENSION_TOKEN`, the connect dialog is bypassed on
-subsequent binds. The token is treated as local-only (never logged in full,
-never sent over the wire).
-
 ---
 
 ## 8. UI architecture
@@ -336,9 +329,9 @@ several streams have completed.
   from the user's existing `copilot` login.
 - **MCP servers** are loaded from `~/.copilot/mcp-config.json` — same as the
   CLI. Anya does not introduce a new MCP config surface.
-- **Playwright auto-attach token** is local-only. If present in
-  `~/.anya/config.json`, the bridge logs `present (auto-attach enabled)`
-  but never logs the value itself.
+- **Playwright auto-attach token** — no longer used. The default CDP mode
+  connects via remote debugging without a token. Extension mode (fallback)
+  uses the connect dialog.
 - **User content** (page text, selection, tab list) is sent only when the
   user explicitly invokes a mention or the agent calls a tool. There is no
   background scraping.
@@ -416,7 +409,7 @@ point referenced by the Native Messaging manifest; it just shells to `node`.
 
 | Path                                          | Contents                                       |
 | --------------------------------------------- | ---------------------------------------------- |
-| `~/.anya/config.json`                    | Optional Playwright token, future settings     |
+| `~/.anya/config.json`                    | Playwright mode, future settings                |
 | `~/.anya/sessions/<chatId>/`             | Per-chat Copilot working directory             |
 | `~/.anya/playwright-session.json`        | Persisted bound tab snapshot                   |
 | `%LOCALAPPDATA%\Anya\bridge.log`         | Append-only bridge log                         |

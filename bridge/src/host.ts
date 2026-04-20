@@ -1,11 +1,14 @@
 import { NativeMessagingTransport } from './native-messaging.js';
 import { CopilotBridge } from './copilot-bridge.js';
 import { error, getLogFilePath, log, setLogSink, warn } from './log.js';
-import { getConfigPath } from './config.js';
+import { getConfigPath, getPlaywrightMode } from './config.js';
 import {
   bindTab,
+  connectBrowser,
+  disconnectBrowser,
   getBoundTab,
   getBoundTabFile,
+  getCdpSessionId,
   loadFromDisk,
   setTabResolver,
   shutdown,
@@ -25,12 +28,14 @@ setLogSink((entry) => {
 
 log('bridge started; pid=', process.pid, 'logFile=', getLogFilePath() ?? '(none)');
 log('config:', getConfigPath());
+log('playwrightMode:', getPlaywrightMode());
 
 transport.send({
   type: 'hello',
-  version: '0.0.3',
+  version: '0.0.4',
   pid: process.pid,
   logFile: getLogFilePath(),
+  playwrightMode: getPlaywrightMode(),
 });
 
 log('bound-tab store:', getBoundTabFile());

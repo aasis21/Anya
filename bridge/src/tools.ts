@@ -1,21 +1,26 @@
 // Bridge-side tool definitions for the Copilot SDK.
 //
-// Tool surface is split into two families:
+// Tool surface is split into families:
 //
-// 1. Chrome-context tools (read-only, free) — defer to the extension over
-//    the tool-rpc channel. They wrap chrome.tabs / chrome.scripting.
+// 1. Chrome-context tools (read-only) — defer to the extension over the
+//    tool-rpc channel. They wrap chrome.tabs / chrome.scripting. Always present.
 //
-// 2. Tab-binding + driving tools — use playwright-cli. The bridge models a
-//    SINGLE bound tab at a time (`bind_tab` opens connect dialog, user
-//    picks one tab; `drive_tab` runs a playwright command on it).
+// 2. Playwright tools — mode-dependent:
+//    - "extension" mode: bind_tab / unbind_tab / bound_tabs / drive_tab
+//    - "cdp" mode: connect_browser / disconnect_browser / bound_tabs / drive_tab
 
 import { defineTool, type Tool } from '@github/copilot-sdk';
 import { spawn } from 'node:child_process';
 import { error, log, warn } from './log.js';
 import type { ToolRpc } from './tool-rpc.js';
-import { bindTab, getBoundTab, getBoundTabFile, getPlaywrightCwd, unbindTab } from './sessions.js';
+import type { PlaywrightMode } from './config.js';
+import { PLAYWRIGHT_CLI } from './config.js';
+import {
+  bindTab, getBoundTab, getBoundTabFile, getPlaywrightCwd, unbindTab,
+  connectBrowser, disconnectBrowser, getCdpSessionId, isCdpConnected,
+  runPlaywrightCmd,
+} from './sessions.js';
 
-const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';
 const PLAYWRIGHT_TIMEOUT_MS = 60_000;
 
 const tabIdSchema = {
@@ -178,7 +183,14 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       handler: async (args) => JSON.stringify(await rpc.call('manage_bookmarks', args)),
     }),
 
-    // ---------------- tab binding ----------------
+    // ---------------- tab binding (extension mode) / browser connect (cdp mode) ----------------
+  ];
+}
+
+// ==================== Extension-mode Playwright tools ====================
+
+function buildExtensionTools(): Tool[] {
+  return [
     defineTool('bind_tab', {
       description:
         'Open a Playwright connect dialog so the user can pick which browser tab to bind for ' +
@@ -186,7 +198,7 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
         'replaces the prior binding. After the user clicks Connect on a tab, that tab becomes ' +
         'driveable via `drive_tab`. Use the optional `hint` to label this binding so you can ' +
         'remember which tab you wanted (e.g. "Gmail compose", "PR review"). ' +
-        'After calling, prompt the user to click Connect, then poll `bound_tab` until the ' +
+        'After calling, prompt the user to click Connect, then poll `bound_tabs` until the ' +
         '`status` flips from "waiting-for-connect" to "connected".',
       parameters: {
         type: 'object',
@@ -208,24 +220,10 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
           stateFile: getBoundTabFile(),
           message:
             'A connect dialog should now be open in the browser. Ask the user to click ' +
-            'Connect on the tab they want bound, then call `bound_tab` to confirm and ' +
+            'Connect on the tab they want bound, then call `bound_tabs` to confirm and ' +
             'use `drive_tab` to act on it.',
         });
       },
-    }),
-    defineTool('bound_tab', {
-      description:
-        'Return the current bound tab\'s status: {sessionId, status, url, title, hint, ' +
-        'chromeTabId, attachedAt, lastSeenAt} — or null if no tab is bound. ' +
-        'Use to confirm a binding has connected before calling `drive_tab`, or to check ' +
-        'whether the bound tab\'s URL still matches what you intended to drive.',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
-      skipPermission: true,
-      handler: async () => JSON.stringify({
-        ok: true,
-        stateFile: getBoundTabFile(),
-        boundTab: getBoundTab(),
-      }),
     }),
     defineTool('unbind_tab', {
       description:
@@ -242,15 +240,94 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
   ];
 }
 
-export function buildBrowserTool(): Tool {
+// ==================== CDP-mode Playwright tools ====================
+
+function buildCdpTools(): Tool[] {
+  return [
+    defineTool('connect_browser', {
+      description:
+        'Attach to the user\'s browser via Chrome DevTools Protocol. This gives full control ' +
+        'over all tabs — you can open new tabs, switch between them, and close them via ' +
+        '`drive_tab`. No connect dialog needed. Requires the user to have enabled remote ' +
+        'debugging: open edge://inspect/#remote-debugging and check "Allow remote debugging ' +
+        'for this browser instance". Call this before `drive_tab` if `bound_tabs` shows no ' +
+        'connection.',
+      parameters: {
+        type: 'object',
+        properties: {
+          browser: { type: 'string', description: 'Browser channel. Default: "msedge". Also: "chrome".' },
+        },
+        additionalProperties: false,
+      },
+      skipPermission: true,
+      handler: async (args) => {
+        const a = (args ?? {}) as { browser?: unknown };
+        const browser = typeof a.browser === 'string' && a.browser.trim() ? a.browser.trim() : 'msedge';
+        const result = await connectBrowser(browser);
+        return JSON.stringify(result);
+      },
+    }),
+    defineTool('disconnect_browser', {
+      description:
+        'Release the CDP connection to the browser. Use when you are done with browser ' +
+        'automation. The browser stays open — only the Playwright control is released.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      skipPermission: true,
+      handler: async () => {
+        const ok = await disconnectBrowser();
+        return JSON.stringify({ ok });
+      },
+    }),
+  ];
+}
+
+// ==================== Shared Playwright tools (both modes) ====================
+
+function buildSharedPlaywrightTools(): Tool[] {
+  return [
+    defineTool('bound_tabs', {
+      description:
+        'List the tabs currently under Playwright control. In extension mode this returns ' +
+        'the single bound tab. In CDP mode this returns all tabs the browser has open. ' +
+        'Use to confirm a connection is active before calling `drive_tab`.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      skipPermission: true,
+      handler: async () => {
+        // CDP mode: use tab-list for multi-tab info
+        const cdpSid = getCdpSessionId();
+        if (cdpSid) {
+          const result = await runPlaywrightCmd(['tab-list'], cdpSid, 8_000);
+          return JSON.stringify({
+            ok: result.ok,
+            mode: 'cdp',
+            sessionId: cdpSid,
+            tabs: result.ok ? result.stdout : undefined,
+            error: result.ok ? undefined : result.stderr.trim().split(/\r?\n/)[0],
+          });
+        }
+        // Extension mode: single bound tab
+        return JSON.stringify({
+          ok: true,
+          mode: 'extension',
+          stateFile: getBoundTabFile(),
+          boundTab: getBoundTab(),
+        });
+      },
+    }),
+    buildDriveTabTool(),
+  ];
+}
+
+function buildDriveTabTool(): Tool {
   return defineTool('drive_tab', {
     description:
-      'Drive the currently bound browser tab via playwright-cli (replaces the old `browser` tool). ' +
+      'Drive a browser tab via playwright-cli. ' +
       'Required: `argv` — playwright-cli arguments, e.g. ["snapshot"], ["click","e15"], ' +
-      '["type","hello"], ["navigate","https://example.com"], ["screenshot"]. ' +
-      'Pre-flight: check `bound_tab` first. If it returns null, status="dead", or the URL is ' +
-      'not what you want to drive, call `bind_tab({hint:"..."})` and ask the user to click ' +
-      'Connect on the right tab. Run argv=["--help"] for command discovery.',
+      '["type","hello"], ["goto","https://example.com"], ["screenshot"]. ' +
+      'In CDP mode you can also use ["tab-new","https://..."], ["tab-select","1"], ' +
+      '["tab-close","2"], ["tab-list"]. ' +
+      'Pre-flight: call `bound_tabs` first. If no connection is active, call ' +
+      '`connect_browser` (CDP mode) or `bind_tab` (extension mode).',
     parameters: {
       type: 'object',
       properties: {
@@ -269,28 +346,40 @@ export function buildBrowserTool(): Tool {
       if (!Array.isArray(a.argv) || a.argv.some((v) => typeof v !== 'string')) {
         return JSON.stringify({ ok: false, error: 'argv must be an array of strings' });
       }
+      // Try CDP session first, then extension session.
+      const cdpSid = getCdpSessionId();
+      if (cdpSid) {
+        return runPlaywright(a.argv as string[], cdpSid);
+      }
       const tab = getBoundTab();
       if (!tab) {
         return JSON.stringify({
           ok: false,
-          error: 'no tab is bound — call `bind_tab` first and ask the user to click Connect.',
+          error: 'No browser connection. Call `connect_browser` (CDP mode) or `bind_tab` (extension mode) first.',
         });
       }
       if (tab.status === 'waiting-for-connect') {
         return JSON.stringify({
           ok: false,
-          error: `bound tab session ${tab.sessionId} is still waiting for the user to click Connect. Ask the user to do so, then retry.`,
+          error: `Bound tab session ${tab.sessionId} is still waiting for the user to click Connect. Ask the user to do so, then retry.`,
         });
       }
       if (tab.status === 'dead') {
         return JSON.stringify({
           ok: false,
-          error: `bound tab session ${tab.sessionId} is dead (tab closed or browser quit). Call \`bind_tab\` to bind a fresh tab.`,
+          error: `Bound tab session ${tab.sessionId} is dead (tab closed or browser quit). Call \`bind_tab\` to bind a fresh tab.`,
         });
       }
       return runPlaywright(a.argv as string[], tab.sessionId);
     },
   });
+}
+
+// ==================== Public builder ====================
+
+export function buildPlaywrightTools(mode: PlaywrightMode): Tool[] {
+  const modeTools = mode === 'cdp' ? buildCdpTools() : buildExtensionTools();
+  return [...modeTools, ...buildSharedPlaywrightTools()];
 }
 
 function runPlaywright(argv: string[], sessionId: string): Promise<string> {
@@ -299,9 +388,7 @@ function runPlaywright(argv: string[], sessionId: string): Promise<string> {
     log('drive_tab: spawning', PLAYWRIGHT_CLI, finalArgv.join(' '));
     let child: ReturnType<typeof spawn>;
     try {
-      // No PLAYWRIGHT_MCP_EXTENSION_TOKEN — `bind_tab` deliberately spawns
-      // without it so the user picks the tab. Once bound, follow-up cmds
-      // run against that session id and don't need the token.
+      // Ensure no stale token env var interferes.
       const env = { ...process.env };
       delete env.PLAYWRIGHT_MCP_EXTENSION_TOKEN;
       child = spawn(PLAYWRIGHT_CLI, finalArgv, { shell: true, windowsHide: true, env, cwd: getPlaywrightCwd() });

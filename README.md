@@ -112,8 +112,11 @@ loaded by `bridge/src/copilot-bridge.ts`.
   is installed and tested in: **Microsoft Edge, Google Chrome, Chromium,
   Brave, Vivaldi, Arc** (Arc is Windows + macOS only — no Linux build).
 - A logged-in **Copilot CLI** (`copilot auth status`)
-- _Optional, for browser automation:_ `npm i -g @playwright/cli` and the
-  Playwright MCP Bridge extension in your browser.
+- **`@playwright/cli`** for browser automation: `npm i -g @playwright/cli`
+- **Remote debugging enabled** in your browser — open
+  `edge://inspect/#remote-debugging` (or `chrome://inspect/...` etc.) and
+  check "Allow remote debugging for this browser instance". This is needed
+  for Anya to drive tabs via CDP.
 
 ### One-line install (recommended)
 
@@ -405,22 +408,6 @@ Anya can drive your real, logged-in Edge browser. The flow:
 Only one tab is bound at a time by design — keeps the model's mental model
 simple ("there is one browser") and means tool calls don't need a session
 selector.
-
-### Skip the connect dialog (optional)
-
-Each accept produces a token. To auto-attach next time:
-
-1. Trigger the dialog once and copy the long token from
-   `PLAYWRIGHT_MCP_EXTENSION_TOKEN=…` shown in the panel.
-2. Paste it into `~/.anya/config.json`:
-   ```json
-   { "playwrightExtensionToken": "<paste-here>" }
-   ```
-3. Reload the extension. The 🐛 panel will log `playwright extension token:
-   present (auto-attach enabled)`.
-
-The token is a local secret. Treat it like an SSH key. Setting
-`$env:PLAYWRIGHT_MCP_EXTENSION_TOKEN` overrides the config file.
 
 ---
 

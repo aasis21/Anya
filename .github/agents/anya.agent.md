@@ -67,7 +67,7 @@ tab", "what I'm looking at", or names a workflow the user owns:
 3. If they say *"this"* or *"that"* on a content page → `get_selection`.
 4. If they want a **summary or quote** → `get_tab_content` (clean
    Markdown via Readability). Don't `web_fetch` a page they have open.
-5. If they need **action on the page** → `bind_tab` + `drive_tab`.
+5. If they need **action on the page** → `connect_browser` + `drive_tab`.
 
 ### Stay anchored in the browser when you can
 
@@ -75,7 +75,7 @@ tab", "what I'm looking at", or names a workflow the user owns:
   `open_tab(<guessed url>)`.
 - For *fetching content* → prefer `open_tab` (background:true) +
   `get_tab_content` over `web_fetch`, so the user can see what you saw.
-- For *acting on a webpage* → use Playwright (`bind_tab` + `drive_tab`).
+- For *acting on a webpage* → use Playwright (`connect_browser` + `drive_tab`).
   Never `web_fetch` to interact.
 - Use `web_fetch` only when a tab would be wasteful (raw JSON, file
   download, programmatic API call).
@@ -131,25 +131,44 @@ walking the tree.
 they care about there — pipelines, dashboards, internal release pages,
 Kusto queries, ICM views. Look there *before* guessing.
 
-### 3c. Tab automation (Playwright — bind one tab at a time)
+### 3c. Browser automation (Playwright via CDP)
 
 For DOM interaction (click, type, fill, screenshot, navigate inside an
-authenticated app) you need to **bind a tab** for Playwright control.
-The bridge holds a SINGLE bound tab — re-binding replaces the prior one.
+authenticated app) you need a Playwright connection to the browser.
 
 | Tool | Purpose |
 | --- | --- |
-| `bind_tab({hint?})` | Opens connect dialog. Returns `{sessionId, status:"waiting-for-connect"}`. Tell the user to click Connect on the desired tab. |
-| `bound_tab()` | Current binding `{sessionId, status, url, title, hint, chromeTabId, ...}` or null. Poll until `status === "connected"`. |
-| `unbind_tab()` | Release the binding. |
-| `drive_tab({argv})` | Run a playwright-cli command. See examples below. |
+| `connect_browser({browser?})` | Attach via Chrome DevTools Protocol. Full multi-tab control, no dialog. Call once — stays connected across tool calls. |
+| `drive_tab({argv})` | Run a playwright-cli command: `["snapshot"]`, `["click","e15"]`, `["type","hello"]`, `["goto","url"]`, `["screenshot"]`, `["tab-new","url"]`, `["tab-select","1"]`, `["tab-close","2"]`. |
+| `bound_tabs()` | List all Playwright-controlled tabs. Use to confirm connection before driving. |
+| `disconnect_browser()` | Release the CDP connection. Browser stays open. |
+
+**If `connect_browser` fails** (remote debugging not enabled): open the
+browser's remote debugging settings page and ask the user to enable it.
+
+| Browser | URL to open via `open_tab` |
+| --- | --- |
+| Edge | `edge://inspect/#remote-debugging` |
+| Chrome | `chrome://inspect/#remote-debugging` |
+| Brave | `brave://inspect/#remote-debugging` |
+| Vivaldi | `vivaldi://inspect/#remote-debugging` |
+| Chromium | `chrome://inspect/#remote-debugging` |
+
+The user needs to check **"Allow remote debugging for this browser
+instance"**, then you retry `connect_browser`.
+
+> **Alternative: extension mode.** Set `"playwrightMode": "extension"` in
+> `~/.anya/config.json` if CDP isn't available. This uses the Playwright
+> MCP extension instead — single-tab only, user picks the tab via a connect
+> dialog. Tools: `bind_tab`, `unbind_tab`, `bound_tabs`, `drive_tab`.
 
 `drive_tab` argv recipes:
 
 - `["snapshot"]` — accessibility tree with refs (your DOM)
-- `["click", "e15"]`, `["type", "hello"]`, `["fill", "e15", "value"]`
-- `["navigate", "https://example.com"]`
-- `["screenshot"]`
+- `["click", "e15"]`, `["type", "hello"]`, `["fill", "e15", "value", "--submit"]`
+- `["goto", "https://example.com"]`
+- `["screenshot"]`, `["press", "Enter"]`, `["go-back"]`
+- `["tab-new", "https://..."]`, `["tab-select", "1"]`, `["tab-close", "2"]` (CDP only)
 - `["--help"]` for command discovery
 
 ### 3d. Local engineering (SDK built-ins)

@@ -81,6 +81,31 @@ Ok 'npm available'
 $osLabel = if ($IsWindows) { 'Windows' } elseif ($IsMacOS) { 'macOS' } else { 'Linux' }
 Ok "Detected OS: $osLabel (PowerShell $($PSVersionTable.PSVersion))"
 
+# Track warnings for the summary — non-fatal issues that the user should fix.
+$warnings = @()
+
+# Copilot CLI auth
+$copilotAuth = $null
+try { $copilotAuth = (& copilot auth status 2>&1) } catch {}
+if ($copilotAuth -and ($copilotAuth -match 'Logged in|authenticated')) {
+  Ok 'Copilot CLI authenticated'
+} elseif (Get-Command copilot -ErrorAction SilentlyContinue) {
+  $warnings += 'Copilot CLI found but not logged in. Run: copilot auth login'
+  Write-Host "  ⚠  Copilot CLI not logged in — run 'copilot auth login'" -ForegroundColor Yellow
+} else {
+  $warnings += 'Copilot CLI not found. Install: npm i -g @github/copilot'
+  Write-Host "  ⚠  Copilot CLI not found — install: npm i -g @github/copilot" -ForegroundColor Yellow
+}
+
+# playwright-cli
+if (Get-Command playwright-cli -ErrorAction SilentlyContinue) {
+  $pwVer = (& playwright-cli --version 2>$null) ?? ''
+  Ok "playwright-cli $pwVer"
+} else {
+  $warnings += 'playwright-cli not found. Install: npm i -g @playwright/cli'
+  Write-Host "  ⚠  playwright-cli not found — install: npm i -g @playwright/cli" -ForegroundColor Yellow
+}
+
 # --- 1. Bridge -------------------------------------------------------------
 Step 'Building bridge'
 Push-Location (Join-Path $root 'bridge')
@@ -153,4 +178,13 @@ Write-Host '   - Type a real prompt -> should stream Copilot output'
 Write-Host ''
 Write-Host " Logs:        $logPath"
 Write-Host ' Uninstall:   ./setup.ps1 -Uninstall'
+
+if ($warnings.Count -gt 0) {
+  Write-Host ''
+  Write-Host ' ⚠ Before using Anya, fix these:' -ForegroundColor Yellow
+  foreach ($w in $warnings) {
+    Write-Host "   • $w" -ForegroundColor Yellow
+  }
+}
+
 Write-Host ''

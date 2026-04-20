@@ -69,6 +69,7 @@ export class AnyaApp extends LitElement {
   @state() private bridgePid: number | null = null;
   @state() private bridgeVersion = '?';
   @state() private bridgeLogFile: string | null = null;
+  @state() private playwrightMode: 'cdp' | 'extension' = 'cdp';
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private draftEmpty = true;
   /** Mirror of textarea content. Drives the highlight overlay so recognised
@@ -605,7 +606,8 @@ export class AnyaApp extends LitElement {
         this.bridgePid = Number(data.pid) || null;
         this.bridgeVersion = String(data.version ?? '?');
         this.bridgeLogFile = typeof data.logFile === 'string' ? data.logFile : null;
-        this.refreshBoundTab();
+        this.playwrightMode = data.playwrightMode === 'extension' ? 'extension' : 'cdp';
+        if (this.playwrightMode === 'extension') this.refreshBoundTab();
         break;
       case 'log': {
         const ts = typeof data.ts === 'string' ? Date.parse(data.ts) : Date.now();
@@ -2088,7 +2090,7 @@ export class AnyaApp extends LitElement {
         </div>
       </footer>
 
-      ${this.renderPwStrip()}
+      ${this.playwrightMode === 'extension' ? this.renderPwStrip() : nothing}
     `;
   }
 

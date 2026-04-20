@@ -5,7 +5,7 @@
 // one bound tab. So we model exactly that — one BoundTab at a time.
 //
 // `bindTab()` mints a fresh sid, kills the prior child if any, spawns a new
-// `playwright-cli attach --extension --session=<sid>` (NO token — user picks
+// `playwright-cli attach --extension --session=<sid>` (user picks
 // the tab via the connect dialog), then polls tab-list until the user clicks
 // Connect. The bridge persists the latest binding so the agent can read it
 // from disk and the UI can subscribe.
@@ -15,8 +15,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { error, log, warn } from './log.js';
 import { boundTabFile, playwrightCwd } from './paths.js';
-
-const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';
+import { PLAYWRIGHT_CLI } from './config.js';
 
 type BindStatus = 'waiting-for-connect' | 'connected' | 'dead' | 'none';
 
@@ -277,7 +276,7 @@ export function bindTab(opts: BindOptions = {}): BoundTab {
   log('sessions: binding session=', sessionId, 'browser=', browser, 'hint=', opts.hint ?? '(none)');
   let child: ChildProcess | null = null;
   try {
-    // No PLAYWRIGHT_MCP_EXTENSION_TOKEN — user picks tab via connect dialog.
+    // Ensure no stale token env var interferes with the connect dialog.
     const env = { ...process.env };
     delete env.PLAYWRIGHT_MCP_EXTENSION_TOKEN;
     child = spawn(
@@ -387,4 +386,68 @@ export async function loadFromDisk(): Promise<void> {
   };
   startPolling();
   log('sessions: re-hydrated bound tab', parsed.sessionId);
+}
+
+// ==================== CDP mode ====================
+// Attaches to the running browser via Chrome DevTools Protocol.
+// Unlike extension mode, CDP gives full multi-tab control.
+
+let cdpSessionId: string | null = null;
+
+export async function connectBrowser(browser = 'msedge'): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  // If already connected, return the existing session.
+  if (cdpSessionId) {
+    const check = await runPlaywrightCmd(['tab-list'], cdpSessionId, 8_000);
+    if (check.ok) {
+      return { ok: true, sessionId: cdpSessionId };
+    }
+    // Dead session — clean up and re-attach below.
+    cdpSessionId = null;
+  }
+  const sessionId = mintSessionId();
+  const result = await runPlaywrightCmd(
+    ['attach', `--cdp=${browser}`, `--session=${sessionId}`],
+    undefined,
+    15_000,
+  );
+  if (!result.ok) {
+    const stderr = result.stderr.trim();
+    if (stderr.includes('DevToolsActivePort') || stderr.includes('remote debugging')) {
+      const inspectUrl = browser === 'chrome' || browser === 'chromium'
+        ? 'chrome://inspect/#remote-debugging'
+        : browser === 'brave'
+        ? 'brave://inspect/#remote-debugging'
+        : browser === 'vivaldi'
+        ? 'vivaldi://inspect/#remote-debugging'
+        : 'edge://inspect/#remote-debugging';
+      return {
+        ok: false,
+        error:
+          `Remote debugging is not enabled. Call open_tab with url "${inspectUrl}" ` +
+          `to open the settings page, then ask the user to check "Allow remote debugging for this ` +
+          `browser instance" and retry connect_browser.`,
+      };
+    }
+    return { ok: false, error: `CDP attach failed: ${stderr.split(/\r?\n/)[0]}` };
+  }
+  cdpSessionId = sessionId;
+  log('sessions: CDP connected, session=', sessionId);
+  return { ok: true, sessionId };
+}
+
+export async function disconnectBrowser(): Promise<boolean> {
+  if (!cdpSessionId) return false;
+  const sid = cdpSessionId;
+  cdpSessionId = null;
+  await runPlaywrightCmd(['close'], sid, 5_000).catch(() => undefined);
+  log('sessions: CDP disconnected', sid);
+  return true;
+}
+
+export function getCdpSessionId(): string | null {
+  return cdpSessionId;
+}
+
+export function isCdpConnected(): boolean {
+  return cdpSessionId !== null;
 }
