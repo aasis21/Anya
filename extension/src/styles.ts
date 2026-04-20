@@ -199,7 +199,7 @@ export const sidebarStyles = css`
     }
 
     .msg {
-      padding: 4px 14px 14px;
+      padding: 2px 14px 8px;
       animation: slideIn 180ms ease-out;
     }
     @keyframes slideIn {
@@ -213,7 +213,7 @@ export const sidebarStyles = css`
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--fg-faint);
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .msg .meta .role { color: var(--fg-dim); font-weight: 700; }
     .msg.user   .meta .role { color: var(--accent); }
@@ -224,16 +224,20 @@ export const sidebarStyles = css`
     .msg .meta .ts { color: var(--fg-faint); }
 
     .bubble {
-      padding: 10px 12px;
+      padding: 7px 11px;
       background: var(--bg-bubble);
       border-left: 2px solid var(--bg-rule);
       color: var(--fg);
       white-space: pre-wrap;
       word-wrap: break-word;
     }
+    /* User bubbles are usually short single-line prompts — keep them
+       tight so the chat scroll isn't dominated by your own questions. */
     .msg.user .bubble {
+      padding: 4px 10px;
       border-left-color: var(--accent);
       background: var(--accent-soft);
+      line-height: 1.35;
     }
     .msg.system .bubble {
       background: transparent;
@@ -263,6 +267,38 @@ export const sidebarStyles = css`
       opacity: 0.85;
     }
     .intent-line + .intent-line { display: none; } /* dedupe consecutive */
+
+    /* Pre-streaming "thinking" indicator. Shown when an assistant turn has
+       started but no tokens or tool calls have arrived yet — so the chat
+       doesn't look frozen while the model is reasoning silently. The
+       intent text (when SDK emits assistant.intent) replaces "thinking…". */
+    .thinking {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin: 2px 0 0 2px;
+      color: var(--fg-dim);
+      font-size: 11.5px;
+      font-style: italic;
+      letter-spacing: 0.01em;
+      opacity: 0.9;
+    }
+    .thinking-dots {
+      display: inline-flex; align-items: center; gap: 3px;
+      height: 12px;
+    }
+    .thinking-dots > span {
+      width: 4px; height: 4px;
+      background: var(--accent);
+      border-radius: 50%;
+      opacity: 0.35;
+      animation: thinkingPulse 1100ms ease-in-out infinite;
+    }
+    .thinking-dots > span:nth-child(2) { animation-delay: 180ms; }
+    .thinking-dots > span:nth-child(3) { animation-delay: 360ms; }
+    @keyframes thinkingPulse {
+      0%, 80%, 100% { opacity: 0.25; transform: scale(1); }
+      40%           { opacity: 1;    transform: scale(1.35); }
+    }
+    .thinking-text { color: var(--fg-dim); }
     .toolcall {
       border: 1px solid var(--border);
       background: var(--bg-bubble);
@@ -1156,7 +1192,56 @@ export const sidebarStyles = css`
     .send-btn.stop-btn:hover { filter: brightness(1.1); }
 
     /* ---- send button group (visible while streaming) ---- */
-    .send-group { display: flex; gap: 4px; }
+    .send-group { display: flex; gap: 2px; align-items: stretch; }
+
+    /* Compact square icon buttons used while streaming. The kbd hint is
+       hidden by default and revealed on hover/focus to keep the textarea
+       wide. The full action label lives in the title= tooltip. */
+    .send-icon {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      background: transparent;
+      color: var(--fg-dim);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 0 8px;
+      min-width: 30px;
+      height: 100%;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 120ms ease, background 120ms ease, border-color 120ms ease, padding 120ms ease;
+    }
+    .send-icon:hover { color: var(--accent); background: var(--bg-soft); border-color: var(--bg-rule); }
+    .send-icon:focus-visible { outline: none; color: var(--accent); border-color: var(--accent); }
+    .send-icon .kbd {
+      display: none;
+      padding: 1px 4px;
+      border: 1px solid var(--fg-faint);
+      border-radius: 3px;
+      font-size: 9.5px;
+      letter-spacing: 0;
+      color: var(--fg);
+    }
+    .send-icon:hover .kbd, .send-icon:focus-visible .kbd { display: inline-block; border-color: var(--accent); color: var(--accent); }
+    .send-icon:disabled { opacity: 0.35; cursor: default; }
+    .send-icon:disabled:hover { color: var(--fg-dim); background: transparent; border-color: transparent; }
+    .send-icon:disabled:hover .kbd { display: none; }
+
+    .send-icon.steer-btn { color: var(--accent); }
+    .send-icon.steer-btn:hover { background: var(--bg-soft); border-color: var(--accent); }
+
+    /* Stop is the dominant action while streaming — keep it filled and
+       a touch wider so it's the obvious target. */
+    .send-icon.stop-btn {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      min-width: 36px;
+      font-size: 11px;
+    }
+    .send-icon.stop-btn:hover { filter: brightness(1.1); background: var(--accent); color: #000; }
+
     .send-btn.steer-btn {
       color: var(--accent);
       border-color: var(--accent);

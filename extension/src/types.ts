@@ -39,6 +39,9 @@ export interface ChatMessage {
   ts: number;
   /** Tool call ids that ran while producing this assistant message. */
   toolCallIds?: string[];
+  /** Latest agent intent (from `assistant.intent` SDK event) — shown
+      while the bubble is still pending and has no text yet. */
+  intent?: string;
   /** Inline image attachments (paste / drop). User messages only. */
   attachments?: ImageAttachment[];
 }

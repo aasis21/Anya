@@ -70,6 +70,12 @@ copilot.onEvent((event) => {
       log('→ error', event.chatId, event.message);
       transport.send({ type: 'error', chatId: event.chatId, message: event.message });
       break;
+    case 'turn-start':
+      transport.send({ type: 'turn-start', chatId: event.chatId });
+      break;
+    case 'intent':
+      transport.send({ type: 'intent', chatId: event.chatId, text: event.text });
+      break;
     case 'tool-request':
       log('→ tool-request', event.tool, 'id=', event.id);
       transport.send({ type: 'tool-request', id: event.id, tool: event.tool, args: event.args });

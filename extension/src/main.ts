@@ -219,6 +219,20 @@ export class AnyaApp extends LitElement {
     try { chrome.storage?.local?.set?.({ 'anya-debug': this.debugOpen }); } catch { /* ignore */ }
   }
 
+  private openRemoteDebugSettings(): void {
+    const ua = navigator.userAgent;
+    const brave = (navigator as unknown as { brave?: { isBrave?: () => unknown } }).brave;
+    let scheme = 'chrome';
+    if (brave && typeof brave.isBrave === 'function') scheme = 'brave';
+    else if (/Edg\//.test(ua)) scheme = 'edge';
+    else if (/Vivaldi\//.test(ua)) scheme = 'vivaldi';
+    else if (/OPR\//.test(ua)) scheme = 'opera';
+    const url = `${scheme}://inspect/#remote-debugging`;
+    chrome.tabs.create({ url, active: true }).catch((e) => {
+      console.warn('[Anya] open remote-debug settings failed:', e);
+    });
+  }
+
   private clearDebug(): void {
     this.debugEntries = [];
   }
@@ -628,6 +642,12 @@ export class AnyaApp extends LitElement {
         break;
       case 'delta':
         if (chatId && !this.cancelledChats.has(chatId)) this.appendDelta(chatId, String(data.text ?? ''));
+        break;
+      case 'turn-start':
+        if (chatId && !this.cancelledChats.has(chatId)) this.ensureThinkingBubble(chatId);
+        break;
+      case 'intent':
+        if (chatId && !this.cancelledChats.has(chatId)) this.setIntent(chatId, String(data.text ?? ''));
         break;
       case 'done':
         if (chatId) {
@@ -1159,6 +1179,27 @@ export class AnyaApp extends LitElement {
     const next = new Set(this.toolExpanded);
     if (next.has(id)) next.delete(id); else next.add(id);
     this.toolExpanded = next;
+  }
+
+  private ensureThinkingBubble(chatId: string): void {
+    const sid = this.streamingIds.get(chatId);
+    if (sid) return;
+    const id = `m${Date.now()}`;
+    this.streamingIds.set(chatId, id);
+    this.appendMessage(chatId, { id, role: 'assistant', text: '', pending: true, ts: Date.now() });
+    if (chatId === this.currentChatId) this.scrollToBottom();
+  }
+
+  private setIntent(chatId: string, intent: string): void {
+    const trimmed = intent.trim();
+    if (!trimmed) return;
+    this.ensureThinkingBubble(chatId);
+    const sid = this.streamingIds.get(chatId);
+    if (!sid) return;
+    this.mutateChat(chatId, (c) => ({
+      ...c,
+      messages: c.messages.map((m) => m.id === sid ? { ...m, intent: trimmed } : m),
+    }));
   }
 
   private appendDelta(chatId: string, chunk: string): void {
@@ -1861,11 +1902,21 @@ export class AnyaApp extends LitElement {
       .map((id) => this.toolCalls.get(id))
       .filter((tc): tc is ToolCall => !!tc);
     const html_ = marked.parse(m.text || '') as string;
+    // Pending-but-empty assistant messages mean the model is thinking
+    // (turn started, but no tokens or tool calls yet). Show an animated
+    // thinking line so the UI doesn't appear frozen.
+    const isThinking = m.pending && !m.text && cards.length === 0;
     return html`
       ${cards.length > 0
         ? html`<div class="toolcalls">${cards.map((tc) => this.renderToolCard(tc))}</div>`
         : nothing}
-      ${m.text || !m.pending
+      ${isThinking
+        ? html`<div class="thinking" title="agent is working">
+            <span class="thinking-dots"><span></span><span></span><span></span></span>
+            <span class="thinking-text">${m.intent ? m.intent : 'thinking…'}</span>
+          </div>`
+        : nothing}
+      ${m.text || (!m.pending && !isThinking)
         ? html`<div class="bubble">
             ${unsafeHTML(html_)}${m.pending && m.text ? html`<span class="caret"></span>` : nothing}
           </div>`
@@ -1963,6 +2014,14 @@ export class AnyaApp extends LitElement {
             aria-label=${online ? 'Bridge connected' : 'Bridge offline'}
           ><span class="pulse"></span></span>
           <span class="header-actions">
+            ${this.playwrightMode === 'cdp' ? html`
+              <button
+                class="icon-btn"
+                @click=${() => this.openRemoteDebugSettings()}
+                title="Open browser remote debugging settings"
+                aria-label="Open remote debugging settings"
+              >🔌</button>
+            ` : nothing}
             <button
               class="icon-btn"
               @click=${() => { this.searchOpen = !this.searchOpen; }}
@@ -2062,24 +2121,27 @@ export class AnyaApp extends LitElement {
             ></textarea>
           </div>
           ${this.currentChatId && this.streamingIds.has(this.currentChatId)
-            ? html`<span class="send-group">
+            ? html`<span class="send-group streaming">
                 <button
-                  class="send-btn"
+                  class="send-icon"
                   @click=${() => this.send('enqueue')}
                   ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
                   title="Queue after current turn (Enter)"
-                >queue<span class="kbd">↵</span></button>
+                  aria-label="Queue"
+                >＋<span class="kbd">↵</span></button>
                 <button
-                  class="send-btn steer-btn"
+                  class="send-icon steer-btn"
                   @click=${() => this.send('immediate')}
                   ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
                   title="Send immediately, interrupt current turn (Ctrl+Enter)"
-                >steer<span class="kbd">⌃↵</span></button>
+                  aria-label="Steer"
+                >↯<span class="kbd">⌃↵</span></button>
                 <button
-                  class="send-btn stop-btn"
+                  class="send-icon stop-btn"
                   @click=${() => this.cancelStream(this.currentChatId)}
-                  title="Stop generating (Ctrl+.)"
-                >stop<span class="kbd">⎋</span></button>
+                  title="Stop generating (Esc)"
+                  aria-label="Stop"
+                >◼</button>
               </span>`
             : html`<button
                 class="send-btn"

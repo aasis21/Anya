@@ -52,6 +52,8 @@ export type BridgeEvent =
   | { type: 'message'; chatId: string; text: string }
   | { type: 'done'; chatId: string }
   | { type: 'error'; chatId: string; message: string }
+  | { type: 'turn-start'; chatId: string }
+  | { type: 'intent'; chatId: string; text: string }
   | { type: 'tool-request'; id: string; tool: string; args: unknown }
   | { type: 'tool-start'; chatId: string; toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string }
   | { type: 'tool-progress'; chatId: string; toolCallId: string; message: string }
@@ -227,6 +229,19 @@ export class CopilotBridge {
     const { chatId, session } = chat;
     session.on((event: SessionEvent) => {
       switch (event.type) {
+        case 'assistant.turn_start':
+          // Fired the moment the agent starts working on a turn — before any
+          // tokens or tool calls. Lets the UI show a "thinking" indicator
+          // even when the model is reasoning silently or waiting on the LLM.
+          this.emit({ type: 'turn-start', chatId });
+          break;
+        case 'assistant.intent': {
+          const data = event.data as { intent?: string };
+          if (typeof data?.intent === 'string' && data.intent.trim()) {
+            this.emit({ type: 'intent', chatId, text: data.intent });
+          }
+          break;
+        }
         case 'assistant.message_delta': {
           const data = event.data as { deltaContent?: string };
           if (typeof data?.deltaContent === 'string') {
