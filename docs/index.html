@@ -92,48 +92,38 @@
   <ol class="feature-grid">
     <li>
       <span class="feat-num">01</span>
-      <h3>Stop reading things twice.</h3>
-      <p>That 600-line PR, the 40-page RFC, the noisy ICM thread. <code>@tab tldr</code> and you're done. Anya reads what's on screen — no copy-paste, no second tab, no tldr-bot.</p>
+      <h3>Ask about what's on screen.</h3>
+      <p>Summarize a 600-line PR, compare what's across your tabs, search your bookmarks by intent, read highlighted text. Just ask — Copilot sees your browser automatically.</p>
     </li>
     <li>
       <span class="feat-num">02</span>
-      <h3>Skip the click-through tax.</h3>
+      <h3>Drive your browser, hands-free.</h3>
       <p>Repetitive forms, multi-step wizards, "find the right button in the new ADO UI." Describe the outcome; Anya drives <em>your</em> logged-in browser to get there. No reauth, no captchas you have to redo.</p>
     </li>
     <li>
       <span class="feat-num">03</span>
-      <h3>Make 20 tabs answer one question.</h3>
-      <p>"Does the spec match what we shipped?" "Which of these dashboards is red?" <code>@tabs</code> hands Anya every open tab as context. Stop alt-tabbing — start asking.</p>
+      <h3>Bring your code into the loop.</h3>
+      <p>Point a chat at a local project folder and the SDK loads your skills, prompts, and file tools from there — reason over your code <em>while</em> driving the tab that depends on it.</p>
     </li>
     <li>
       <span class="feat-num">04</span>
-      <h3>Bring your repo into the loop.</h3>
-      <p>Point Anya at a local project folder and it gets the SDK's full code toolbelt — read files, grep, edit, run shells, MCP. Reason over your code <em>while</em> driving the tab that depends on it.</p>
-    </li>
-    <li>
-      <span class="feat-num">05</span>
-      <h3>Treat bookmarks like a knowledge graph.</h3>
-      <p>"Open the order release page." "Group AI / infra / fun." Anya searches your bookmarks before guessing URLs, and reorganises in bulk after you OK the plan. Your saved stuff finally pays rent.</p>
-    </li>
-    <li>
-      <span class="feat-num">06</span>
-      <h3>Yours. Stays yours.</h3>
-      <p>Signs in with your existing GitHub Copilot account — same seat, same model. Chats live in your browser. The bridge runs on your laptop. Nothing leaves the machine.</p>
+      <h3>Nothing leaves your machine.</h3>
+      <p>Your existing GitHub Copilot seat, your browser, your laptop. Chats live in <code>chrome.storage</code>. The bridge runs locally. No server, no telemetry, no cloud sync.</p>
     </li>
   </ol>
 </section>
 
 <section id="language" class="language">
   <header class="section-head">
-    <span class="kicker">02 · What Copilot gains</span>
+    <span class="kicker">02 · How it connects to your browser</span>
     <h2>Browser tools <br/>the editor doesn't have.</h2>
     <p class="section-lede">Anya gives the same Copilot agent a set of browser-native tools it can call autonomously. You just talk — it decides what to use.</p>
   </header>
 
   <div class="prefix-row">
     <article class="prefix">
-      <div class="prefix-glyph at">👁</div>
-      <h3>see the browser</h3>
+      <div class="prefix-glyph at">C</div>
+      <h3>Read the browser</h3>
       <p class="prefix-meaning">Read tabs, pages, selections, and bookmarks — always available, no setup needed.</p>
       <ul class="prefix-list">
         <li><code>get_active_tab</code></li>
@@ -145,8 +135,8 @@
     </article>
 
     <article class="prefix">
-      <div class="prefix-glyph slash">🖱</div>
-      <h3>drive the browser</h3>
+      <div class="prefix-glyph slash">A</div>
+      <h3>Drive the browser</h3>
       <p class="prefix-meaning">Click, type, fill forms, navigate, and screenshot — on your real logged-in tabs via Playwright.</p>
       <ul class="prefix-list">
         <li><code>connect_browser</code></li>
@@ -154,12 +144,13 @@
         <li><code>open_tab</code></li>
         <li><code>close_tab</code></li>
         <li><code>focus_tab</code></li>
+        <li><code>manage_bookmarks</code></li>
       </ul>
     </article>
 
     <article class="prefix">
-      <div class="prefix-glyph hash">⌨</div>
-      <h3>shortcuts</h3>
+      <div class="prefix-glyph hash">S</div>
+      <h3>Composer shortcuts</h3>
       <p class="prefix-meaning">Inline context with <code>@</code> or run sidebar commands with <code>/</code> — optional power-user prefixes.</p>
       <ul class="prefix-list">
         <li><code>@tab</code></li>
@@ -177,8 +168,8 @@
 <section id="install" class="install">
   <header class="section-head">
     <span class="kicker">03 · Install</span>
-    <h2>One line. Any Chromium.</h2>
-    <p class="section-lede">PowerShell 7+ on Windows, or bash on macOS / Linux. Works in Edge, Chrome, Brave, Vivaldi, Arc, Chromium.</p>
+    <h2>One command. <br/>Every Chromium browser.</h2>
+    <p class="section-lede">Requires Node 20+, a Copilot CLI login, and <code>playwright-cli</code>. The installer handles the rest.</p>
   </header>
 
   <div class="install-grid">
@@ -284,9 +275,8 @@
     </div>
     <div class="foot-links">
       <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/aasis21/Anya/blob/main/design.md" target="_blank" rel="noopener">Design</a>
-      <a href="https://github.com/aasis21/Anya/blob/main/AGENTS.md" target="_blank" rel="noopener">Agents</a>
       <a href="https://github.com/aasis21/Anya/blob/main/README.md" target="_blank" rel="noopener">README</a>
+      <a href="./privacy.html">Privacy</a>
     </div>
     <div class="foot-meta">
       Built by <a href="https://github.com/aasis21" target="_blank" rel="noopener">@aasis21</a>. No telemetry, no cloud sync — every byte stays local.
