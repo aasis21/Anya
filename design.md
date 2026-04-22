@@ -1,7 +1,7 @@
 # Anya — Design
 
-> **One line.** GitHub Copilot's CLI agent, repackaged as a Microsoft Edge
-> sidebar app, so it lives next to your tabs, can see and drive them, and
+> **One line.** GitHub Copilot's CLI agent, repackaged as a Chromium
+> sidebar extension, so it lives next to your tabs, can see and drive them, and
 > inherits every MCP server you have already configured for the terminal.
 
 This document describes the system as it stands today: what each piece does,
@@ -31,7 +31,7 @@ before changing architecture.
 ### Non-goals
 
 - Polished marketplace distribution. Anya is loaded unpacked.
-- Cross-browser support. Edge sidePanel is baked in.
+- Cross-browser support. Chromium sidePanel is baked in.
 - Replacing the terminal `copilot` CLI. Anya is a peer surface; the CLI
   remains the source of truth for auth, MCP config, and prompt files.
 
@@ -41,7 +41,7 @@ before changing architecture.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│  Microsoft Edge — MV3 sidePanel                               │
+│  Chromium browser — MV3 sidePanel                              │
 │                                                               │
 │  ┌─────────────────────────┐    ┌─────────────────────────┐   │
 │  │  Anya sidebar      │    │  Your tabs / pages      │   │
@@ -55,7 +55,7 @@ before changing architecture.
 │  │  chrome.scripting       │              │ Playwright         │
 │  │  chrome.bookmarks       │    ┌─────────────────────────┐   │
 │  │                         │    │  Playwright MCP Bridge  │   │
-│  │  Native Messaging       │    │  extension (MS)         │   │
+│  │  Native Messaging       │    │  extension              │   │
 │  └────────────┬────────────┘    └────────────┬────────────┘   │
 └───────────────┼──────────────────────────────┼────────────────┘
                 │ length-prefixed JSON         │ localhost + token
@@ -89,11 +89,11 @@ before changing architecture.
 | 1 | Sidebar UI               | Lit, `marked`                    | Chat surface, drawer, mentions, slash commands, debug panel   |
 | 2 | Extension layer          | `chrome.tabs/scripting/...`      | Captures browser context; mediates the bridge connection      |
 | 3 | Native Messaging bridge  | Node + `@github/copilot-sdk`     | Owns Copilot sessions, runs tools, persists state             |
-| 4 | Playwright control plane | `@playwright/cli` + MS extension | Drives the user's real Edge tab                               |
+| 4 | Playwright control plane | `@playwright/cli` + extension   | Drives the user's real browser tab                            |
 | 5 | Config + logs            | `~/.anya/`, `bridge.log`    | Local-only state, optional auto-attach token, live trace      |
 
 The boundary that matters most is **(2) ↔ (3)**: a length-prefixed JSON
-channel via Edge's Native Messaging API. Everything is asynchronous; everything
+channel via Chromium's Native Messaging API. Everything is asynchronous; everything
 is JSON. There is no shared memory, no Web Worker, no bundled SDK in the
 extension.
 
@@ -245,7 +245,7 @@ The agent drives the user's real browser via the `browser` tool. Mechanics:
 1. The user clicks **bind** in the sidebar's footer strip.
 2. The bridge spawns `playwright-cli attach --extension=msedge` with a
    minted `sessionId`.
-3. The Playwright MCP Bridge extension (Microsoft, separate install) shows a
+3. The Playwright MCP Bridge extension (separate install) shows a
    **Connect?** dialog. The user accepts.
 4. The bridge starts polling `playwright-cli list` to track URL/title/status.
 5. Subsequent `browser` tool calls invoke `playwright-cli` with the same

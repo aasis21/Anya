@@ -38,7 +38,7 @@ Three little prefixes, that's the whole language:
 
 REQUIRES a one-time install of the local bridge from https://github.com/aasis21/Anya — the extension alone cannot work without it. Install is one command in PowerShell or bash.
 
-Open source, MIT-style. Built by an engineer at Microsoft, not by Microsoft. No data leaves your machine that GitHub Copilot doesn't already see.
+Open source, MIT-style. No data leaves your machine that GitHub Copilot doesn't already see.
 
 ---
 
