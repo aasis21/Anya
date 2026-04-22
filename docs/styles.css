@@ -542,6 +542,60 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 }
 
 /* ─── language (composer prefixes) ────────────────────── */
+
+/* ─── use-cases (§03) ─────────────────────────────────── */
+.use-cases {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: clamp(80px, 12vw, 140px) 0;
+}
+.use-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--pad-x);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.use-grid li {
+  position: relative;
+  padding: 28px 24px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: var(--surface-1);
+  transition: border-color 0.25s ease, background 0.25s ease;
+}
+.use-grid li:hover {
+  border-color: var(--accent);
+  background: rgba(255, 77, 46, 0.04);
+}
+.use-grid .use-quote {
+  font-family: var(--display);
+  font-weight: 400;
+  font-style: italic;
+  font-variation-settings: "opsz" 90, "WONK" 1, "SOFT" 50;
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--bone);
+  margin: 0 0 10px;
+}
+.use-grid .use-who {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 6px;
+}
+.use-grid .use-outcome {
+  margin: 0;
+  color: var(--bone-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── language (composer prefixes) ────────────────────── */
 .language {
   max-width: var(--max);
   margin: 0 auto;
@@ -855,6 +909,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   .feature-grid li:nth-child(3n) { border-right: 1px solid var(--rule); }
   .feature-grid li:nth-child(2n) { border-right: none; }
   .install-grid { grid-template-columns: 1fr; }
+  .use-grid { grid-template-columns: 1fr 1fr; }
   .prefix-row { grid-template-columns: 1fr; }
   .prefix { border-right: none; border-bottom: 1px solid var(--rule); }
   .prefix:last-child { border-bottom: none; }
@@ -866,6 +921,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 @media (max-width: 540px) {
   .feature-grid { grid-template-columns: 1fr; }
   .feature-grid li { border-right: none !important; }
+  .use-grid { grid-template-columns: 1fr; }
   .hero-title .line-2 { padding-left: 0; }
   .hero-install-label { font-size: 10px; }
   .install-tab { padding: 5px 8px; font-size: 10px; letter-spacing: 0.1em; }
