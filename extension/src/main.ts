@@ -105,16 +105,19 @@ export class AnyaApp extends LitElement {
   @state() private msgMenuId: string | null = null;
 
   // Pending pasted/dropped images attached to the next outbound message.
-  @state() private pendingAttachments: ImageAttachment[] = [];
+  // (legacy — images now go through contextAttachments with kind: 'image')
 
   // Field-assist: tracks the text field the user last focused on a page.
   // `focusedField` is set silently on focus (powers Insert/Append buttons).
   @state() private focusedField: FocusedField | null = null;
   private fieldBlurTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Context attachments: collected via "Add to Anya" right-click or @mentions.
+  // Context attachments: collected via "Add to Anya" right-click, @mentions, 📎 menu, paste.
   // Stacked as chips above the composer, injected into prompts on send.
   @state() private contextAttachments: ContextAttachment[] = [];
+
+  // 📎 attach menu popup
+  @state() private attachMenuOpen = false;
 
   // Inline autocomplete for `/` and `@` triggers.
   @state() private autocomplete: {
@@ -772,6 +775,11 @@ export class AnyaApp extends LitElement {
       case 'chat-deleted':
         // Bridge confirmed deletion; no action needed (UI already updated).
         break;
+      case 'folder-pick-result':
+        if (f.ok && typeof f.path === 'string' && f.path) {
+          this.handleFolderPickResult(f.path);
+        }
+        break;
       default:
         console.debug('[Anya] unknown frame:', f);
     }
@@ -1316,8 +1324,8 @@ export class AnyaApp extends LitElement {
     const ta = this.textarea ?? (this.renderRoot.querySelector('#prompt-input') as HTMLTextAreaElement | null);
     if (!ta) return;
     const text = ta.value.trim();
-    const attachments = this.pendingAttachments;
-    if (!text && attachments.length === 0) return;
+    const hasContext = this.contextAttachments.length > 0;
+    if (!text && !hasContext) return;
 
     // Slash commands are intercepted before any bridge dispatch.
     if (text.startsWith('/')) {
@@ -1335,21 +1343,26 @@ export class AnyaApp extends LitElement {
     // filtered out by a still-pending `done` from a previously cancelled turn.
     this.cancelledChats.delete(chatId);
 
+    // Extract image blobs from context attachments for the bridge.
+    const imageAttachments: ImageAttachment[] = this.contextAttachments
+      .filter((a) => a.kind === 'image' && a.imageData)
+      .map((a) => a.imageData!);
+
     this.appendMessage(chatId, {
       id: `u${Date.now()}`,
       role: 'user',
       text,
       ts: Date.now(),
-      attachments: attachments.length ? attachments : undefined,
+      attachments: imageAttachments.length ? imageAttachments : undefined,
     });
     if (text) this.autoTitleIfNeeded(chatId, text);
     ta.value = '';
     this.syncDraft('');
-    this.pendingAttachments = [];
     this.contextAttachments = [];
+    this.attachMenuOpen = false;
     this.scrollToBottom();
 
-    void this.dispatchPrompt(chatId, text, attachments, mode);
+    void this.dispatchPrompt(chatId, text, imageAttachments, mode);
   };
 
   /**
@@ -1987,7 +2000,7 @@ export class AnyaApp extends LitElement {
     }
   };
 
-  /** Read a File as data URL + base64 and push into the pending strip. */
+  /** Read a File as data URL + base64 and add as a context chip. */
   private async addImageAttachment(file: File): Promise<void> {
     if (file.size > AnyaApp.ATTACHMENT_TOTAL_LIMIT) {
       this.pushSystem(
@@ -1997,7 +2010,9 @@ export class AnyaApp extends LitElement {
       );
       return;
     }
-    const totalSoFar = this.pendingAttachments.reduce((n, a) => n + a.bytes, 0);
+    const totalSoFar = this.contextAttachments
+      .filter((a) => a.kind === 'image' && a.imageData)
+      .reduce((n, a) => n + (a.imageData?.bytes ?? 0), 0);
     if (totalSoFar + file.size > AnyaApp.ATTACHMENT_TOTAL_LIMIT) {
       this.pushSystem(
         this.currentChatId || this.startNewChat(),
@@ -2018,21 +2033,64 @@ export class AnyaApp extends LitElement {
     if (!dataUrl) return;
     const commaIdx = dataUrl.indexOf(',');
     const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
-    this.pendingAttachments = [
-      ...this.pendingAttachments,
-      {
-        dataUrl,
-        data: base64,
-        mimeType: file.type || 'image/png',
-        bytes: file.size,
-        name: file.name || undefined,
-      },
-    ];
+    const imgNum = this.contextAttachments.filter((a) => a.kind === 'image').length + 1;
+    const name = file.name || `pasted-image-${imgNum}`;
+    const sizeKB = (file.size / 1024).toFixed(0);
+
+    // Add as context chip.
+    const id = `ctx-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.contextAttachments = [...this.contextAttachments, {
+      id,
+      kind: 'image',
+      icon: '🖼️',
+      label: `${name} · ${sizeKB} KB`,
+      preview: `${file.type}, ${sizeKB} KB`,
+      content: '',
+      pageUrl: '',
+      imageData: { dataUrl, data: base64, mimeType: file.type || 'image/png', bytes: file.size, name },
+    }];
   }
 
-  private removePendingAttachment = (idx: number): void => {
-    this.pendingAttachments = this.pendingAttachments.filter((_, i) => i !== idx);
+  private removeContextAttachment = (id: string): void => {
+    this.contextAttachments = this.contextAttachments.filter((a) => a.id !== id);
   };
+
+  // ----- 📎 attach menu -------------------------------------------------
+
+  private toggleAttachMenu(): void {
+    this.attachMenuOpen = !this.attachMenuOpen;
+  }
+
+  private async attachFromMenu(kind: string): Promise<void> {
+    this.attachMenuOpen = false;
+    if (kind === 'folder') {
+      this.bridgeSend({ type: 'folder-pick' });
+      return;
+    }
+    // Reuse the same resolve logic as @mention chips.
+    await this.resolveAtMentionChip(kind, `@${kind}`);
+  }
+
+  // Handle folder-pick result from bridge.
+  private handleFolderPickResult(path: string): void {
+    const folderName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
+    const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.contextAttachments = [...this.contextAttachments, {
+      id,
+      kind: 'folder',
+      icon: '📁',
+      label: folderName,
+      preview: path,
+      content: `Local folder: ${path}\nUse view, grep, glob, edit tools to work with files in this folder.`,
+      ref: { folderPath: path },
+      pageUrl: '',
+    }];
+    // Set the cwd on the current chat so the bridge uses it as workingDirectory.
+    if (this.currentChatId) {
+      this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
+      this.persistChats();
+    }
+  }
 
   // ----- render ----------------------------------------------------------
   private fmtTime(ts: number): string {
@@ -2350,23 +2408,20 @@ export class AnyaApp extends LitElement {
             `)}
           </div>
         ` : nothing}
-        ${this.pendingAttachments.length > 0 ? html`
-          <div class="att-strip" title="Attachments queued for next message">
-            ${this.pendingAttachments.map((a, i) => html`
-              <div class="att-chip">
-                <img class="att-thumb" src=${a.dataUrl} alt="" />
-                <span class="att-meta">${(a.bytes / 1024).toFixed(0)} KB</span>
-                <button
-                  class="att-x"
-                  @click=${() => this.removePendingAttachment(i)}
-                  title="Remove"
-                >×</button>
-              </div>
-            `)}
-          </div>
-        ` : nothing}
         <div class="composer-row">
-          <span class="sigil">›</span>
+          <button class="attach-btn" @click=${() => this.toggleAttachMenu()} title="Attach context (📎)" aria-label="Attach">📎</button>
+          ${this.attachMenuOpen ? html`
+            <div class="attach-menu">
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('tab')}>🌐 Current tab</button>
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('selection')}>✂️ Selection</button>
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('tabs')}>📑 All open tabs</button>
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('clipboard')}>📋 Clipboard</button>
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('url')}>🔗 URL</button>
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('title')}>📌 Title</button>
+              <hr class="attach-menu-sep" />
+              <button class="attach-menu-item" @click=${() => this.attachFromMenu('folder')}>📁 Folder...</button>
+            </div>
+          ` : nothing}
           <div class="composer-input">
             <div class="composer-mirror" aria-hidden="true">${this.renderMentionedText(this.composerText)}${this.composerText.endsWith('\n') ? ' ' : ''}</div>
             <textarea
@@ -2386,14 +2441,14 @@ export class AnyaApp extends LitElement {
                 <button
                   class="send-icon"
                   @click=${() => this.send('enqueue')}
-                  ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
+                  ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
                   title="Queue after current turn (Enter)"
                   aria-label="Queue"
                 >＋<span class="kbd">↵</span></button>
                 <button
                   class="send-icon steer-btn"
                   @click=${() => this.send('immediate')}
-                  ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
+                  ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
                   title="Send immediately, interrupt current turn (Ctrl+Enter)"
                   aria-label="Steer"
                 >↯<span class="kbd">⌃↵</span></button>
@@ -2407,7 +2462,7 @@ export class AnyaApp extends LitElement {
             : html`<button
                 class="send-btn"
                 @click=${() => this.send()}
-                ?disabled=${(this.draftEmpty && this.pendingAttachments.length === 0) || !online}
+                ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
                 title="Send (Enter)"
               >send<span class="kbd">↵</span></button>`}
         </div>

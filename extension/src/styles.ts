@@ -406,6 +406,7 @@ export const sidebarStyles = css`
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: stretch;
+      position: relative;
     }
     .ac-popup {
       position: absolute;
@@ -543,6 +544,58 @@ export const sidebarStyles = css`
       border-radius: 3px;
     }
     .ctx-chip-x:hover { opacity: 1; background: var(--bg-rule); }
+
+    /* ---------- 📎 ATTACH BUTTON + MENU ---------- */
+    .attach-btn {
+      background: transparent;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 4px;
+      opacity: 0.6;
+      line-height: 1;
+      transition: opacity 0.12s;
+      flex-shrink: 0;
+    }
+    .attach-btn:hover { opacity: 1; }
+    .attach-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 6px;
+      margin-bottom: 4px;
+      background: var(--bg);
+      border: 1px solid var(--bg-rule);
+      border-radius: 6px;
+      padding: 4px 0;
+      z-index: 20;
+      min-width: 180px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      animation: attachMenuIn 0.12s ease-out;
+    }
+    @keyframes attachMenuIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .attach-menu-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-family: inherit;
+      color: var(--fg);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .attach-menu-item:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .attach-menu-sep {
+      border: none;
+      border-top: 1px solid var(--bg-rule);
+      margin: 3px 0;
+    }
 
     /* ---------- BUBBLE ACTION ICONS (copy / insert / append) ---------- */
     .bubble-actions {

@@ -2,6 +2,7 @@ import { NativeMessagingTransport } from './native-messaging.js';
 import { CopilotBridge } from './copilot-bridge.js';
 import { error, getLogFilePath, log, setLogSink, warn } from './log.js';
 import { getConfigPath, getPlaywrightMode } from './config.js';
+import { execSync } from 'node:child_process';
 import {
   bindTab,
   connectBrowser,
@@ -213,6 +214,33 @@ transport.onFrame(async (raw) => {
     case 'pw-unbind': {
       const ok = await unbindTab();
       transport.send({ type: 'pw-unbind-result', ok, boundTab: null });
+      break;
+    }
+    case 'folder-pick': {
+      // Open a native OS folder picker dialog and return the selected path.
+      try {
+        let folderPath = '';
+        if (process.platform === 'win32') {
+          // PowerShell folder browser dialog.
+          const ps = `Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select a folder for Anya'; $d.ShowNewFolderButton = $false; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }`;
+          folderPath = execSync(`powershell -NoProfile -Command "${ps}"`, { encoding: 'utf8', timeout: 60_000 }).trim();
+        } else if (process.platform === 'darwin') {
+          // macOS: osascript folder dialog.
+          folderPath = execSync(`osascript -e 'POSIX path of (choose folder with prompt "Select a folder for Anya")'`, { encoding: 'utf8', timeout: 60_000 }).trim();
+        } else {
+          // Linux: zenity or kdialog.
+          try {
+            folderPath = execSync(`zenity --file-selection --directory --title="Select a folder for Anya" 2>/dev/null`, { encoding: 'utf8', timeout: 60_000 }).trim();
+          } catch {
+            folderPath = execSync(`kdialog --getexistingdirectory ~ --title "Select a folder for Anya" 2>/dev/null`, { encoding: 'utf8', timeout: 60_000 }).trim();
+          }
+        }
+        transport.send({ type: 'folder-pick-result', ok: !!folderPath, path: folderPath || null });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log('folder-pick cancelled or failed:', msg);
+        transport.send({ type: 'folder-pick-result', ok: false, path: null });
+      }
       break;
     }
     default:

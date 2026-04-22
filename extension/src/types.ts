@@ -161,7 +161,9 @@ export type AttachmentKind =
   | 'clipboard'   // @clipboard
   | 'url'         // @url — just the active tab URL
   | 'title'       // @title — just the active tab title
-  | 'bookmark';   // @bookmark — a saved bookmark by search
+  | 'bookmark'    // @bookmark — a saved bookmark by search
+  | 'image'       // pasted/dropped image
+  | 'folder';     // local project folder
 
 /** Max chars stored by-value in an attachment. Larger content is truncated;
  *  the model can fetch the full version via reference tools. */
@@ -180,8 +182,17 @@ export interface ContextAttachment {
     tabId?: number;
     ctxId?: string;       // data-anya-ctx attribute for elements
     fieldId?: string;     // data-anya-field-id for fields
+    folderPath?: string;  // local filesystem path for folders
   };
   /** Total char count of the original content (before truncation). */
   fullLength?: number;
   pageUrl: string;
+  /** For image attachments — the blob data. */
+  imageData?: {
+    dataUrl: string;     // data:mime;base64,... for thumbnail
+    data: string;        // raw base64 (sent to bridge)
+    mimeType: string;
+    bytes: number;
+    name?: string;
+  };
 }
