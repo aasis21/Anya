@@ -77,13 +77,6 @@ export const sidebarStyles = css`
       gap: 4px;
       flex: 0 0 auto;
     }
-    .brand {
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      font-size: 11px;
-    }
-    .brand .slash { color: var(--accent); padding: 0 2px; }
     .signal {
       display: inline-flex; align-items: center;
       flex: 0 0 auto;
@@ -99,18 +92,6 @@ export const sidebarStyles = css`
       background: var(--accent);
       box-shadow: 0 0 0 0 rgba(255,51,0,0.5);
       animation: pulse 1.6s ease-out infinite;
-    }
-    .theme-toggle {
-      background: transparent;
-      border: 1px solid var(--bg-rule);
-      color: var(--fg-dim);
-      font: inherit;
-      font-size: 10px;
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
-      padding: 4px 8px;
-      cursor: pointer;
-      transition: color 150ms ease, border-color 150ms ease;
     }
     .icon-btn {
       background: transparent;
@@ -129,10 +110,6 @@ export const sidebarStyles = css`
     }
     .icon-btn:hover { color: var(--fg); border-color: var(--fg-faint); }
     .icon-btn.active { color: var(--accent); border-color: var(--accent); }
-    .theme-toggle:hover {
-      color: var(--accent);
-      border-color: var(--accent);
-    }
     @keyframes pulse {
       0%   { box-shadow: 0 0 0 0 rgba(255,51,0,0.45); }
       70%  { box-shadow: 0 0 0 6px rgba(255,51,0,0); }
@@ -626,54 +603,6 @@ export const sidebarStyles = css`
       background: color-mix(in srgb, var(--fg) 10%, transparent);
     }
 
-    .att-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 6px 10px;
-      border-bottom: 1px dashed var(--bg-rule);
-      background: var(--bg-soft, var(--bg));
-    }
-    .att-chip {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 22px 3px 3px;
-      border: 1px solid var(--bg-rule);
-      border-radius: 6px;
-      background: var(--bg);
-      font-size: 11px;
-      color: var(--fg-soft, var(--fg));
-    }
-    .att-thumb {
-      width: 36px;
-      height: 36px;
-      object-fit: cover;
-      border-radius: 4px;
-      display: block;
-    }
-    .att-meta {
-      font-variant-numeric: tabular-nums;
-      opacity: 0.75;
-    }
-    .att-x {
-      position: absolute;
-      top: 1px;
-      right: 2px;
-      width: 18px;
-      height: 18px;
-      border: 0;
-      background: transparent;
-      color: var(--fg-soft, var(--fg));
-      font-size: 14px;
-      line-height: 1;
-      cursor: pointer;
-      padding: 0;
-      opacity: 0.7;
-    }
-    .att-x:hover { opacity: 1; color: var(--accent, #f78166); }
-
     /* ---------- CONTEXT CHIPS IN USER BUBBLES ---------- */
     .msg-ctx-chips {
       display: flex;
@@ -849,14 +778,6 @@ export const sidebarStyles = css`
     }
     .pw-strip.nobind .pw-row:hover { background: transparent; color: var(--fg-dim); }
     .pw-row:hover { background: var(--bg); color: var(--fg); }
-    .pw-label {
-      flex: 0 0 auto;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--fg-faint);
-      font-size: 9.5px;
-    }
     .pw-current {
       flex: 1 1 auto;
       min-width: 0;
@@ -881,82 +802,10 @@ export const sidebarStyles = css`
       white-space: nowrap;
     }
     .pw-icon:hover { color: var(--accent); border-color: var(--accent); }
-    .pw-icon.attach {
-      padding: 0 8px;
-      font-size: 9.5px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    .pw-caret { flex: 0 0 auto; font-size: 9px; color: var(--fg-faint); }
-    .pw-list {
-      max-height: 200px;
-      overflow-y: auto;
-      border-top: 1px solid var(--bg-rule);
-      background: var(--bg);
-    }
-    .pw-session {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-left: 2px solid transparent;
-      min-width: 0;
-    }
-    .pw-session + .pw-session { border-top: 1px solid var(--bg-rule); }
-    .pw-session.ok    { border-left-color: var(--accent); }
-    .pw-session.wait  { border-left-color: #d6a85d; }
-    .pw-session.dead  { border-left-color: #d96d6d; opacity: 0.65; }
     .pw-status { flex: 0 0 auto; font-size: 11px; line-height: 1; }
     .pw-status.ok    { color: var(--accent); }
     .pw-status.wait  { color: #d6a85d; }
     .pw-status.dead  { color: #d96d6d; }
-    .pw-who {
-      flex: 1 1 auto;
-      min-width: 0;
-      overflow: hidden;
-    }
-    .pw-title {
-      color: var(--fg);
-      font-size: 11px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-    }
-    .pw-hint {
-      color: var(--fg-faint);
-      font-size: 10px;
-      font-style: italic;
-    }
-    .pw-url {
-      color: var(--fg-faint);
-      font-size: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .pw-sid {
-      color: var(--accent);
-      font-family: var(--font-mono, monospace);
-      font-size: 9.5px;
-      flex: 0 0 auto;
-    }
-    .pw-tabid {
-      color: var(--fg-dim);
-      font-family: var(--font-mono, monospace);
-      font-size: 9.5px;
-      flex: 0 0 auto;
-    }
-    .pw-urltext {
-      flex: 1 1 auto;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
     .pw-icon.close {
       color: var(--fg-faint);
       border-color: transparent;
@@ -965,12 +814,9 @@ export const sidebarStyles = css`
     }
     .pw-icon.close:hover { color: #d96d6d; border-color: #d96d6d; }
     .pw-header { cursor: default; }
-    .pw-header.clickable { cursor: pointer; }
     .pw-header:hover { background: transparent; color: var(--fg-dim); }
-    .pw-header.clickable:hover { background: var(--bg); color: var(--fg); }
 
     /* ---------- DEBUG PANEL ---------- */
-    .theme-toggle.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
     .debug {
       border-bottom: 1px solid var(--bg-rule);
       background: var(--bg-soft);

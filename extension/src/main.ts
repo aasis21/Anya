@@ -103,9 +103,6 @@ export class AnyaApp extends LitElement {
   // Per-message hover toolbar — id of the message whose ⋯ menu is open.
   @state() private msgMenuId: string | null = null;
 
-  // Pending pasted/dropped images attached to the next outbound message.
-  // (legacy — images now go through contextAttachments with kind: 'image')
-
   // Field-assist: tracks the text field the user last focused on a page.
   // `focusedField` is set silently on focus (powers Insert/Append buttons).
   @state() private focusedField: FocusedField | null = null;
