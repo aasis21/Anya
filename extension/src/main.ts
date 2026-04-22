@@ -891,8 +891,20 @@ export class AnyaApp extends LitElement {
         await chrome.tabs.remove(ids);
         return { closed: ids };
       }
-      case 'manage_bookmarks': {
+      case 'manage_bookmarks':
+        // Legacy alias — falls through to find_bookmarks or edit_bookmarks.
         return await this.execManageBookmarks(args);
+      case 'find_bookmarks': {
+        // Read-only bookmark operations: list, tree, search.
+        const op = String(args.op ?? 'search');
+        if (!['list', 'tree', 'search'].includes(op)) throw new Error(`find_bookmarks: invalid op "${op}". Valid: list, tree, search.`);
+        return await this.execManageBookmarks({ ...args, op });
+      }
+      case 'edit_bookmarks': {
+        // Write bookmark operations: create, update, move, remove, open.
+        const op = String(args.op ?? '');
+        if (!['create', 'update', 'move', 'remove', 'open'].includes(op)) throw new Error(`edit_bookmarks: invalid op "${op}". Valid: create, update, move, remove, open.`);
+        return await this.execManageBookmarks({ ...args, op });
       }
       case 'browse_history': {
         const query = String(args.query ?? '');
