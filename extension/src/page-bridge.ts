@@ -311,18 +311,18 @@ function captureContext(): AttachmentPayload {
     }
   }
 
-  // 5. Fallback — whole page (ref = tabId, added by background/sidebar)
-  const pageText = (document.body.innerText || '').trim();
-  const { capped, full } = cap(pageText);
+  // 5. Fallback — whole page. Send a lightweight signal so the sidebar
+  //    resolves via get_tab_content (same path as @tab autocomplete).
   return {
     kind: 'tab',
     icon: '🌐',
     label: `${document.title || hostname()}`,
-    preview: `Full page · ${hostname()}`,
-    content: capped,
-    fullLength: full,
+    preview: `Full tab · ${hostname()}`,
+    content: '',  // sidebar will resolve via resolveAtMentionChip
+    fullLength: 0,
     pageUrl: location.href,
-  };
+    _resolveInSidebar: true,  // flag for sidebar to re-resolve
+  } as AttachmentPayload;
 }
 
 // ---------------------------------------------------------------------------

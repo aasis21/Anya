@@ -21,7 +21,7 @@
   },
   "side_panel": { "default_path": "sidebar.html" },
   "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting", "bookmarks", "clipboardRead", "contextMenus"],
+  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting", "bookmarks", "clipboardRead", "contextMenus", "history"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {

@@ -2,7 +2,7 @@
  * Anya sidebar — the Lit component that wires the browser to the local Copilot bridge.
  *
  * High-level layout (top → bottom of the file):
- *   1. Imports + small pure helpers (escapeRegExp, summariseTab).
+ *   1. Imports + small pure helpers (summariseTab).
  *   2. AnyaApp (`<anya-app>`):
  *        - reactive @state fields (UI + chat store + debug + bound tab)
  *        - lifecycle: connectedCallback / disconnectedCallback
@@ -56,11 +56,6 @@ function summariseTab(tab: chrome.tabs.Tab): {
     windowId: tab.windowId,
     favIconUrl: tab.favIconUrl,
   };
-}
-
-/** Escape a literal string for use inside a RegExp. */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 @customElement('anya-app')
@@ -364,12 +359,8 @@ export class AnyaApp extends LitElement {
     }, 250);
   }
 
-  private newChatId(): string {
-    return `c${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
   private startNewChat = (): string => {
-    const id = this.newChatId();
+    const id = `c${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
     const chat: Chat = {
       id,
@@ -764,7 +755,7 @@ export class AnyaApp extends LitElement {
         if (f.type === 'pw-bind-result' && data.ok) {
           // Status flips from 'waiting-for-connect' → 'connected' after
           // the user clicks the picker button. Poll a few times.
-          this.scheduleBoundTabRefreshes();
+          for (const ms of [1500, 3500, 6000, 10000, 15000]) setTimeout(() => this.refreshBoundTab(), ms);
         }
         break;
       }
@@ -902,6 +893,19 @@ export class AnyaApp extends LitElement {
       }
       case 'manage_bookmarks': {
         return await this.execManageBookmarks(args);
+      }
+      case 'browse_history': {
+        const query = String(args.query ?? '');
+        const maxResults = Math.min(Number(args.maxResults || 50), 200);
+        const daysBack = Math.min(Number(args.daysBack || 7), 90);
+        const startTime = Date.now() - daysBack * 86_400_000;
+        const results = await chrome.history.search({ text: query, startTime, maxResults });
+        return results.map((r) => ({
+          url: r.url,
+          title: r.title,
+          lastVisit: r.lastVisitTime ? new Date(r.lastVisitTime).toISOString() : null,
+          visitCount: r.visitCount ?? 0,
+        }));
       }
       case 'get_attached': {
         // Unified tool: fetch fresh content of an attached element or field.
@@ -1308,13 +1312,6 @@ export class AnyaApp extends LitElement {
     this.bridgeSend({ type: 'pw-unbind' });
   };
 
-  private scheduleBoundTabRefreshes = (): void => {
-    const delays = [1500, 3500, 6000, 10000, 15000];
-    for (const ms of delays) {
-      setTimeout(() => this.refreshBoundTab(), ms);
-    }
-  };
-
   // ----- send ------------------------------------------------------------
   private send = (mode: 'enqueue' | 'immediate' = 'enqueue'): void => {
     const ta = this.textarea ?? (this.renderRoot.querySelector('#prompt-input') as HTMLTextAreaElement | null);
@@ -1482,16 +1479,17 @@ export class AnyaApp extends LitElement {
     }
     // Context attachment — "Add to Anya" right-click or Alt+A.
     if (msg.type === 'anya-attach' && msg.attachment) {
+      const att = msg.attachment as unknown as Record<string, unknown>;
+      // If page-bridge flagged this for sidebar resolution (whole-page fallback),
+      // use the same path as @tab autocomplete for consistent content quality.
+      if (att._resolveInSidebar) {
+        void this.attach('tab');
+        chrome.storage.session.remove('anya-pending-attach').catch(() => {});
+        return;
+      }
       const tabId = sender.tab?.id;
       const ref = msg.attachment.ref ? { ...msg.attachment.ref, tabId: msg.attachment.ref.tabId ?? tabId } : (tabId ? { tabId } : undefined);
-      const att: ContextAttachment = {
-        ...msg.attachment,
-        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        ref,
-      };
-      this.contextAttachments = [...this.contextAttachments, att];
-      this.injectTokenAtCursor(this.attachmentToken(att));
-      // Clear session buffer since we handled it live.
+      this.commitAttachment({ ...msg.attachment, ref });
       chrome.storage.session.remove('anya-pending-attach').catch(() => {});
     }
   };
@@ -1504,9 +1502,35 @@ export class AnyaApp extends LitElement {
     this.contextAttachments = [];
   }
 
+  /** Unified entry point for adding a context attachment chip.
+   *  Generates a unique ID, pushes to the chip array, and injects
+   *  the @-reference token at the cursor in the composer. */
+  private commitAttachment(chip: Omit<ContextAttachment, 'id'> & { id?: string }): ContextAttachment {
+    const att: ContextAttachment = {
+      ...chip,
+      id: chip.id ?? `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+    this.contextAttachments = [...this.contextAttachments, att];
+    // Inject @-reference token at the cursor in the composer.
+    const token = this.refLabel(att);
+    this.updateComplete.then(() => {
+      const ta = this.textarea;
+      if (!ta) return;
+      const pos = ta.selectionStart ?? ta.value.length;
+      const before = pos > 0 && !/\s$/.test(ta.value.slice(0, pos)) ? ' ' : '';
+      const insert = before + token + ' ';
+      ta.value = ta.value.slice(0, pos) + insert + ta.value.slice(pos);
+      const newPos = pos + insert.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+      this.syncDraft(ta.value);
+      ta.focus();
+    });
+    return att;
+  }
+
   /** Generate a short reference token for an attachment that gets injected
    *  into the composer so the user and LLM can reference it inline. */
-  private attachmentToken(att: ContextAttachment): string {
+  private refLabel(att: ContextAttachment): string {
     const safe = (s: string) => s.replace(/[\s:,;!?'"()\[\]{}]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
     switch (att.kind) {
       case 'tab':       return '@tab';
@@ -1524,24 +1548,6 @@ export class AnyaApp extends LitElement {
     }
   }
 
-  /** Insert a text token at the current cursor position in the composer. */
-  private injectTokenAtCursor(token: string): void {
-    this.updateComplete.then(() => {
-      const ta = this.textarea;
-      if (!ta) return;
-      const pos = ta.selectionStart ?? ta.value.length;
-      // Add a space before if not at start and previous char isn't whitespace.
-      const before = pos > 0 && !/\s$/.test(ta.value.slice(0, pos)) ? ' ' : '';
-      const after = ' ';
-      const insert = before + token + after;
-      ta.value = ta.value.slice(0, pos) + insert + ta.value.slice(pos);
-      const newPos = pos + insert.length;
-      ta.selectionStart = ta.selectionEnd = newPos;
-      this.syncDraft(ta.value);
-      ta.focus();
-    });
-  }
-
   /** Load any context attachments buffered in session storage before the
    *  sidebar was open. Clears them after loading. */
   private async loadPendingAttachments(): Promise<void> {
@@ -1552,12 +1558,11 @@ export class AnyaApp extends LitElement {
         await chrome.storage.session.remove('anya-pending-attach');
         for (const att of pending) {
           if (att && typeof att === 'object' && att.kind) {
-            const full: ContextAttachment = {
-              ...att,
-              id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            };
-            this.contextAttachments = [...this.contextAttachments, full];
-            this.injectTokenAtCursor(this.attachmentToken(full));
+            if (att._resolveInSidebar) {
+              void this.attach(String(att.kind));
+            } else {
+              this.commitAttachment(att);
+            }
           }
         }
       }
@@ -1599,7 +1604,8 @@ export class AnyaApp extends LitElement {
   ): Promise<void> {
     let prompt = text;
     try {
-      prompt = await this.expandMentions(text);
+      // @ tokens in the text are references to attachments — they stay as-is.
+      // The real content is in contextChips, injected below.
       const tab = await this.getActiveTab().catch(() => null);
       if (tab) {
         const url = tab.url ?? '(unknown url)';
@@ -1609,7 +1615,7 @@ export class AnyaApp extends LitElement {
       // Inject context attachments passed from send().
       if (contextChips.length > 0) {
         const ctxBlocks = contextChips.map((a, idx) => {
-          const token = this.attachmentToken(a);
+          const token = this.refLabel(a);
           const lines: string[] = [];
           lines.push(`[${idx + 1}] ${a.icon} ${a.label} — ref: ${token}` + (a.fullLength ? ` (${a.fullLength.toLocaleString()} chars)` : ''));
 
@@ -1673,152 +1679,6 @@ export class AnyaApp extends LitElement {
     }
     const ok = this.bridgeSend(frame);
     if (!ok) this.pushSystem(chatId, 'bridge disconnected — waiting to reconnect…', 'error');
-  }
-
-  // Replace @-mentions inline so the user can be explicit about context.
-  // Tools are still available to the model for on-demand fetches.
-  //
-  // Supported:
-  //   @tab               active tab content (Markdown via Readability)
-  //   @selection         highlighted text on the active tab
-  //   @url               active tab URL only
-  //   @title             active tab title only
-  //   @clipboard         system clipboard text
-  //   @tabs              markdown table of every open tab
-  //   @tab:<id|query>    one tab — numeric id OR substring of title/url
-  private async expandMentions(text: string): Promise<string> {
-    const tokenRegex = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?)(?=$|[\s.,;!?])/gi;
-    if (!tokenRegex.test(text)) return text;
-    tokenRegex.lastIndex = 0;
-
-    const PAGE_CAP = 30_000;
-    const cap = (s: string): string => {
-      if (s.length <= PAGE_CAP) return s;
-      return `${s.slice(0, PAGE_CAP)}\n\n…(truncated, original ${s.length.toLocaleString()} chars)`;
-    };
-
-    const replacements: Array<{ token: string; getValue: () => Promise<string> }> = [];
-    const seen = new Set<string>();
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(text)) !== null) {
-      const token = match[0];
-      const lower = token.toLowerCase();
-      if (seen.has(lower)) continue;
-      seen.add(lower);
-
-      if (lower === '@tab') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            const r = (await this.executeTool('get_tab_content', {})) as {
-              title?: string; url?: string; text?: string; restricted?: boolean;
-            };
-            if (r.restricted) {
-              return `\n\n_(${token} unavailable: ${r.url ?? 'this page'} is a browser-internal URL and cannot be read by extensions)_\n\n`;
-            }
-            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---\n${cap(r.text ?? '')}\n--- end ---\n\n`;
-          },
-        });
-      } else if (lower === '@selection') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            const r = (await this.executeTool('get_selection', {})) as { selection?: string; restricted?: boolean };
-            if (r.restricted) return `\n\n_(@selection unavailable on browser-internal pages)_\n\n`;
-            return r.selection ? `\n\n> ${r.selection.replace(/\n/g, '\n> ')}\n\n` : '';
-          },
-        });
-      } else if (lower === '@url') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            const r = (await this.executeTool('get_active_tab', {})) as { url?: string };
-            return r.url ?? '';
-          },
-        });
-      } else if (lower === '@title') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            const r = (await this.executeTool('get_active_tab', {})) as { title?: string };
-            return r.title ?? '';
-          },
-        });
-      } else if (lower === '@clipboard') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            try {
-              const txt = await navigator.clipboard.readText();
-              if (!txt) return '\n\n_(@clipboard is empty)_\n\n';
-              return `\n\n\`\`\`\n${cap(txt)}\n\`\`\`\n\n`;
-            } catch (err) {
-              return `\n\n_(@clipboard unavailable: ${String((err as Error)?.message ?? err)})_\n\n`;
-            }
-          },
-        });
-      } else if (lower === '@tabs') {
-        replacements.push({
-          token,
-          getValue: async () => {
-            const r = (await this.executeTool('list_tabs', {})) as Array<{
-              id?: number; title?: string; url?: string; active?: boolean;
-            }>;
-            const rows = r.map((t) =>
-              `| ${t.id ?? ''} | ${t.active ? '★' : ''} | ${(t.title ?? '').replace(/\|/g, '\\|').slice(0, 80)} | ${t.url ?? ''} |`
-            ).join('\n');
-            return `\n\n| id | * | title | url |\n| --- | --- | --- | --- |\n${rows}\n\n`;
-          },
-        });
-      } else if (lower.startsWith('@tab:')) {
-        const arg = token.slice('@tab:'.length);
-        replacements.push({
-          token,
-          getValue: async () => {
-            // Numeric → use as chrome tabId directly. Otherwise → fuzzy match.
-            let resolvedId: number | undefined;
-            let matchNote = '';
-            if (/^\d+$/.test(arg)) {
-              resolvedId = Number(arg);
-            } else {
-              const tabs = (await this.executeTool('list_tabs', {})) as Array<{
-                id?: number; title?: string; url?: string;
-              }>;
-              const q = arg.toLowerCase();
-              const hits = tabs.filter((t) =>
-                (t.title ?? '').toLowerCase().includes(q) || (t.url ?? '').toLowerCase().includes(q)
-              );
-              if (hits.length === 0) {
-                return `\n\n_(${token} matched no open tab)_\n\n`;
-              }
-              resolvedId = hits[0].id;
-              if (hits.length > 1) {
-                matchNote = ` _(matched ${hits.length} tabs, using top hit "${hits[0].title ?? ''}")_`;
-              }
-            }
-            const r = (await this.executeTool('get_tab_content', { tabId: resolvedId })) as {
-              title?: string; url?: string; text?: string; restricted?: boolean;
-            };
-            if (r.restricted) {
-              return `\n\n_(${token} unavailable: ${r.url ?? 'tab'} is a browser-internal URL)_\n\n`;
-            }
-            return `\n\n--- ${r.title ?? ''} (${r.url ?? ''}) ---${matchNote}\n${cap(r.text ?? '')}\n--- end ---\n\n`;
-          },
-        });
-      }
-    }
-
-    let result = text;
-    for (const r of replacements) {
-      try {
-        const value = await r.getValue();
-        const rx = new RegExp(escapeRegExp(r.token), 'gi');
-        result = result.replace(rx, value);
-      } catch (err) {
-        console.debug('[Anya] mention expansion skipped for', r.token, err);
-      }
-    }
-    return result;
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -1966,7 +1826,7 @@ export class AnyaApp extends LitElement {
       this.syncDraft(ta.value);
       this.autocomplete = null;
       // Resolve asynchronously and add chip.
-      void this.resolveAtMentionChip(item.chipKind, item.token);
+      void this.attach(item.chipKind);
       return;
     }
 
@@ -1981,14 +1841,21 @@ export class AnyaApp extends LitElement {
     this.autocomplete = null;
   }
 
-  /** Resolve an @-mention into a ContextAttachment chip. */
-  private async resolveAtMentionChip(chipKind: string, token: string): Promise<void> {
+  /** Resolve a chip kind into a ContextAttachment and add it.
+   *  This is the universal entry point for all chip types — called from
+   *  @autocomplete, 📎 menu, right-click "Add to Anya", and buffered loads. */
+  private async attach(chipKind: string): Promise<void> {
+    // Folder is special — opens a native OS dialog via the bridge.
+    if (chipKind === 'folder') {
+      this.bridgeSend({ type: 'folder-pick' });
+      return;
+    }
+
     const CAP = ATTACHMENT_VALUE_CAP;
-    const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const trunc = (s: string) => s.length > CAP ? s.slice(0, CAP) : s;
 
     try {
-      let att: ContextAttachment | null = null;
+      let att: Omit<ContextAttachment, 'id'> | null = null;
 
       if (chipKind === 'tab') {
         const tab = await this.getActiveTab().catch(() => null);
@@ -1996,43 +1863,54 @@ export class AnyaApp extends LitElement {
           const result = await this.executeTool('get_tab_content', { tabId: tab.id });
           const text = typeof result === 'string' ? result : JSON.stringify(result);
           const title = tab.title || tab.url || 'Page';
-          att = { id, kind: 'tab', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full tab · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
+          att = { kind: 'tab', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full tab · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
         }
       } else if (chipKind === 'selection') {
         const result = await this.executeTool('get_selection', {});
         const text = typeof result === 'string' ? result : '';
         if (text) {
-          att = { id, kind: 'selection', icon: '✂️', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
+          att = { kind: 'selection', icon: '✂️', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
         }
       } else if (chipKind === 'url') {
         const tab = await this.getActiveTab().catch(() => null);
         if (tab?.url) {
-          att = { id, kind: 'url', icon: '🔗', label: tab.url.length > 60 ? tab.url.slice(0, 57) + '…' : tab.url, preview: tab.url, content: tab.url, pageUrl: tab.url };
+          att = { kind: 'url', icon: '🔗', label: tab.url.length > 60 ? tab.url.slice(0, 57) + '…' : tab.url, preview: tab.url, content: tab.url, pageUrl: tab.url };
         }
       } else if (chipKind === 'title') {
         const tab = await this.getActiveTab().catch(() => null);
         if (tab?.title) {
-          att = { id, kind: 'title', icon: '📌', label: tab.title, preview: tab.title, content: tab.title, pageUrl: tab.url ?? '' };
+          att = { kind: 'title', icon: '📌', label: tab.title, preview: tab.title, content: tab.title, pageUrl: tab.url ?? '' };
         }
       } else if (chipKind === 'clipboard') {
         const text = await navigator.clipboard.readText().catch(() => '');
         if (text) {
-          att = { id, kind: 'clipboard', icon: '📋', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
+          att = { kind: 'clipboard', icon: '📋', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
         }
       } else if (chipKind === 'tabs') {
         const result = await this.executeTool('list_tabs', {});
         const tabs = Array.isArray(result) ? result : [];
         const md = tabs.map((t: any) => `| ${t.tabId} | ${t.active ? '→' : ''} | ${t.title} | ${t.url} |`).join('\n');
         const content = `| id | active | title | url |\n| --- | --- | --- | --- |\n${md}`;
-        att = { id, kind: 'tabs', icon: '📑', label: `${tabs.length} open tabs`, preview: `${tabs.length} tabs`, content: trunc(content), fullLength: content.length, pageUrl: '' };
+        att = { kind: 'tabs', icon: '📑', label: `${tabs.length} open tabs`, preview: `${tabs.length} tabs`, content: trunc(content), fullLength: content.length, pageUrl: '' };
+      } else if (chipKind === 'bookmarks') {
+        const result = await this.executeTool('manage_bookmarks', { op: 'list', limit: 100 });
+        const data = result as { count?: number; items?: Array<{ title: string; url?: string; folderPath: string; isFolder: boolean }> };
+        const items = data.items ?? [];
+        const md = items.filter((b) => b.url).map((b) => `| ${b.title} | ${b.url} | ${b.folderPath} |`).join('\n');
+        const content = `| title | url | folder |\n| --- | --- | --- |\n${md}`;
+        att = { kind: 'bookmark', icon: '🔖', label: `${items.length} bookmarks`, preview: `${items.length} bookmarks`, content: trunc(content), fullLength: content.length, pageUrl: '' };
+      } else if (chipKind === 'history') {
+        const results = await chrome.history.search({ text: '', startTime: Date.now() - 7 * 86_400_000, maxResults: 50 });
+        const md = results.map((r) => `| ${r.title ?? ''} | ${r.url ?? ''} | ${r.lastVisitTime ? new Date(r.lastVisitTime).toISOString().slice(0, 16) : ''} |`).join('\n');
+        const content = `| title | url | last visit |\n| --- | --- | --- |\n${md}`;
+        att = { kind: 'bookmark', icon: '📜', label: `${results.length} recent pages`, preview: `Last 7 days · ${results.length} pages`, content: trunc(content), fullLength: content.length, pageUrl: '' };
       }
 
       if (att) {
-        this.contextAttachments = [...this.contextAttachments, att];
-        this.injectTokenAtCursor(this.attachmentToken(att));
+        this.commitAttachment(att);
       }
     } catch (err) {
-      console.warn(`[Anya] failed to resolve ${token}:`, err);
+      console.warn(`[Anya] failed to resolve @${chipKind}:`, err);
     }
   }
 
@@ -2086,9 +1964,7 @@ export class AnyaApp extends LitElement {
     const sizeKB = (file.size / 1024).toFixed(0);
 
     // Add as context chip.
-    const id = `ctx-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    this.contextAttachments = [...this.contextAttachments, {
-      id,
+    this.commitAttachment({
       kind: 'image',
       icon: '🖼️',
       label: `${name} · ${sizeKB} KB`,
@@ -2096,32 +1972,15 @@ export class AnyaApp extends LitElement {
       content: '',
       pageUrl: '',
       imageData: { dataUrl, data: base64, mimeType: file.type || 'image/png', bytes: file.size, name },
-    }];
-    this.injectTokenAtCursor(`@image:${name.replace(/[\s:]+/g, '-')}`);
+    });
   }
 
   // ----- 📎 attach menu -------------------------------------------------
 
-  private toggleAttachMenu(): void {
-    this.attachMenuOpen = !this.attachMenuOpen;
-  }
-
-  private async attachFromMenu(kind: string): Promise<void> {
-    this.attachMenuOpen = false;
-    if (kind === 'folder') {
-      this.bridgeSend({ type: 'folder-pick' });
-      return;
-    }
-    // Reuse the same resolve logic as @mention chips.
-    await this.resolveAtMentionChip(kind, `@${kind}`);
-  }
-
   // Handle folder-pick result from bridge.
   private handleFolderPickResult(path: string): void {
     const folderName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
-    const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    this.contextAttachments = [...this.contextAttachments, {
-      id,
+    this.commitAttachment({
       kind: 'folder',
       icon: '📁',
       label: folderName,
@@ -2129,8 +1988,7 @@ export class AnyaApp extends LitElement {
       content: `Local folder: ${path}\nUse view, grep, glob, edit tools to work with files in this folder.`,
       ref: { folderPath: path },
       pageUrl: '',
-    }];
-    this.injectTokenAtCursor(`@folder:${folderName}`);
+    });
     // Set the cwd on the current chat so the bridge uses it as workingDirectory.
     if (this.currentChatId) {
       this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
@@ -2194,13 +2052,8 @@ export class AnyaApp extends LitElement {
   }
 
   /**
-   * Split user-bubble text into a sequence of plain strings and
-   * `<span class="mention">…</span>` lit fragments so the operator can see
-   * at a glance which `@-tokens` were recognised by the composer.
-   *
-   * Mirrors the regex in `expandMentions`. We intentionally do NOT highlight
-   * tokens the regex doesn't accept — that would lie to the user about what
-   * actually got expanded.
+   * Split text into plain strings and highlighted `@-token` spans so
+   * attachment references stand out visually in the composer and chat bubbles.
    */
   private renderMentionedText(text: string) {
     // Matches all @ tokens: original ones (@tab, @selection, etc.) plus
@@ -2458,17 +2311,19 @@ export class AnyaApp extends LitElement {
           </div>
         ` : nothing}
         <div class="composer-row">
-          <button class="attach-btn" @click=${() => this.toggleAttachMenu()} title="Attach context (📎)" aria-label="Attach">📎</button>
+          <button class="attach-btn" @click=${() => { this.attachMenuOpen = !this.attachMenuOpen; }} title="Attach context (📎)" aria-label="Attach">📎</button>
           ${this.attachMenuOpen ? html`
             <div class="attach-menu">
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('tab')}>🌐 Current tab</button>
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('selection')}>✂️ Selection</button>
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('tabs')}>📑 All open tabs</button>
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('clipboard')}>📋 Clipboard</button>
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('url')}>🔗 URL</button>
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('title')}>📌 Title</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tab'); }}>🌐 Current tab</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('selection'); }}>✂️ Selection</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tabs'); }}>📑 All open tabs</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('clipboard'); }}>📋 Clipboard</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('url'); }}>🔗 URL</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('title'); }}>📌 Title</button>
               <hr class="attach-menu-sep" />
-              <button class="attach-menu-item" @click=${() => this.attachFromMenu('folder')}>📁 Folder...</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('bookmarks'); }}>🔖 Bookmarks</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('history'); }}>📜 Recent history</button>
+              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('folder'); }}>📁 Folder...</button>
             </div>
           ` : nothing}
           <div class="composer-input">
