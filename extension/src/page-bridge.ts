@@ -52,6 +52,28 @@ const SEMANTIC_TAGS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
+// Safe messaging — extension context can be invalidated after a reload.
+// Wrap all chrome.runtime calls so a stale content script doesn't throw.
+// ---------------------------------------------------------------------------
+
+function safeSend(msg: Record<string, unknown>): void {
+  try {
+    chrome.runtime?.sendMessage?.(msg)?.catch?.(() => {});
+  } catch {
+    // Extension context invalidated — this content script is stale.
+    // Detach all listeners so we stop firing into the void.
+    cleanup();
+  }
+}
+
+function cleanup(): void {
+  document.removeEventListener('focusin', handleFocusIn, true);
+  document.removeEventListener('focusout', handleFocusOut, true);
+  document.removeEventListener('contextmenu', handleContextMenu, true);
+  document.removeEventListener('keydown', handleKeyDown, true);
+}
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -314,7 +336,7 @@ function handleFocusIn(e: FocusEvent): void {
   activeField = target;
   const meta = buildFieldMeta(target);
   activeFieldId = meta.fieldId;
-  chrome.runtime.sendMessage({ type: 'anya-field-focus', field: meta }).catch(() => {});
+  safeSend({ type: 'anya-field-focus', field: meta });
 }
 
 function handleFocusOut(_e: FocusEvent): void {
@@ -322,7 +344,7 @@ function handleFocusOut(_e: FocusEvent): void {
   blurTimer = setTimeout(() => {
     activeField = null;
     activeFieldId = null;
-    chrome.runtime.sendMessage({ type: 'anya-field-blur' }).catch(() => {});
+    safeSend({ type: 'anya-field-blur' });
   }, 600);
 }
 
@@ -348,11 +370,11 @@ function handleKeyDown(e: KeyboardEvent): void {
       ? document.activeElement : null;
 
     const attachment = captureContext();
-    chrome.runtime.sendMessage({ type: 'anya-attach', attachment }).catch(() => {});
+    safeSend({ type: 'anya-attach', attachment });
     // Also send field-focus so Insert/Append buttons work.
     if (activeField && isTextField(activeField)) {
       const meta = buildFieldMeta(activeField);
-      chrome.runtime.sendMessage({ type: 'anya-field-focus', field: meta }).catch(() => {});
+      safeSend({ type: 'anya-field-focus', field: meta });
     }
   }
 }
@@ -401,11 +423,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // "Add to Anya" context menu click → capture and send attachment.
   if (msg.type === 'anya-capture-context') {
     const attachment = captureContext();
-    chrome.runtime.sendMessage({ type: 'anya-attach', attachment }).catch(() => {});
+    safeSend({ type: 'anya-attach', attachment });
     // If this was a field, also send field-focus for Insert/Append.
     if (attachment.kind === 'field' && lastContextTarget && isTextField(lastContextTarget)) {
       const meta = buildFieldMeta(lastContextTarget);
-      chrome.runtime.sendMessage({ type: 'anya-field-focus', field: meta }).catch(() => {});
+      safeSend({ type: 'anya-field-focus', field: meta });
     }
     return false;
   }

@@ -2224,23 +2224,15 @@ export class AnyaApp extends LitElement {
     }
     if (m.role === 'user') {
       const ctxLabels = m.contextLabels ?? [];
-      const textLabels = ctxLabels.filter((c) => !c.dataUrl);
-      const imgLabels = ctxLabels.filter((c) => c.dataUrl);
       return html`
         <div class="bubble">
-          ${textLabels.length > 0 ? html`
+          ${ctxLabels.length > 0 ? html`
             <div class="msg-ctx-chips">
-              ${textLabels.map((c) => html`
-                <span class="msg-ctx-chip">${c.icon} ${c.label}</span>
-              `)}
-            </div>
-          ` : nothing}
-          ${imgLabels.length > 0 ? html`
-            <div class="msg-attachments">
-              ${imgLabels.map((a) => html`
-                <a class="msg-img-link" href=${a.dataUrl!} target="_blank" rel="noopener" title=${a.label}>
-                  <img class="msg-img" src=${a.dataUrl!} alt=${a.label} />
-                </a>
+              ${ctxLabels.map((c) => html`
+                <span class="msg-ctx-chip">
+                  ${c.dataUrl ? html`<img class="msg-ctx-chip-thumb" src=${c.dataUrl} alt="" />` : nothing}
+                  ${c.icon} ${c.label}
+                </span>
               `)}
             </div>
           ` : nothing}
@@ -2375,6 +2367,12 @@ export class AnyaApp extends LitElement {
             aria-label=${online ? 'Bridge connected' : 'Bridge offline'}
           ><span class="pulse"></span></span>
           <span class="header-actions">
+            <button
+              class="icon-btn"
+              @click=${() => this.startNewChat()}
+              title="New chat (Ctrl+N)"
+              aria-label="New chat"
+            >＋</button>
             ${this.playwrightMode === 'cdp' ? html`
               <button
                 class="icon-btn"
@@ -2383,12 +2381,6 @@ export class AnyaApp extends LitElement {
                 aria-label="Open remote debugging settings"
               >🔌</button>
             ` : nothing}
-            <button
-              class="icon-btn"
-              @click=${() => { this.searchOpen = !this.searchOpen; }}
-              title="Search chats (Ctrl+K)"
-              aria-label="Search"
-            >⌕</button>
             <button
               class="icon-btn ${this.debugOpen ? 'active' : ''}"
               @click=${() => this.toggleDebug()}
@@ -2572,6 +2564,7 @@ export class AnyaApp extends LitElement {
       <aside class="drawer" @click=${(e: Event) => e.stopPropagation()}>
         <div class="drawer-head">
           <span class="drawer-title">CHATS</span>
+          <button class="icon-btn" @click=${() => { this.searchOpen = true; this.chatDrawerOpen = false; }} title="Search chats (Ctrl+K)">⌕</button>
           <button class="icon-btn" @click=${() => this.startNewChat()} title="New chat (Ctrl+N)">＋</button>
           <button class="icon-btn" @click=${() => { this.chatDrawerOpen = false; }} title="Close (Esc)">×</button>
         </div>

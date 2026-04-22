@@ -627,22 +627,14 @@ export const sidebarStyles = css`
       line-height: 1.4;
       letter-spacing: 0.2px;
     }
+    .msg-ctx-chip-thumb {
+      width: 18px;
+      height: 18px;
+      object-fit: cover;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
 
-    .msg-attachments {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-    .msg-img-link { display: inline-block; line-height: 0; }
-    .msg-img {
-      max-width: 200px;
-      max-height: 160px;
-      border-radius: 6px;
-      border: 1px solid var(--bg-rule);
-      cursor: zoom-in;
-      display: block;
-    }
     .msg-text { white-space: pre-wrap; }
     .sigil {
       display: flex;
