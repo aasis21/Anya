@@ -42,20 +42,8 @@ export interface ChatMessage {
   /** Latest agent intent (from `assistant.intent` SDK event) — shown
       while the bubble is still pending and has no text yet. */
   intent?: string;
-  /** Inline image attachments (paste / drop). User messages only. */
-  attachments?: ImageAttachment[];
-}
-
-export interface ImageAttachment {
-  /** data URL: "data:<mime>;base64,<...>" — used for in-bubble preview. */
-  dataUrl: string;
-  /** Raw base64 (no data URL prefix) — sent to bridge / SDK. */
-  data: string;
-  mimeType: string;
-  /** Encoded byte count (for the strip badge). */
-  bytes: number;
-  /** Optional original filename. */
-  name?: string;
+  /** Context attachment labels shown as chips in the user bubble. */
+  contextLabels?: Array<{ icon: string; label: string; dataUrl?: string }>;
 }
 
 /**

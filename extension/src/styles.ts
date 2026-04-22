@@ -673,6 +673,32 @@ export const sidebarStyles = css`
       opacity: 0.7;
     }
     .att-x:hover { opacity: 1; color: var(--accent, #f78166); }
+
+    /* ---------- CONTEXT CHIPS IN USER BUBBLES ---------- */
+    .msg-ctx-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .msg-ctx-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
+      color: var(--accent);
+      font-size: 10.5px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+      line-height: 1.4;
+      letter-spacing: 0.2px;
+    }
+
     .msg-attachments {
       display: flex;
       flex-wrap: wrap;

@@ -29,7 +29,6 @@ import {
   type Chat,
   type BoundTab,
   type QuickPrompt,
-  type ImageAttachment,
   type DebugEntry,
   type FocusedField,
   type ContextAttachment,
@@ -1343,17 +1342,23 @@ export class AnyaApp extends LitElement {
     // filtered out by a still-pending `done` from a previously cancelled turn.
     this.cancelledChats.delete(chatId);
 
-    // Extract image blobs from context attachments for the bridge.
-    const imageAttachments: ImageAttachment[] = this.contextAttachments
-      .filter((a) => a.kind === 'image' && a.imageData)
-      .map((a) => a.imageData!);
+    // Snapshot context attachments BEFORE clearing — they need to reach dispatchPrompt.
+    const ctxSnapshot = [...this.contextAttachments];
+
+    // Build context labels for chip rendering in the user bubble.
+    // Images get a dataUrl for inline thumbnail preview.
+    const contextLabels = ctxSnapshot.map((a) => ({
+      icon: a.icon,
+      label: a.label,
+      ...(a.kind === 'image' && a.imageData ? { dataUrl: a.imageData.dataUrl } : {}),
+    }));
 
     this.appendMessage(chatId, {
       id: `u${Date.now()}`,
       role: 'user',
       text,
       ts: Date.now(),
-      attachments: imageAttachments.length ? imageAttachments : undefined,
+      contextLabels: contextLabels.length ? contextLabels : undefined,
     });
     if (text) this.autoTitleIfNeeded(chatId, text);
     ta.value = '';
@@ -1362,7 +1367,7 @@ export class AnyaApp extends LitElement {
     this.attachMenuOpen = false;
     this.scrollToBottom();
 
-    void this.dispatchPrompt(chatId, text, imageAttachments, mode);
+    void this.dispatchPrompt(chatId, text, mode, ctxSnapshot);
   };
 
   /**
@@ -1488,6 +1493,7 @@ export class AnyaApp extends LitElement {
         ref,
       };
       this.contextAttachments = [...this.contextAttachments, att];
+      this.injectTokenAtCursor(this.attachmentToken(att));
       // Clear session buffer since we handled it live.
       chrome.storage.session.remove('anya-pending-attach').catch(() => {});
     }
@@ -1501,6 +1507,44 @@ export class AnyaApp extends LitElement {
     this.contextAttachments = [];
   }
 
+  /** Generate a short reference token for an attachment that gets injected
+   *  into the composer so the user and LLM can reference it inline. */
+  private attachmentToken(att: ContextAttachment): string {
+    const safe = (s: string) => s.replace(/[\s:,;!?'"()\[\]{}]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+    switch (att.kind) {
+      case 'tab':       return '@tab';
+      case 'selection': return '@selection';
+      case 'clipboard': return '@clipboard';
+      case 'tabs':      return '@tabs';
+      case 'url':       return '@url';
+      case 'title':     return '@title';
+      case 'element':   return `@element:${safe(att.label.split('·')[0].trim())}`;
+      case 'field':     return `@field:${safe(att.label.split('·')[0].trim())}`;
+      case 'link':      return `@link:${safe(att.label)}`;
+      case 'image':     return `@image:${safe(att.imageData?.name || 'image')}`;
+      case 'folder':    return `@folder:${safe(att.label)}`;
+      case 'bookmark':  return `@bookmark:${safe(att.label)}`;
+    }
+  }
+
+  /** Insert a text token at the current cursor position in the composer. */
+  private injectTokenAtCursor(token: string): void {
+    this.updateComplete.then(() => {
+      const ta = this.textarea;
+      if (!ta) return;
+      const pos = ta.selectionStart ?? ta.value.length;
+      // Add a space before if not at start and previous char isn't whitespace.
+      const before = pos > 0 && !/\s$/.test(ta.value.slice(0, pos)) ? ' ' : '';
+      const after = ' ';
+      const insert = before + token + after;
+      ta.value = ta.value.slice(0, pos) + insert + ta.value.slice(pos);
+      const newPos = pos + insert.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+      this.syncDraft(ta.value);
+      ta.focus();
+    });
+  }
+
   /** Load any context attachments buffered in session storage before the
    *  sidebar was open. Clears them after loading. */
   private async loadPendingAttachments(): Promise<void> {
@@ -1510,20 +1554,17 @@ export class AnyaApp extends LitElement {
       if (Array.isArray(pending) && pending.length > 0) {
         await chrome.storage.session.remove('anya-pending-attach');
         for (const att of pending) {
-          if (att && typeof att === 'object' && att.kind && att.content) {
-            this.contextAttachments = [...this.contextAttachments, {
+          if (att && typeof att === 'object' && att.kind) {
+            const full: ContextAttachment = {
               ...att,
               id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            }];
+            };
+            this.contextAttachments = [...this.contextAttachments, full];
+            this.injectTokenAtCursor(this.attachmentToken(full));
           }
         }
       }
     } catch { /* session storage may not be available */ }
-  }
-
-  /** Check if any attached context is a field (enables field-mode prompt). */
-  private get hasFieldAttachment(): boolean {
-    return this.contextAttachments.some((a) => a.kind === 'field');
   }
 
   /**
@@ -1556,8 +1597,8 @@ export class AnyaApp extends LitElement {
   private async dispatchPrompt(
     chatId: string,
     text: string,
-    attachments: ImageAttachment[] = [],
     mode: 'enqueue' | 'immediate' = 'enqueue',
+    contextChips: ContextAttachment[] = [],
   ): Promise<void> {
     let prompt = text;
     try {
@@ -1568,11 +1609,12 @@ export class AnyaApp extends LitElement {
         const title = (tab.title ?? '').replace(/\s+/g, ' ').trim() || '(untitled)';
         prompt = `[Active tab: ${url} — ${title}]\n\n${prompt}`;
       }
-      // Inject context attachments (from right-click "Add to Anya" / @mentions / Alt+A).
-      if (this.contextAttachments.length > 0) {
-        const ctxBlocks = this.contextAttachments.map((a) => {
+      // Inject context attachments passed from send().
+      if (contextChips.length > 0) {
+        const ctxBlocks = contextChips.map((a, idx) => {
+          const token = this.attachmentToken(a);
           const lines: string[] = [];
-          lines.push(`${a.icon} ${a.label}` + (a.fullLength ? ` (${a.fullLength.toLocaleString()} chars)` : ''));
+          lines.push(`[${idx + 1}] ${a.icon} ${a.label} — ref: ${token}` + (a.fullLength ? ` (${a.fullLength.toLocaleString()} chars)` : ''));
 
           // Field attachments get special instructions.
           if (a.kind === 'field') {
@@ -1600,16 +1642,24 @@ export class AnyaApp extends LitElement {
 
           return lines.join('\n');
         });
-        prompt = '[Context]\n\n' + ctxBlocks.join('\n\n') + '\n\n[Message]\n' + prompt;
+        prompt = '[Context — attached by the user via "Add to Anya" or @mentions]\n' +
+          'The user\'s message below may reference this context directly (e.g. "summarize this", ' +
+          '"what does this mean", "fix this") — treat the attached context as what "this" refers to.\n\n' +
+          ctxBlocks.join('\n\n') + '\n\n[Message]\n' + prompt;
       }
     } catch (err) {
       console.warn('[Anya] context prep failed; sending raw prompt', err);
     }
 
+    // Extract image blobs from context chips for the bridge frame.
+    const imageBlobs = contextChips
+      .filter((a) => a.kind === 'image' && a.imageData)
+      .map((a) => a.imageData!);
+
     // Default caption when only images were sent so the model has something
     // textual to anchor on.
-    if (!prompt.trim() && attachments.length > 0) {
-      prompt = `(${attachments.length} image${attachments.length === 1 ? '' : 's'} attached — please look at ${attachments.length === 1 ? 'it' : 'them'}.)`;
+    if (!prompt.trim() && imageBlobs.length > 0) {
+      prompt = `(${imageBlobs.length} image${imageBlobs.length === 1 ? '' : 's'} attached — please look at ${imageBlobs.length === 1 ? 'it' : 'them'}.)`;
     }
 
     const frame: Record<string, unknown> = { type: 'prompt', chatId, text: prompt, mode };
@@ -1617,8 +1667,8 @@ export class AnyaApp extends LitElement {
     // the session.  After the first prompt the bridge ignores it (session exists).
     const chat = this.chats.find((c) => c.id === chatId);
     if (chat?.cwd) frame.cwd = chat.cwd;
-    if (attachments.length > 0) {
-      frame.attachments = attachments.map((a, i) => ({
+    if (imageBlobs.length > 0) {
+      frame.attachments = imageBlobs.map((a, i) => ({
         data: a.data,
         mimeType: a.mimeType,
         displayName: a.name ?? `pasted-image-${i + 1}.${a.mimeType.split('/')[1] ?? 'png'}`,
@@ -1982,6 +2032,7 @@ export class AnyaApp extends LitElement {
 
       if (att) {
         this.contextAttachments = [...this.contextAttachments, att];
+        this.injectTokenAtCursor(this.attachmentToken(att));
       }
     } catch (err) {
       console.warn(`[Anya] failed to resolve ${token}:`, err);
@@ -2049,11 +2100,8 @@ export class AnyaApp extends LitElement {
       pageUrl: '',
       imageData: { dataUrl, data: base64, mimeType: file.type || 'image/png', bytes: file.size, name },
     }];
+    this.injectTokenAtCursor(`@image:${name.replace(/[\s:]+/g, '-')}`);
   }
-
-  private removeContextAttachment = (id: string): void => {
-    this.contextAttachments = this.contextAttachments.filter((a) => a.id !== id);
-  };
 
   // ----- 📎 attach menu -------------------------------------------------
 
@@ -2085,6 +2133,7 @@ export class AnyaApp extends LitElement {
       ref: { folderPath: path },
       pageUrl: '',
     }];
+    this.injectTokenAtCursor(`@folder:${folderName}`);
     // Set the cwd on the current chat so the bridge uses it as workingDirectory.
     if (this.currentChatId) {
       this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
@@ -2157,7 +2206,9 @@ export class AnyaApp extends LitElement {
    * actually got expanded.
    */
   private renderMentionedText(text: string) {
-    const rx = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?)(?=$|[\s.,;!?])/gi;
+    // Matches all @ tokens: original ones (@tab, @selection, etc.) plus
+    // attachment references (@element:Name, @field:Name, @image:name, @folder:name, @link:name, @bookmark:name).
+    const rx = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?|element:\S+|field:\S+|image:\S+|folder:\S+|link:\S+|bookmark:\S+)(?=$|[\s.,;!?])/gi;
     const parts: Array<unknown> = [];
     let last = 0;
     let m: RegExpExecArray | null;
@@ -2175,14 +2226,23 @@ export class AnyaApp extends LitElement {
       return html`<div class="bubble">${m.text}</div>`;
     }
     if (m.role === 'user') {
-      const imgs = m.attachments ?? [];
+      const ctxLabels = m.contextLabels ?? [];
+      const textLabels = ctxLabels.filter((c) => !c.dataUrl);
+      const imgLabels = ctxLabels.filter((c) => c.dataUrl);
       return html`
         <div class="bubble">
-          ${imgs.length > 0 ? html`
+          ${textLabels.length > 0 ? html`
+            <div class="msg-ctx-chips">
+              ${textLabels.map((c) => html`
+                <span class="msg-ctx-chip">${c.icon} ${c.label}</span>
+              `)}
+            </div>
+          ` : nothing}
+          ${imgLabels.length > 0 ? html`
             <div class="msg-attachments">
-              ${imgs.map((a) => html`
-                <a class="msg-img-link" href=${a.dataUrl} target="_blank" rel="noopener" title=${a.name ?? a.mimeType}>
-                  <img class="msg-img" src=${a.dataUrl} alt=${a.name ?? 'pasted image'} />
+              ${imgLabels.map((a) => html`
+                <a class="msg-img-link" href=${a.dataUrl!} target="_blank" rel="noopener" title=${a.label}>
+                  <img class="msg-img" src=${a.dataUrl!} alt=${a.label} />
                 </a>
               `)}
             </div>
