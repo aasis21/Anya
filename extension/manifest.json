@@ -21,6 +21,14 @@
   },
   "side_panel": { "default_path": "sidebar.html" },
   "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting", "bookmarks", "clipboardRead"],
-  "host_permissions": ["<all_urls>"]
+  "permissions": ["sidePanel", "nativeMessaging", "tabs", "activeTab", "storage", "scripting", "bookmarks", "clipboardRead", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page-bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
 }

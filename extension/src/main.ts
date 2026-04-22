@@ -31,6 +31,9 @@ import {
   type QuickPrompt,
   type ImageAttachment,
   type DebugEntry,
+  type FocusedField,
+  type ContextAttachment,
+  ATTACHMENT_VALUE_CAP,
   DEFAULT_QUICK_PROMPTS,
   DEBUG_MAX_ENTRIES,
 } from './types.js';
@@ -104,6 +107,15 @@ export class AnyaApp extends LitElement {
   // Pending pasted/dropped images attached to the next outbound message.
   @state() private pendingAttachments: ImageAttachment[] = [];
 
+  // Field-assist: tracks the text field the user last focused on a page.
+  // `focusedField` is set silently on focus (powers Insert/Append buttons).
+  @state() private focusedField: FocusedField | null = null;
+  private fieldBlurTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Context attachments: collected via "Add to Anya" right-click or @mentions.
+  // Stacked as chips above the composer, injected into prompts on send.
+  @state() private contextAttachments: ContextAttachment[] = [];
+
   // Inline autocomplete for `/` and `@` triggers.
   @state() private autocomplete: {
     kind: 'slash' | 'at';
@@ -127,14 +139,15 @@ export class AnyaApp extends LitElement {
     { token: '/help',    description: 'show this list inside chat' },
   ];
 
-  private static readonly AT_CATALOG: ReadonlyArray<{ token: string; description: string; insert?: string }> = [
-    { token: '@tab',        description: 'active tab as Markdown' },
-    { token: '@selection',  description: 'highlighted text on the active tab' },
-    { token: '@url',        description: 'active tab URL' },
-    { token: '@title',      description: 'active tab title' },
-    { token: '@clipboard',  description: 'system clipboard text' },
-    { token: '@tabs',       description: 'markdown table of every open tab' },
+  private static readonly AT_CATALOG: ReadonlyArray<{ token: string; description: string; insert?: string; chipKind?: string }> = [
+    { token: '@tab',        description: 'active tab as Markdown',                     chipKind: 'page' },
+    { token: '@selection',  description: 'highlighted text on the active tab',          chipKind: 'selection' },
+    { token: '@url',        description: 'active tab URL',                             chipKind: 'url' },
+    { token: '@title',      description: 'active tab title',                           chipKind: 'title' },
+    { token: '@clipboard',  description: 'system clipboard text',                      chipKind: 'clipboard' },
+    { token: '@tabs',       description: 'markdown table of every open tab',           chipKind: 'tabs' },
     { token: '@tab:',       description: 'one tab — id or substring of title/url', insert: '@tab:' },
+    { token: '@bookmark:',  description: 'search bookmarks by name',              insert: '@bookmark:' },
   ];
   /** Native messaging caps frames near 4MB. base64 inflates ~1.33×. */
   private static readonly ATTACHMENT_TOTAL_LIMIT = 3 * 1024 * 1024;
@@ -179,6 +192,10 @@ export class AnyaApp extends LitElement {
     void this.loadChats();
     void this.loadQuickPrompts();
     window.addEventListener('keydown', this.onGlobalKey);
+    // Listen for page-bridge messages (context attachments, field tracking).
+    chrome.runtime.onMessage.addListener(this.onPageBridgeMessage);
+    // Check for pending context attachments buffered before the sidebar opened.
+    void this.loadPendingAttachments();
     // Hidden dev escape hatch — invisible to users
     (window as any).anya = {
       ping: () => this.bridgeSend({ type: 'ping' }),
@@ -285,6 +302,8 @@ export class AnyaApp extends LitElement {
     this.unsubMessage?.();
     this.unsubDisconnect?.();
     window.removeEventListener('keydown', this.onGlobalKey);
+    chrome.runtime.onMessage.removeListener(this.onPageBridgeMessage);
+    if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
     // Flush any debounced persist before tearing down so the latest state
     // survives reload, then clear the timer.
     if (this.persistTimer != null) {
@@ -880,6 +899,29 @@ export class AnyaApp extends LitElement {
       case 'manage_bookmarks': {
         return await this.execManageBookmarks(args);
       }
+      case 'get_attached': {
+        // Unified tool: fetch fresh content of an attached element or field.
+        // Accepts ctxId (for elements) or fieldId (for fields) — one or the other.
+        const tabId = Number(args.tabId || 0);
+        const ctxId = args.ctxId ? String(args.ctxId) : '';
+        const fieldId = args.fieldId ? String(args.fieldId) : '';
+        if (!ctxId && !fieldId) throw new Error('get_attached: ctxId or fieldId required');
+        const targetTab = tabId || (await this.getActiveTab()).id;
+        if (!targetTab) throw new Error('get_attached: no target tab');
+
+        if (ctxId) {
+          const resp = await chrome.tabs.sendMessage(targetTab, { type: 'anya-read-context', ctxId });
+          if (resp?.ok) return resp.content;
+          // Fallback to cached content in chip.
+          const chip = this.contextAttachments.find((a) => a.ref?.ctxId === ctxId);
+          if (chip) return chip.content + (chip.fullLength && chip.fullLength > ATTACHMENT_VALUE_CAP ? '\n[from cache — element may have been removed from page]' : '');
+          throw new Error(resp?.error || 'Element not found');
+        } else {
+          const resp = await chrome.tabs.sendMessage(targetTab, { type: 'anya-field-read', fieldId });
+          if (resp?.ok) return resp.value;
+          throw new Error(resp?.error || 'Field not found');
+        }
+      }
       case 'resolve_pw_tab': {
         // Bridge-internal: locate which chrome tab a Playwright session is
         // bound to. URL-first; only scans for the injected marker when
@@ -1304,6 +1346,7 @@ export class AnyaApp extends LitElement {
     ta.value = '';
     this.syncDraft('');
     this.pendingAttachments = [];
+    this.contextAttachments = [];
     this.scrollToBottom();
 
     void this.dispatchPrompt(chatId, text, attachments, mode);
@@ -1408,6 +1451,95 @@ export class AnyaApp extends LitElement {
     }
   }
 
+  // ----- page-bridge: context attachments + field tracking ----------------
+
+  private onPageBridgeMessage = (
+    msg: { type: string; field?: FocusedField; attachment?: ContextAttachment },
+    sender: chrome.runtime.MessageSender,
+  ): void => {
+    // Silent field tracking — powers Insert/Append buttons on bubbles.
+    if (msg.type === 'anya-field-focus' && msg.field && sender.tab?.id != null) {
+      if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
+      this.focusedField = { ...msg.field, tabId: sender.tab.id };
+    } else if (msg.type === 'anya-field-blur') {
+      if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
+      this.fieldBlurTimer = setTimeout(() => { this.focusedField = null; }, 2000);
+    }
+    // Context attachment — "Add to Anya" right-click or Alt+A.
+    if (msg.type === 'anya-attach' && msg.attachment) {
+      const tabId = sender.tab?.id;
+      const ref = msg.attachment.ref ? { ...msg.attachment.ref, tabId: msg.attachment.ref.tabId ?? tabId } : (tabId ? { tabId } : undefined);
+      const att: ContextAttachment = {
+        ...msg.attachment,
+        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        ref,
+      };
+      this.contextAttachments = [...this.contextAttachments, att];
+      // Clear session buffer since we handled it live.
+      chrome.storage.session.remove('anya-pending-attach').catch(() => {});
+    }
+  };
+
+  private removeAttachment(id: string): void {
+    this.contextAttachments = this.contextAttachments.filter((a) => a.id !== id);
+  }
+
+  private clearAttachments(): void {
+    this.contextAttachments = [];
+  }
+
+  /** Load any context attachments buffered in session storage before the
+   *  sidebar was open. Clears them after loading. */
+  private async loadPendingAttachments(): Promise<void> {
+    try {
+      const result = await chrome.storage.session.get('anya-pending-attach');
+      const pending = result?.['anya-pending-attach'];
+      if (Array.isArray(pending) && pending.length > 0) {
+        await chrome.storage.session.remove('anya-pending-attach');
+        for (const att of pending) {
+          if (att && typeof att === 'object' && att.kind && att.content) {
+            this.contextAttachments = [...this.contextAttachments, {
+              ...att,
+              id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            }];
+          }
+        }
+      }
+    } catch { /* session storage may not be available */ }
+  }
+
+  /** Check if any attached context is a field (enables field-mode prompt). */
+  private get hasFieldAttachment(): boolean {
+    return this.contextAttachments.some((a) => a.kind === 'field');
+  }
+
+  /**
+   * Fill the focused field on the page with the given text.
+   */
+  private async fillField(text: string, mode: 'replace' | 'append' = 'replace'): Promise<void> {
+    const f = this.focusedField;
+    if (!f) return;
+    try {
+      await chrome.tabs.sendMessage(f.tabId, {
+        type: 'anya-field-fill',
+        fieldId: f.fieldId,
+        text,
+        mode,
+      });
+      this.pushSystem(
+        this.currentChatId,
+        `Inserted into field${f.label ? ` "${f.label}"` : ''} on ${new URL(f.pageUrl).hostname}.`,
+        'normal',
+      );
+    } catch (err) {
+      this.pushSystem(
+        this.currentChatId,
+        `Could not fill field: ${err}. The page may have navigated or the field may no longer exist.`,
+        'error',
+      );
+    }
+  }
+
   private async dispatchPrompt(
     chatId: string,
     text: string,
@@ -1422,6 +1554,40 @@ export class AnyaApp extends LitElement {
         const url = tab.url ?? '(unknown url)';
         const title = (tab.title ?? '').replace(/\s+/g, ' ').trim() || '(untitled)';
         prompt = `[Active tab: ${url} — ${title}]\n\n${prompt}`;
+      }
+      // Inject context attachments (from right-click "Add to Anya" / @mentions / Alt+A).
+      if (this.contextAttachments.length > 0) {
+        const ctxBlocks = this.contextAttachments.map((a) => {
+          const lines: string[] = [];
+          lines.push(`${a.icon} ${a.label}` + (a.fullLength ? ` (${a.fullLength.toLocaleString()} chars)` : ''));
+
+          // Field attachments get special instructions.
+          if (a.kind === 'field') {
+            lines.push(a.content);
+            if (a.ref?.fieldId) lines.push(`→ Fresh value: call get_attached({ tabId: ${a.ref.tabId ?? 'active'}, fieldId: "${a.ref.fieldId}" })`);
+            lines.push('Respond with ONLY the text to insert — no markdown, no explanation, no quotes.');
+            return lines.join('\n');
+          }
+
+          // By-value: content fits within cap → inline fully.
+          if (!a.fullLength || a.fullLength <= ATTACHMENT_VALUE_CAP) {
+            lines.push(a.content);
+          } else {
+            // Truncated — inline what we have + tell model how to fetch full.
+            lines.push(a.content);
+            lines.push(`[truncated at ${ATTACHMENT_VALUE_CAP.toLocaleString()} of ${a.fullLength.toLocaleString()} chars]`);
+          }
+
+          // By-reference fetch instructions.
+          if (a.ref?.ctxId) {
+            lines.push(`→ Fresh/full content: call get_attached({ tabId: ${a.ref.tabId ?? 'active'}, ctxId: "${a.ref.ctxId}" })`);
+          } else if (a.kind === 'page') {
+            lines.push(`→ Fresh/full content: call get_tab_content({ tabId: ${a.ref?.tabId ?? 'active'} })`);
+          }
+
+          return lines.join('\n');
+        });
+        prompt = '[Context]\n\n' + ctxBlocks.join('\n\n') + '\n\n[Message]\n' + prompt;
       }
     } catch (err) {
       console.warn('[Anya] context prep failed; sending raw prompt', err);
@@ -1724,10 +1890,27 @@ export class AnyaApp extends LitElement {
   }
 
   /** Replace the trigger run with the chosen completion text. */
-  private applyAutocomplete(item: { token: string; insert?: string }): void {
+  private applyAutocomplete(item: { token: string; insert?: string; chipKind?: string }): void {
     const ac = this.autocomplete;
     const ta = this.textarea;
     if (!ac || !ta) return;
+
+    // If this @-item produces a context chip, resolve it and add as chip
+    // instead of inserting the token text into the composer.
+    if (ac.kind === 'at' && item.chipKind) {
+      // Remove the typed @... text from the composer.
+      const caret = ta.selectionStart ?? ta.value.length;
+      ta.value = ta.value.slice(0, ac.startIdx) + ta.value.slice(caret);
+      ta.selectionStart = ta.selectionEnd = ac.startIdx;
+      ta.focus();
+      this.syncDraft(ta.value);
+      this.autocomplete = null;
+      // Resolve asynchronously and add chip.
+      void this.resolveAtMentionChip(item.chipKind, item.token);
+      return;
+    }
+
+    // Default: insert text into composer (slash commands, @tab:<query>).
     const caret = ta.selectionStart ?? ta.value.length;
     const insertText = item.insert ?? item.token;
     ta.value = ta.value.slice(0, ac.startIdx) + insertText + ta.value.slice(caret);
@@ -1736,6 +1919,60 @@ export class AnyaApp extends LitElement {
     ta.focus();
     this.syncDraft(ta.value);
     this.autocomplete = null;
+  }
+
+  /** Resolve an @-mention into a ContextAttachment chip. */
+  private async resolveAtMentionChip(chipKind: string, token: string): Promise<void> {
+    const CAP = ATTACHMENT_VALUE_CAP;
+    const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const trunc = (s: string) => s.length > CAP ? s.slice(0, CAP) : s;
+
+    try {
+      let att: ContextAttachment | null = null;
+
+      if (chipKind === 'page') {
+        const tab = await this.getActiveTab().catch(() => null);
+        if (tab) {
+          const result = await this.executeTool('get_tab_content', { tabId: tab.id });
+          const text = typeof result === 'string' ? result : JSON.stringify(result);
+          const title = tab.title || tab.url || 'Page';
+          att = { id, kind: 'page', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full page · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
+        }
+      } else if (chipKind === 'selection') {
+        const result = await this.executeTool('get_selection', {});
+        const text = typeof result === 'string' ? result : '';
+        if (text) {
+          att = { id, kind: 'selection', icon: '✂️', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
+        }
+      } else if (chipKind === 'url') {
+        const tab = await this.getActiveTab().catch(() => null);
+        if (tab?.url) {
+          att = { id, kind: 'url', icon: '🔗', label: tab.url.length > 60 ? tab.url.slice(0, 57) + '…' : tab.url, preview: tab.url, content: tab.url, pageUrl: tab.url };
+        }
+      } else if (chipKind === 'title') {
+        const tab = await this.getActiveTab().catch(() => null);
+        if (tab?.title) {
+          att = { id, kind: 'title', icon: '📌', label: tab.title, preview: tab.title, content: tab.title, pageUrl: tab.url ?? '' };
+        }
+      } else if (chipKind === 'clipboard') {
+        const text = await navigator.clipboard.readText().catch(() => '');
+        if (text) {
+          att = { id, kind: 'clipboard', icon: '📋', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
+        }
+      } else if (chipKind === 'tabs') {
+        const result = await this.executeTool('list_tabs', {});
+        const tabs = Array.isArray(result) ? result : [];
+        const md = tabs.map((t: any) => `| ${t.tabId} | ${t.active ? '→' : ''} | ${t.title} | ${t.url} |`).join('\n');
+        const content = `| id | active | title | url |\n| --- | --- | --- | --- |\n${md}`;
+        att = { id, kind: 'tabs', icon: '📑', label: `${tabs.length} open tabs`, preview: `${tabs.length} tabs`, content: trunc(content), fullLength: content.length, pageUrl: '' };
+      }
+
+      if (att) {
+        this.contextAttachments = [...this.contextAttachments, att];
+      }
+    } catch (err) {
+      console.warn(`[Anya] failed to resolve ${token}:`, err);
+    }
   }
 
   /** Intercept clipboard images on the textarea. */
@@ -1919,6 +2156,15 @@ export class AnyaApp extends LitElement {
       ${m.text || (!m.pending && !isThinking)
         ? html`<div class="bubble">
             ${unsafeHTML(html_)}${m.pending && m.text ? html`<span class="caret"></span>` : nothing}
+            ${!m.pending && m.text ? html`
+              <div class="bubble-actions">
+                <button class="bubble-action-btn" @click=${() => this.copyMessage(m)} title="Copy">📋</button>
+                ${this.focusedField ? html`
+                  <button class="bubble-action-btn" @click=${() => this.fillField(m.text)} title="Insert into field">↗</button>
+                  <button class="bubble-action-btn" @click=${() => this.fillField(m.text, 'append')} title="Append to field">＋</button>
+                ` : nothing}
+              </div>
+            ` : nothing}
           </div>`
         : nothing}
     `;
@@ -2089,6 +2335,21 @@ export class AnyaApp extends LitElement {
 
       <footer>
         ${this.autocomplete ? this.renderAutocomplete() : nothing}
+        ${this.contextAttachments.length > 0 ? html`
+          <div class="ctx-strip">
+            <div class="ctx-strip-header">
+              <span class="ctx-strip-label">📎 CONTEXT</span>
+              <button class="ctx-clear-btn" @click=${() => this.clearAttachments()} title="Clear all">clear</button>
+            </div>
+            ${this.contextAttachments.map((a) => html`
+              <div class="ctx-chip" title=${a.preview}>
+                <span class="ctx-chip-icon">${a.icon}</span>
+                <span class="ctx-chip-label">${a.label}</span>
+                <button class="ctx-chip-x" @click=${() => this.removeAttachment(a.id)} title="Remove">×</button>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
         ${this.pendingAttachments.length > 0 ? html`
           <div class="att-strip" title="Attachments queued for next message">
             ${this.pendingAttachments.map((a, i) => html`

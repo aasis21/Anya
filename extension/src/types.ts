@@ -123,3 +123,65 @@ export interface DebugEntry {
 }
 
 export const DEBUG_MAX_ENTRIES = 500;
+
+/**
+ * Metadata about a text field the user is focused on in a page.
+ * Sent by the page-bridge content script on every focusin event.
+ */
+export interface FocusedField {
+  fieldId: string;
+  tabId: number;
+  tagName: string;
+  inputType: string | null;
+  placeholder: string;
+  label: string;
+  ariaLabel: string;
+  currentValue: string;
+  maxLength: number | null;
+  isContentEditable: boolean;
+  pageUrl: string;
+  pageTitle: string;
+}
+
+/**
+ * A context attachment shown as a chip above the composer. Added via:
+ * - Right-click "Add to Anya" (element, selection, field, link, page)
+ * - @-mention autocomplete (@tab, @selection, @tabs, @clipboard, @url, @title)
+ * - Alt+A keyboard shortcut
+ *
+ * Multiple chips can stack. All are injected into the prompt on send.
+ */
+export type AttachmentKind =
+  | 'element'     // right-click on a DOM element
+  | 'selection'   // selected text on page, or @selection
+  | 'page'        // full page content, or @tab
+  | 'field'       // editable text field
+  | 'link'        // right-click on an <a> element
+  | 'tabs'        // @tabs — list of all open tabs
+  | 'clipboard'   // @clipboard
+  | 'url'         // @url — just the active tab URL
+  | 'title'       // @title — just the active tab title
+  | 'bookmark';   // @bookmark — a saved bookmark by search
+
+/** Max chars stored by-value in an attachment. Larger content is truncated;
+ *  the model can fetch the full version via reference tools. */
+export const ATTACHMENT_VALUE_CAP = 5_000;
+
+export interface ContextAttachment {
+  id: string;
+  kind: AttachmentKind;
+  icon: string;
+  label: string;
+  preview: string;
+  /** By-value content, capped at ATTACHMENT_VALUE_CAP chars. */
+  content: string;
+  /** By-reference coordinates for fetching fresh/full content on demand. */
+  ref?: {
+    tabId?: number;
+    ctxId?: string;       // data-anya-ctx attribute for elements
+    fieldId?: string;     // data-anya-field-id for fields
+  };
+  /** Total char count of the original content (before truncation). */
+  fullLength?: number;
+  pageUrl: string;
+}

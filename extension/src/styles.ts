@@ -471,6 +471,108 @@ export const sidebarStyles = css`
       font-size: 0.92em;
       white-space: nowrap;
     }
+    /* ---------- CONTEXT ATTACHMENT STRIP ---------- */
+    .ctx-strip {
+      padding: 6px 10px;
+      border-bottom: 1px dashed var(--bg-rule);
+      background: color-mix(in srgb, var(--accent) 5%, var(--bg));
+      animation: ctxStripIn 0.2s ease-out;
+    }
+    @keyframes ctxStripIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ctx-strip-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .ctx-strip-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--fg-soft, var(--fg));
+      opacity: 0.6;
+    }
+    .ctx-clear-btn {
+      background: transparent;
+      border: none;
+      color: var(--fg-soft, var(--fg));
+      font-size: 10px;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 0 2px;
+      font-family: inherit;
+    }
+    .ctx-clear-btn:hover { opacity: 1; color: var(--accent); }
+    .ctx-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 6px;
+      margin-bottom: 3px;
+      border-radius: 4px;
+      background: var(--bg);
+      border: 1px solid var(--bg-rule);
+      font-size: 11px;
+      color: var(--fg-soft, var(--fg));
+      animation: ctxStripIn 0.15s ease-out;
+    }
+    .ctx-chip-icon { font-size: 12px; flex-shrink: 0; }
+    .ctx-chip-label {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .ctx-chip-x {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      border: 0;
+      background: transparent;
+      color: var(--fg-soft, var(--fg));
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      opacity: 0.5;
+      border-radius: 3px;
+    }
+    .ctx-chip-x:hover { opacity: 1; background: var(--bg-rule); }
+
+    /* ---------- BUBBLE ACTION ICONS (copy / insert / append) ---------- */
+    .bubble-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 2px;
+      margin-top: 6px;
+      padding-top: 4px;
+      border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .bubble:hover .bubble-actions { opacity: 1; }
+    .bubble-action-btn {
+      background: transparent;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--fg-soft, var(--fg));
+      opacity: 0.6;
+      transition: opacity 0.12s, background 0.12s;
+    }
+    .bubble-action-btn:hover {
+      opacity: 1;
+      background: color-mix(in srgb, var(--fg) 10%, transparent);
+    }
+
     .att-strip {
       display: flex;
       flex-wrap: wrap;

@@ -40,10 +40,12 @@ export default defineConfig({
       input: {
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
+        'page-bridge': resolve(root, 'src/page-bridge.ts'),
       },
       output: {
         entryFileNames: (chunk) => {
           if (chunk.name === 'background') return 'background.js';
+          if (chunk.name === 'page-bridge') return 'page-bridge.js';
           return 'assets/[name].js';
         },
         chunkFileNames: 'assets/[name]-[hash].js',
