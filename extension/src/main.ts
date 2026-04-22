@@ -1557,6 +1557,7 @@ export class AnyaApp extends LitElement {
       case 'image':     return `@image:${safe(att.imageData?.name || 'image')}`;
       case 'folder':    return `@folder:${safe(att.label)}`;
       case 'bookmark':  return `@bookmark:${safe(att.label)}`;
+      case 'history':   return `@history:${safe(att.label)}`;
     }
   }
 
@@ -1915,7 +1916,7 @@ export class AnyaApp extends LitElement {
         const results = await chrome.history.search({ text: '', startTime: Date.now() - 7 * 86_400_000, maxResults: 50 });
         const md = results.map((r) => `| ${r.title ?? ''} | ${r.url ?? ''} | ${r.lastVisitTime ? new Date(r.lastVisitTime).toISOString().slice(0, 16) : ''} |`).join('\n');
         const content = `| title | url | last visit |\n| --- | --- | --- |\n${md}`;
-        att = { kind: 'bookmark', icon: '📜', label: `${results.length} recent pages`, preview: `Last 7 days · ${results.length} pages`, content: trunc(content), fullLength: content.length, pageUrl: '' };
+        att = { kind: 'history', icon: '📜', label: `${results.length} recent pages`, preview: `Last 7 days · ${results.length} pages`, content: trunc(content), fullLength: content.length, pageUrl: '' };
       }
 
       if (att) {
@@ -2070,7 +2071,7 @@ export class AnyaApp extends LitElement {
   private renderMentionedText(text: string) {
     // Matches all @ tokens: original ones (@tab, @selection, etc.) plus
     // attachment references (@element:Name, @field:Name, @image:name, @folder:name, @link:name, @bookmark:name).
-    const rx = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?|element:\S+|field:\S+|image:\S+|folder:\S+|link:\S+|bookmark:\S+)(?=$|[\s.,;!?])/gi;
+    const rx = /@(?:selection|url|title|clipboard|tabs|tab(?::\S+)?|element:\S+|field:\S+|image:\S+|folder:\S+|link:\S+|bookmark:\S+|history:\S+)(?=$|[\s.,;!?])/gi;
     const parts: Array<unknown> = [];
     let last = 0;
     let m: RegExpExecArray | null;

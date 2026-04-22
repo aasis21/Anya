@@ -31,10 +31,11 @@ What it does well:
 • Use your bookmarks as a knowledge graph — "open the order release page", "group these by topic".
 • Bring your repo into the loop — point Anya at a local project folder and it gets the full Copilot toolbelt (read, edit, grep, shell, MCP) right alongside the tab it's helping with.
 
-Three little prefixes, that's the whole language:
-• @  pulls in browser context (@tab, @selection, @tabs, @clipboard)
-• /  acts on the sidebar (/new, /pin, /search, /export)
-• #  references your saved things (bookmarks, prior chats)
+Three ways to give Anya context:
+• Right-click anything on a page → "Add to Anya" captures it as context
+• 📎 menu in the composer → attach tabs, bookmarks, history, clipboard, local folders
+• @ references in the composer → @tab, @selection, @clipboard, @tabs, @bookmark:query
+• / commands → /new, /pin, /search, /export, /open
 
 REQUIRES a one-time install of the local bridge from https://github.com/aasis21/Anya — the extension alone cannot work without it. Install is one command in PowerShell or bash.
 

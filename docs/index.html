@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Anya — GitHub Copilot, in your browser</title>
-<meta name="description" content="A Chromium sidebar Copilot agent that wraps @github/copilot-sdk via a local native-messaging bridge. Real streaming, real tools, your real browser." />
+<meta name="description" content="GitHub Copilot in your browser sidebar. Reads tabs, drives pages, searches bookmarks — automatically. Point at anything for precision." />
 <meta property="og:title" content="Anya" />
-<meta property="og:description" content="GitHub Copilot, in your browser. Powered by the Copilot SDK." />
+<meta property="og:description" content="GitHub Copilot in your browser. It reads your tabs, drives your pages, and knows your bookmarks." />
 <meta property="og:type" content="website" />
 <meta name="theme-color" content="#0a0c10" />
 
@@ -40,7 +40,7 @@
   </a>
   <nav class="nav-links">
     <a href="#what">what</a>
-    <a href="#language">how</a>
+    <a href="#how">how</a>
     <a href="#install">install</a>
     <a href="#under">under the hood</a>
     <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">github ↗</a>
@@ -66,7 +66,7 @@
   </h1>
 
   <p class="hero-sub">
-    Anya brings GitHub Copilot into your browser sidebar — the same agent, now sitting next to the pages you're actually working in. Read tabs, drive forms, dig across bookmarks, and optionally point it at a local repo so it can reason over your code <em>while</em> driving your tabs.
+    Anya puts GitHub Copilot in your browser sidebar — it reads your tabs, searches your bookmarks, checks your history, and drives your pages. Point at something specific when you need precision.
   </p>
 
   <div class="hero-install">
@@ -92,18 +92,18 @@
   <ol class="feature-grid">
     <li>
       <span class="feat-num">01</span>
-      <h3>Ask about what's on screen.</h3>
-      <p>Summarize a 600-line PR, compare what's across your tabs, search your bookmarks by intent, read highlighted text. Just ask — Copilot sees your browser automatically.</p>
+      <h3>Sees your browser.</h3>
+      <p>Ask about any page and Anya reads it — tabs, bookmarks, history, selections. Need precision? Right-click → "Add to Anya" to pin a specific section, table, or field. Or use the 📎 menu and <code>@</code> references.</p>
     </li>
     <li>
       <span class="feat-num">02</span>
-      <h3>Drive your browser, hands-free.</h3>
-      <p>Repetitive forms, multi-step wizards, "find the right button in the new ADO UI." Describe the outcome; Anya drives <em>your</em> logged-in browser to get there. No reauth, no captchas you have to redo.</p>
+      <h3>Acts on your browser.</h3>
+      <p>Fill forms, click through wizards, navigate dashboards — Anya drives <em>your</em> logged-in browser via Playwright. Focus a text field and ask what to write — one click inserts it.</p>
     </li>
     <li>
       <span class="feat-num">03</span>
-      <h3>Bring your code into the loop.</h3>
-      <p>Point a chat at a local project folder and the SDK loads your skills, prompts, and file tools from there — reason over your code <em>while</em> driving the tab that depends on it.</p>
+      <h3>Your repo too.</h3>
+      <p>Attach a local folder — the SDK loads your skills, prompts, and file tools. Read files, grep, edit, run shell commands, all while the AI is also looking at your browser.</p>
     </li>
     <li>
       <span class="feat-num">04</span>
@@ -113,53 +113,38 @@
   </ol>
 </section>
 
-<section id="language" class="language">
+<section id="how" class="language">
   <header class="section-head">
-    <span class="kicker">02 · How it connects to your browser</span>
-    <h2>Browser tools <br/>the editor doesn't have.</h2>
-    <p class="section-lede">Anya gives the same Copilot agent a set of browser-native tools it can call autonomously. You just talk — it decides what to use.</p>
+    <span class="kicker">02 · What Anya can do</span>
+    <h2>Your browser is<br/>its workspace.</h2>
+    <p class="section-lede">In the editor, Copilot reads your files. Here, Anya reads your tabs, bookmarks, and history — automatically. When you need it to focus, point at exactly what you mean.</p>
   </header>
 
   <div class="prefix-row">
     <article class="prefix">
-      <div class="prefix-glyph at">C</div>
-      <h3>Read the browser</h3>
-      <p class="prefix-meaning">Read tabs, pages, selections, and bookmarks — always available, no setup needed.</p>
+      <div class="prefix-glyph at">🤖</div>
+      <h3>Just ask</h3>
+      <p class="prefix-meaning">Talk naturally. On top of Copilot's standard tools, Anya has built-in browser powers — it reads pages, searches bookmarks, checks history, and drives tabs on its own.</p>
       <ul class="prefix-list">
-        <li><code>get_active_tab</code></li>
-        <li><code>list_tabs</code></li>
-        <li><code>get_tab_content</code></li>
-        <li><code>get_selection</code></li>
-        <li><code>manage_bookmarks</code></li>
+        <li>"Summarize this page"</li>
+        <li>"Find my Redis bookmark"</li>
+        <li>"What did I look at yesterday?"</li>
+        <li>"Fill this form"</li>
+        <li>"What's across my tabs?"</li>
+        <li>"Click the submit button"</li>
       </ul>
     </article>
 
     <article class="prefix">
-      <div class="prefix-glyph slash">A</div>
-      <h3>Drive the browser</h3>
-      <p class="prefix-meaning">Click, type, fill forms, navigate, and screenshot — on your real logged-in tabs via Playwright.</p>
+      <div class="prefix-glyph at">+</div>
+      <h3>Point when it matters</h3>
+      <p class="prefix-meaning">Right-click → "Add to Anya", click 📎, or type <code>@</code> to attach exactly what you mean.</p>
       <ul class="prefix-list">
-        <li><code>connect_browser</code></li>
-        <li><code>drive_tab</code></li>
-        <li><code>open_tab</code></li>
-        <li><code>close_tab</code></li>
-        <li><code>focus_tab</code></li>
-        <li><code>manage_bookmarks</code></li>
-      </ul>
-    </article>
-
-    <article class="prefix">
-      <div class="prefix-glyph hash">S</div>
-      <h3>Composer shortcuts</h3>
-      <p class="prefix-meaning">Inline context with <code>@</code> or run sidebar commands with <code>/</code> — optional power-user prefixes.</p>
-      <ul class="prefix-list">
-        <li><code>@tab</code></li>
-        <li><code>@selection</code></li>
-        <li><code>@tabs</code></li>
-        <li><code>/open &lt;folder&gt;</code></li>
-        <li><code>/new</code></li>
-        <li><code>/export</code></li>
-        <li><code>/help</code></li>
+        <li>📄 Sections, tables, elements</li>
+        <li>✏️ Text fields · 🔗 Links</li>
+        <li>🌐 Tabs · 📋 Clipboard · ✂️ Selection</li>
+        <li>🔖 Bookmarks · 📜 History</li>
+        <li>📁 Local folders · 🖼️ Images</li>
       </ul>
     </article>
   </div>
@@ -169,7 +154,10 @@
   <header class="section-head">
     <span class="kicker">03 · Install</span>
     <h2>One command. <br/>Every Chromium browser.</h2>
-    <p class="section-lede">Requires Node 20+, a Copilot CLI login, and <code>playwright-cli</code>. The installer handles the rest.</p>
+    <p class="section-lede">Requires Node 20+, a <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot subscription</a>, and <code>playwright-cli</code>. The installer handles the rest.</p>
+  </header>
+
+  <p style="text-align:center; font-size: 0.85rem; opacity: 0.6; margin: -0.5rem 0 1.5rem;">Works on: <strong>Edge</strong> · <strong>Chrome</strong> · <strong>Brave</strong> · <strong>Vivaldi</strong> · <strong>Chromium</strong> · <strong>Arc</strong></p>
   </header>
 
   <div class="install-grid">
@@ -218,7 +206,7 @@
         <li>Toggle <em>Developer mode</em></li>
         <li><em>Load unpacked</em> → pick <code>~/Anya/extension/dist/</code></li>
         <li>Pin the action icon → click → sidebar opens</li>
-        <li>Start chatting — Copilot is now in your browser</li>
+        <li>Start chatting — right-click anything to add context</li>
       </ol>
 
       <p style="font-size: 0.85rem; opacity: 0.7; margin: 1.5rem 0 0.5rem;">To update, run the same command again. See the <a href="https://github.com/aasis21/Anya/blob/main/README.md" target="_blank" rel="noopener">README</a> for options, uninstalling, and developing locally.</p>
@@ -229,13 +217,13 @@
 <section id="under" class="diagram-section">
   <header class="section-head centered">
     <span class="kicker">04 · Under the hood</span>
-    <h2>Two small pieces. <br/>That's the whole thing.</h2>
-    <p class="section-lede">A sidebar extension talks to a tiny Node bridge on your laptop. The bridge wraps the official <code>@github/copilot-sdk</code> and shells out to Playwright when Anya needs to drive a tab. No servers, no relays, no telemetry.</p>
+    <h2>Simple architecture.<br/>Serious power.</h2>
+    <p class="section-lede">A sidebar extension, a content script on every page, and a local Node bridge. No servers. No relays. Everything on your machine.</p>
   </header>
   <div class="arch-diagram">
     <div class="arch-box">
-      <strong>Browser sidebar</strong>
-      <span>Lit + marked</span>
+      <strong>Sidebar</strong>
+      <span>chat UI · context chips · 📎 menu</span>
     </div>
     <div class="arch-wire">
       <span class="arch-arrow">◀ ─── JSON frames ─── ▶</span>
@@ -243,28 +231,29 @@
     </div>
     <div class="arch-box">
       <strong>Node bridge</strong>
-      <span>@github/copilot-sdk + tools</span>
+      <span>@github/copilot-sdk · browser tools</span>
     </div>
     <div class="arch-leaf">
-      <span class="arch-down">↓</span>
-      <span>chrome.tabs / scripting</span>
-      <strong>browser context</strong>
+      <span class="arch-down">↑</span>
+      <span>right-click · Alt+A · field tracking</span>
+      <strong>Page bridge</strong>
     </div>
     <div class="arch-leaf-spacer"></div>
     <div class="arch-leaf">
       <span class="arch-down">↓</span>
-      <span>shells out to</span>
+      <span>click · type · screenshot · navigate</span>
       <strong>playwright-cli</strong>
     </div>
   </div>
+  <p style="text-align: center; font-size: 0.85rem; opacity: 0.5; margin-top: 2rem;">The page bridge runs as a content script on every page — captures elements you right-click, tracks text fields, and sends context to the sidebar. The Node bridge wraps the Copilot SDK and runs tools. That's it.</p>
 </section>
 
 <section class="quote">
   <p>
-    <span class="quote-mark">“</span>The browser is the user's primary workspace.<br/>
-    Most requests are about the page — so I look there <em>first</em>.<span class="quote-mark">”</span>
+    <span class="quote-mark">“</span>Your browser is my workspace.<br/>
+    Tabs are my files. Bookmarks are my knowledge graph.<span class="quote-mark">”</span>
   </p>
-  <cite>— Anya, system prompt</cite>
+  <cite>— Anya</cite>
 </section>
 
 <footer class="foot">

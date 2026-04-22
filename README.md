@@ -4,46 +4,53 @@
 
 Anya is an MV3 sidebar extension for any Chromium-based browser — Edge, Chrome,
 Chromium, Brave, Vivaldi, Arc — that talks to a local Node bridge wrapping
-[`@github/copilot-sdk`]. The result is the same agentic Copilot you run in your
-terminal — streaming output, tool calls, MCP servers — sitting next to your
-tabs, with a side helping of browser automation via Playwright.
+[`@github/copilot-sdk`]. On top of Copilot's standard tools (files, shell,
+sub-agents, MCP), Anya adds browser-native powers: it reads your tabs, searches
+bookmarks, checks history, drives pages via Playwright, and lets you right-click
+anything on a page to attach it as context.
 
 ```
 ┌────────────────────┐    JSON frames    ┌────────────────────┐
 │  Browser sidebar   │ ◀─────────────▶   │  Node bridge       │
-│  (Lit + marked)    │  Native Messaging │  @github/copilot-  │
-│                    │                   │  sdk + tools       │
+│  chat UI · 📎 menu │  Native Messaging │  @github/copilot-  │
+│  context chips     │                   │  sdk + tools       │
 └────────────────────┘                   └────────────────────┘
-        │                                          │
-        │ chrome.tabs / scripting                  │ shells out to
-        ▼                                          ▼
-   browser context                          playwright-cli
+        ↑                                          │
+        │ right-click · Alt+A · field tracking     │ shells out to
+        │                                          ▼
+   page-bridge.ts                           playwright-cli
+   (content script)
 ```
 
 ---
 
 ## What you get
 
-- **Real Copilot, real streaming.** The bridge owns one `CopilotClient` and one
-  `CopilotSession` per chat thread, so messages stream token-by-token with
-  proper tool-call lifecycle events.
-- **Multi-chat with persistence.** Drawer of chats, each with its own
-  bridge-side session. Pin, tag, search, rename, delete, export to Markdown.
-  Survives restarts via `chrome.storage.local`.
-- **Browser context as first-class input.** The composer speaks three
-  languages — `/` for client commands, `@` for ambient browser context,
-  `#` (planned) for named references. See [Composer language](#composer-language).
-- **Playwright automation built in.** A `drive_*` tool family (`drive_tab`,
-  `drive_browser`, `drive_context`, `drive_devtools`) shells out to
-  `playwright-cli` so the agent can drive your real, logged-in browser — click,
-  type, screenshot, read cookies, dump console — with the same auth your tabs
-  already have.
-- **Inline tool cards.** Every tool call renders as a VS Code-style card with
-  args, progress, and result preview. Click to expand.
-- **Live debug panel.** A 🐛 button opens a trace of every Native Messaging
-  frame and bridge log line. Click any row to see the full payload.
-- **Hotkeys, slash commands.** Ctrl+B/N/K/L/. and Ctrl+1..9, plus `/help`,
-  `/pin`, `/stop`, `/tag`, `/clear`, `/export`, `/quick`.
+- **Browser tools, autonomous.** Anya reads tabs, searches bookmarks, checks
+  history, lists open tabs, reads selections — on its own. Just ask.
+- **"Add to Anya" context menu.** Right-click any element, field, link, or
+  selection on a page. Anya captures it as a context chip with the element's
+  text, tagged with `data-anya-ctx` for fresh re-reads.
+- **📎 attach menu + @ references.** Click 📎 or type `@tab`, `@selection`,
+  `@clipboard`, `@tabs`, `@bookmark:query` in the composer. All produce the
+  same context chips — attachments are the content, @ tokens are just labels.
+- **Field fill.** Focus a text field, ask Anya what to write. One click
+  inserts the response — dispatches `input` + `change` events so React /
+  Angular / Vue forms pick it up.
+- **Playwright automation.** `drive_tab`, `drive_browser`, `drive_context`,
+  `drive_devtools` — Anya drives your real, logged-in browser. Same cookies,
+  same session.
+- **Local folders.** Attach a folder via 📎 → the SDK loads skills, prompts,
+  and file tools from that repo.
+- **Multi-chat with persistence.** Drawer with pin, tag, search, rename,
+  delete, export to Markdown. Survives restarts via `chrome.storage.local`.
+- **Streaming + tool cards.** Token-by-token streaming. Every tool call
+  renders as an expandable card with args, progress, and result preview.
+- **Live debug panel.** 🐛 button traces every Native Messaging frame.
+- **Hotkeys + slash commands.** `Ctrl+B/N/K/L/.`, `Ctrl+1..9`, plus
+  `/help`, `/pin`, `/stop`, `/tag`, `/clear`, `/export`, `/open`.
+- **Nothing leaves your machine.** No Anya server, no telemetry, no cloud
+  sync. Chats in `chrome.storage`, bridge on localhost.
 
 See [`design.md`](./design.md) for the full architecture.
 
@@ -54,33 +61,31 @@ See [`design.md`](./design.md) for the full architecture.
 ```
 Anya/
 ├── README.md
-├── design.md                     # full design spec
-├── setup.ps1                     # one-shot install/build/test/register (PowerShell 7+)
-├── setup.sh                      # one-shot install/build/test/register (bash, cross-platform)
+├── design.md                     # architecture spec
+├── setup.ps1                     # one-shot install/build/register (PowerShell 7+)
+├── setup.sh                      # one-shot install/build/register (bash)
 ├── extension/                    # Chromium MV3 extension (Lit + Vite)
 │   ├── manifest.json
 │   ├── sidebar.html
 │   ├── vite.config.ts
 │   └── src/
-│       ├── main.ts               # the <anya-app> Lit component
-│       ├── styles.ts             # extracted CSS for the sidebar
-│       ├── types.ts              # Chat / ChatMessage / ToolCall / ...
+│       ├── main.ts               # <anya-app> Lit component (UI, chat, tools, attachments)
+│       ├── styles.ts             # extracted CSS
+│       ├── types.ts              # ContextAttachment, ChatMessage, Chat, etc.
 │       ├── native-bridge.ts      # chrome.runtime.connectNative wrapper
-│       └── background.ts         # opens the side panel on action click
+│       ├── background.ts         # side panel + "Add to Anya" context menu
+│       └── page-bridge.ts        # content script: element capture, field tracking, fill
 └── bridge/                       # Node Native Messaging host
     ├── manifest.template.json
-    ├── launcher.cmd              # Windows launcher
-    ├── launcher.sh               # POSIX launcher (macOS/Linux)
-    ├── install.ps1               # multi-Chromium NM registration (cross-platform, PS 7+)
-    ├── uninstall.ps1
-    ├── install.sh                # multi-Chromium NM registration (bash, cross-platform)
-    ├── uninstall.sh
+    ├── launcher.cmd / launcher.sh
+    ├── install.ps1 / install.sh
+    ├── uninstall.ps1 / uninstall.sh
     └── src/
-        ├── host.ts               # NM stdio loop + frame router
-        ├── copilot-bridge.ts     # SessionManager (one Copilot session per chat)
-        ├── sessions.ts           # single-bound Playwright tab + polling
-        ├── tools.ts              # context tools + browser tool definitions
-        ├── tool-rpc.ts           # bridge → extension tool RPC
+        ├── host.ts               # NM stdio loop + frame router + folder-pick
+        ├── copilot-bridge.ts     # SessionManager (one CopilotSession per chat)
+        ├── sessions.ts           # single-bound Playwright tab
+        ├── tools.ts              # SDK tool definitions
+        ├── tool-rpc.ts           # bridge → extension RPC
         ├── native-messaging.ts   # length-prefixed JSON framing
         ├── config.ts             # ~/.anya/config.json loader
         ├── paths.ts              # cross-platform data-dir resolver
@@ -113,7 +118,7 @@ loaded by `bridge/src/copilot-bridge.ts`.
 - **A Chromium-based browser** with developer-mode extensions enabled. Anya
   is installed and tested in: **Microsoft Edge, Google Chrome, Chromium,
   Brave, Vivaldi, Arc** (Arc is Windows + macOS only — no Linux build).
-- A logged-in **Copilot CLI** (`copilot auth status`)
+- A [**GitHub Copilot subscription**](https://github.com/features/copilot) (Individual, Business, or Enterprise) with the Copilot CLI logged in (`copilot auth status`)
 - **`@playwright/cli`** for browser automation: `npm i -g @playwright/cli`
 - **Remote debugging enabled** in your browser — open
   `edge://inspect/#remote-debugging` (or `chrome://inspect/...` etc.) and
@@ -280,12 +285,13 @@ delete the `~/Anya` folder if you no longer need it.
 | Icon  | Action                                                       |
 | ----- | ------------------------------------------------------------ |
 | ☰     | Toggle the chat drawer (`Ctrl+B`)                            |
-| ⌕     | Open chat search (`Ctrl+K`)                                  |
+| ＋    | New chat (`Ctrl+N`)                                          |
 | 🐛    | Toggle the bridge debug panel                                |
 | ☀ / ☾ | Toggle light / dark theme (persisted)                        |
 
 ### Chat drawer
 
+- **`⌕`** — search chats (`Ctrl+K`)
 - **`＋`** — new chat (`Ctrl+N`)
 - **`★ / ☆`** — pin / unpin (pinned chats float to the top)
 - **`✎`** — rename
@@ -294,37 +300,59 @@ delete the `~/Anya` folder if you no longer need it.
 - **Tag chips** — click to filter; click _all_ to clear
 - **Per-row stats** — `N msg · ~T tok · age` (relative time)
 
-### Composer language
+### Context attachments
 
-The textarea recognises three prefixes. Each has a distinct, non-overlapping
-purpose so the composer never feels ambiguous:
+Anya uses a **unified context attachment system**. Content arrives as
+**attachments** (context chips above the composer). The user's message
+text contains **@-reference tokens** that point back to those attachments.
 
-| Prefix | Purpose | Mental model | Sent to model? |
-| ------ | ------- | ------------ | -------------- |
-| `/`    | **Commands to the client** — chat lifecycle, UI state, search | "Do something to the sidebar." | No — intercepted |
-| `@`    | **Ambient browser context** — the *here, now* state | "Look at what I'm looking at." | Yes — expanded inline |
-| `#`    | **Named, curated references** (planned) — bookmarks, files, chats by name | "Look up the thing I labelled X." | Yes — would expand inline |
+**Attachments are the content. @ tokens are labels.**
 
-**Why three?** They map to three different cognitive moves the user makes:
-*manage their workspace* (`/`), *point at what's on screen right now* (`@`),
-and *cite something they curated earlier* (`#`). Lumping them together is
-what makes other chat UIs feel mushy.
+Three ways to attach:
 
-**Design principles:**
+| Method | What happens |
+| --- | --- |
+| **Right-click → "Add to Anya"** | Captures the element, field, link, selection, or page you clicked. Smart walk-up finds meaningful containers. |
+| **📎 menu** | Click 📎 in the composer → attach current tab, all tabs, clipboard, bookmarks, history, local folder. |
+| **`@` autocomplete** | Type `@` → pick from the list. Same attachments, keyboard-first. |
 
-1. **`/` never reaches the model.** Client-only — keeps the prompt
-   transcript clean and lets us add UI ops without bloating context.
-2. **`@` is for now-state.** Anything that depends on what the browser
-   is currently showing (active tab, selection, open tabs, clipboard).
-   Expanded **before** the bridge sees the prompt, so the model gets
-   real content and never needs a tool round-trip for these.
-3. **`#` is for named lookups.** Reserved for things you address by
-   name (bookmark titles, folders, file paths, prior chats). Not yet
-   implemented — see the `#` subsection below.
-4. **Ergonomics over completeness.** A token only earns its place if a
-   tool call is too high-friction for the same job. Things the model
-   can fetch on its own (most web search, ad-hoc URLs) intentionally
-   don't get a prefix.
+All three call `attach(kind)` → `commitAttachment(chip)` → inject `@refLabel` at cursor.
+
+#### Attachment kinds
+
+| @ token | Kind | What's captured |
+| --- | --- | --- |
+| `@tab` | 🌐 tab | Full active tab content (≤5K inline, ref for full) |
+| `@selection` | ✂️ selection | Highlighted text on the page |
+| `@clipboard` | 📋 clipboard | System clipboard text |
+| `@tabs` | 📑 tabs | Markdown table of every open tab |
+| `@url` | 🔗 url | Active tab URL |
+| `@title` | 📌 title | Active tab title |
+| `@tab:query` | 🌐 tab | One tab by id or title/url search |
+| `@bookmark:query` | 🔖 bookmark | Bookmark search results |
+| `@element:Name` | 📄 element | Right-clicked DOM element |
+| `@field:Name` | ✏️ field | Right-clicked text field (for AI fill) |
+| `@link:Name` | 🔗 link | Right-clicked link (URL + text) |
+| `@image:name` | 🖼️ image | Pasted/dropped image |
+| `@folder:name` | 📁 folder | Local project folder |
+
+#### How it reaches the model
+
+```
+[Context — attached by the user]
+[1] 🌐 PR #4521 — ref: @tab (25,412 chars)
+... first 5,000 chars ...
+→ call get_tab_content({ tabId: 42 }) for full text
+
+[2] 📄 Change summary — ref: @element:Change-summary (847 chars)
+Change summary: Why? PR1 of a 3-PR Redis migration...
+
+[Message]
+summarize @tab and compare with @element:Change-summary
+```
+
+@ tokens stay as-is in the text. The real content is in the numbered
+attachments. The model reads from there.
 
 #### `/` — slash commands
 
@@ -342,33 +370,8 @@ Client-side only. Never sent to the model.
 | `/search [query]`        | Open chat search, optionally pre-filled (`Ctrl+K`)      |
 | `/export`                | Download the current chat as Markdown                   |
 | `/stop`                  | Cancel the in-flight stream (`Ctrl+.`)                  |
+| `/open <folder>`         | Open a new chat rooted in a local folder                |
 | `/help`                  | Print this list inside the chat                         |
-
-#### `@` — ambient browser context
-
-Expanded inline by the extension *before* the prompt is sent. The model
-sees the resolved content, not the literal `@token`. Restricted URLs
-and empty results return a friendly placeholder so the prompt always
-goes through.
-
-| Token                  | Resolves to                                                                 |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `@tab`                 | Active tab's content as Markdown (Readability), capped at ~30 KB            |
-| `@selection`           | Highlighted text on the active tab, blockquoted                             |
-| `@url`                 | Active tab URL only                                                         |
-| `@title`               | Active tab title only                                                       |
-| `@clipboard`           | System clipboard text in a code fence                                       |
-| `@tabs`                | Markdown table of every open tab — id, active flag, title, url              |
-| `@tab:<id\|query>`     | One specific tab — numeric chrome id OR substring of title/url (top hit; multi-match note included) |
-
-**Plus**: paste an image into the composer (`Ctrl+V`) to attach it as a
-proper SDK vision blob. Up to 3 MB total per turn.
-
-#### `#` — named references (planned)
-
-Reserved namespace. Bookmark search, file lookup, and similar named
-references will land here once we have autocomplete plus at least two
-named-thing kinds to justify the dedicated prefix.
 
 ### Hotkeys
 
@@ -399,12 +402,13 @@ not yet expose `abort()` — so we just stop painting.
 
 ## Browser automation (Playwright)
 
-Anya can drive your real, logged-in Edge browser. The flow:
+Anya can drive your real, logged-in browser — any Chromium-based browser with
+remote debugging enabled. The flow:
 
 1. Sidebar shows a "BOUND TAB" strip in the footer with status.
-2. Click **bind** → bridge spawns `playwright-cli attach --extension=msedge`.
-3. The Playwright MCP Bridge extension shows a **Connect?** dialog. Accept it.
-4. Now the agent's `browser` tool drives _that_ tab.
+2. Click **bind** → bridge spawns `playwright-cli attach`.
+3. Accept the connect dialog.
+4. Now the agent's `drive_*` tools drive _that_ tab.
 5. Click **unbind** to release.
 
 Only one tab is bound at a time by design — keeps the model's mental model
@@ -452,26 +456,29 @@ whitelists exactly that ID.
 
 **Extension (`extension/src/`):**
 
-- `main.ts` — `<anya-app>` Lit component. Owns all UI state, the chat
-  store, the frame handler, the tool RPC, and the render tree.
+- `main.ts` — `<anya-app>` Lit component. UI state, chat store, frame
+  handler, tool RPC, context attachment system (`attach` → `commitAttachment`),
+  📎 menu, and the render tree.
 - `styles.ts` — extracted CSS (one big `css` tagged template).
-- `types.ts` — `Chat`, `ChatMessage`, `ToolCall`, `BoundTab`, `QuickPrompt`,
-  `DebugEntry`, `DEFAULT_QUICK_PROMPTS`, `DEBUG_MAX_ENTRIES`.
-- `native-bridge.ts` — wraps `chrome.runtime.connectNative` with auto-reconnect
-  and a small pub-sub for incoming frames.
-- `background.ts` — opens the side panel on the action click.
+- `types.ts` — `ContextAttachment`, `ChatMessage`, `Chat`, `AttachmentKind`,
+  `ATTACHMENT_VALUE_CAP`, etc.
+- `native-bridge.ts` — wraps `chrome.runtime.connectNative` with auto-reconnect.
+- `background.ts` — side panel behavior + "Add to Anya" context menu registration.
+- `page-bridge.ts` — content script on every page: captures right-clicked
+  elements (smart DOM walk-up), tracks focused text fields, handles fill
+  commands, `safeSend` wrapper for extension context invalidation.
 
 **Bridge (`bridge/src/`):**
 
-- `host.ts` — Native Messaging stdio loop. Routes incoming frames to the
-  `SessionManager` or directly to tool/RPC handlers.
+- `host.ts` — Native Messaging stdio loop. Routes frames to the
+  `SessionManager`, tool/RPC handlers, and folder-pick dialog.
 - `copilot-bridge.ts` — `SessionManager`. One `CopilotClient` shared, one
   `CopilotSession` per chat id, lazy-created and cached.
 - `sessions.ts` — single-bound Playwright tab. Spawns `playwright-cli attach`,
   polls via `playwright-cli list`, persists state to disk.
-- `tools.ts` — defines context tools (`get_active_tab`, `list_tabs`,
-  `get_selection`, `get_tab_content`) and the `browser` tool that shells out
-  to `playwright-cli`.
+- `tools.ts` — defines browser tools (`get_active_tab`, `list_tabs`,
+  `get_selection`, `get_tab_content`, `browse_history`, `find_bookmarks`,
+  `edit_bookmarks`, `get_attached`) and the Playwright `drive_*` family.
 - `tool-rpc.ts` — request/response correlation for bridge → extension tool
   calls (where the bridge needs `chrome.*` data).
 - `config.ts` — loads `~/.anya/config.json`.

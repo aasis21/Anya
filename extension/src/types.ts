@@ -150,6 +150,7 @@ export type AttachmentKind =
   | 'url'         // @url — just the active tab URL
   | 'title'       // @title — just the active tab title
   | 'bookmark'    // @bookmark — a saved bookmark by search
+  | 'history'     // @history — recent browsing history
   | 'image'       // pasted/dropped image
   | 'folder';     // local project folder
 
