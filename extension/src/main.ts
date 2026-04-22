@@ -140,7 +140,7 @@ export class AnyaApp extends LitElement {
   ];
 
   private static readonly AT_CATALOG: ReadonlyArray<{ token: string; description: string; insert?: string; chipKind?: string }> = [
-    { token: '@tab',        description: 'active tab as Markdown',                     chipKind: 'page' },
+    { token: '@tab',        description: 'active tab as Markdown',                     chipKind: 'tab' },
     { token: '@selection',  description: 'highlighted text on the active tab',          chipKind: 'selection' },
     { token: '@url',        description: 'active tab URL',                             chipKind: 'url' },
     { token: '@title',      description: 'active tab title',                           chipKind: 'title' },
@@ -1581,7 +1581,7 @@ export class AnyaApp extends LitElement {
           // By-reference fetch instructions.
           if (a.ref?.ctxId) {
             lines.push(`→ Fresh/full content: call get_attached({ tabId: ${a.ref.tabId ?? 'active'}, ctxId: "${a.ref.ctxId}" })`);
-          } else if (a.kind === 'page') {
+          } else if (a.kind === 'tab') {
             lines.push(`→ Fresh/full content: call get_tab_content({ tabId: ${a.ref?.tabId ?? 'active'} })`);
           }
 
@@ -1930,13 +1930,13 @@ export class AnyaApp extends LitElement {
     try {
       let att: ContextAttachment | null = null;
 
-      if (chipKind === 'page') {
+      if (chipKind === 'tab') {
         const tab = await this.getActiveTab().catch(() => null);
         if (tab) {
           const result = await this.executeTool('get_tab_content', { tabId: tab.id });
           const text = typeof result === 'string' ? result : JSON.stringify(result);
           const title = tab.title || tab.url || 'Page';
-          att = { id, kind: 'page', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full page · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
+          att = { id, kind: 'tab', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full tab · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
         }
       } else if (chipKind === 'selection') {
         const result = await this.executeTool('get_selection', {});

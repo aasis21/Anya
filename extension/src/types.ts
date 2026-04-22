@@ -154,7 +154,7 @@ export interface FocusedField {
 export type AttachmentKind =
   | 'element'     // right-click on a DOM element
   | 'selection'   // selected text on page, or @selection
-  | 'page'        // full page content, or @tab
+  | 'tab'         // full tab content, @tab
   | 'field'       // editable text field
   | 'link'        // right-click on an <a> element
   | 'tabs'        // @tabs — list of all open tabs

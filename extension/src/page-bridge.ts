@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 
 interface AttachmentPayload {
-  kind: 'element' | 'selection' | 'page' | 'field' | 'link';
+  kind: 'element' | 'selection' | 'tab' | 'field' | 'link';
   icon: string;
   label: string;
   preview: string;
@@ -293,7 +293,7 @@ function captureContext(): AttachmentPayload {
   const pageText = (document.body.innerText || '').trim();
   const { capped, full } = cap(pageText);
   return {
-    kind: 'page',
+    kind: 'tab',
     icon: '🌐',
     label: `${document.title || hostname()}`,
     preview: `Full page · ${hostname()}`,
