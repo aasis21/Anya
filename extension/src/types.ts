@@ -158,6 +158,80 @@ export type AttachmentKind =
  *  the model can fetch the full version via reference tools. */
 export const ATTACHMENT_VALUE_CAP = 5_000;
 
+// --------------- TOOL REGISTRY ---------------
+// Used by the sidebar tools-settings panel to let the user enable/disable
+// individual tools. Groups provide visual organisation.
+
+export interface ToolMeta {
+  /** Machine name — must match the defineTool() name on the bridge side. */
+  name: string;
+  /** Short human-readable label. */
+  label: string;
+  /** One-line description shown below the label. */
+  description: string;
+}
+
+export interface ToolGroup {
+  id: string;
+  label: string;
+  icon: string;
+  tools: ToolMeta[];
+}
+
+/**
+ * Canonical tool groups. Kept in the extension so the UI can render without
+ * a bridge connection. Names MUST match `defineTool(name, ...)` in
+ * `bridge/src/tools.ts`.
+ */
+export const TOOL_GROUPS: ToolGroup[] = [
+  {
+    id: 'browser-read',
+    label: 'Browser Context',
+    icon: '🌐',
+    tools: [
+      { name: 'get_active_tab', label: 'Active Tab', description: 'Get the focused tab info' },
+      { name: 'list_tabs', label: 'List Tabs', description: 'List all open tabs' },
+      { name: 'get_selection', label: 'Selection', description: 'Get highlighted text on a page' },
+      { name: 'get_tab_content', label: 'Tab Content', description: 'Read the page as Markdown' },
+      { name: 'browse_history', label: 'History', description: 'Search browser history' },
+    ],
+  },
+  {
+    id: 'browser-actions',
+    label: 'Browser Actions',
+    icon: '🖱️',
+    tools: [
+      { name: 'focus_tab', label: 'Focus Tab', description: 'Bring a tab to the foreground' },
+      { name: 'open_tab', label: 'Open Tab', description: 'Open a new tab at a URL' },
+      { name: 'close_tab', label: 'Close Tab', description: 'Close one or more tabs' },
+      { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Read and manage bookmarks' },
+    ],
+  },
+  {
+    id: 'playwright-connect',
+    label: 'Playwright Connection',
+    icon: '🔗',
+    tools: [
+      { name: 'bind_tab', label: 'Bind Tab', description: 'Bind a tab for automation (extension mode)' },
+      { name: 'unbind_tab', label: 'Unbind Tab', description: 'Release the bound tab' },
+      { name: 'connect_browser', label: 'Connect Browser', description: 'Attach via CDP (cdp mode)' },
+      { name: 'disconnect_browser', label: 'Disconnect', description: 'Release CDP connection' },
+    ],
+  },
+  {
+    id: 'playwright-drive',
+    label: 'Playwright Driving',
+    icon: '🎭',
+    tools: [
+      { name: 'bound_tabs', label: 'Bound Tabs', description: 'List tabs under Playwright control' },
+      { name: 'drive_tab', label: 'Drive Tab', description: 'Page-scoped DOM, nav, screenshots, eval' },
+      { name: 'drive_browser', label: 'Drive Browser', description: 'Browser/session/multi-tab lifecycle' },
+      { name: 'drive_context', label: 'Drive Context', description: 'Cookies, storage, auth, network mocking' },
+      { name: 'drive_devtools', label: 'Drive DevTools', description: 'Console, network log, tracing, video' },
+    ],
+  },
+];
+
 export interface ContextAttachment {
   id: string;
   kind: AttachmentKind;

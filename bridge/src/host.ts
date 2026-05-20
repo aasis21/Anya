@@ -243,6 +243,34 @@ transport.onFrame(async (raw) => {
       }
       break;
     }
+    case 'tool-config': {
+      const disabled = Array.isArray(frame.disabledTools)
+        ? (frame.disabledTools as unknown[]).filter((s): s is string => typeof s === 'string')
+        : [];
+      log('tool-config: disabled tools:', disabled.join(', ') || '(none)');
+      copilot.setDisabledTools(new Set(disabled));
+      transport.send({ type: 'tool-config-ack', ok: true, disabledCount: disabled.length });
+      break;
+    }
+    case 'set-model': {
+      const model = typeof frame.model === 'string' ? frame.model : '';
+      log('set-model:', model || '(default)');
+      copilot.setModel(model);
+      break;
+    }
+    case 'list-models': {
+      log('list-models request');
+      copilot.listModels()
+        .then((models) => {
+          log('list-models: got', models.length, 'models');
+          transport.send({ type: 'models', models });
+        })
+        .catch((err: unknown) => {
+          warn('list-models failed:', err);
+          transport.send({ type: 'models', models: [], error: String(err) });
+        });
+      break;
+    }
     default:
       warn('unknown frame type:', frame.type);
       transport.send({ type: 'error', message: `unknown frame type: ${String(frame.type)}` });

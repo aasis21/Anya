@@ -194,6 +194,34 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       handler: async (args) => JSON.stringify(await rpc.call('manage_bookmarks', args)),
     }),
 
+    defineTool('browse_history', {
+      description:
+        'Search the user\'s browser history. Returns an array of ' +
+        '{url, title, lastVisitTime, visitCount, typedCount}.\n\n' +
+        'Parameters:\n' +
+        '- `query` (string, optional) — search text matched against URL and title. ' +
+        'Empty string returns everything.\n' +
+        '- `maxResults` (number, optional, default 100) — max entries to return.\n' +
+        '- `startTime` (string, optional) — ISO 8601 timestamp. Only results visited ' +
+        'after this time.\n' +
+        '- `endTime` (string, optional) — ISO 8601 timestamp. Only results visited ' +
+        'before this time.\n\n' +
+        'USE CASES: "what did I visit today", "find that page I was looking at", ' +
+        '"sites I visited about X", "browsing history for the last hour".',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search text matched against URL and title. Empty = all.' },
+          maxResults: { type: 'number', description: 'Max entries to return (default 100).' },
+          startTime: { type: 'string', description: 'ISO 8601 timestamp — only results after this time.' },
+          endTime: { type: 'string', description: 'ISO 8601 timestamp — only results before this time.' },
+        },
+        additionalProperties: false,
+      },
+      skipPermission: true,
+      handler: async (args) => JSON.stringify(await rpc.call('browse_history', args)),
+    }),
+
     // ---------------- tab binding (extension mode) / browser connect (cdp mode) ----------------
   ];
 }

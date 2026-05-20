@@ -35,6 +35,7 @@ import {
   ATTACHMENT_VALUE_CAP,
   DEFAULT_QUICK_PROMPTS,
   DEBUG_MAX_ENTRIES,
+  TOOL_GROUPS,
 } from './types.js';
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -98,6 +99,12 @@ export class AnyaApp extends LitElement {
   // Per-message hover toolbar — id of the message whose ⋯ menu is open.
   @state() private msgMenuId: string | null = null;
 
+  // Tools settings panel — lets the user enable/disable individual tools.
+  @state() private toolsPanelOpen = false;
+  @state() private disabledTools: Set<string> = new Set();
+  // Tracks which tool groups are collapsed in the panel.
+  @state() private toolGroupCollapsed: Set<string> = new Set();
+
   // Field-assist: tracks the text field the user last focused on a page.
   // `focusedField` is set silently on focus (powers Insert/Append buttons).
   @state() private focusedField: FocusedField | null = null;
@@ -109,6 +116,19 @@ export class AnyaApp extends LitElement {
 
   // 📎 attach menu popup
   @state() private attachMenuOpen = false;
+
+  // Send-options dropdown (visible while streaming)
+  @state() private sendMenuOpen = false;
+  // Header overflow menu
+  @state() private headerMenuOpen = false;
+  // Model selector
+  @state() private availableModels: Array<{ id: string; name: string; contextWindow?: number; billingMultiplier?: number }> = [];
+  @state() private selectedModel = '';   // empty = SDK default ("Auto")
+  @state() private modelMenuOpen = false;
+  // Workspace selector
+  @state() private workspaceMenuOpen = false;
+  /** Client-side queue for prompts sent while streaming. Drained in finishStream. */
+  private pendingQueue: Array<{ chatId: string; text: string; ctx: ContextAttachment[] }> = [];
 
   // Inline autocomplete for `/` and `@` triggers.
   @state() private autocomplete: {
@@ -183,9 +203,11 @@ export class AnyaApp extends LitElement {
     this.connected = nativeBridge.isConnected();
     this.loadTheme();
     this.loadDebug();
+    void this.loadDisabledTools();
     void this.loadChats();
     void this.loadQuickPrompts();
     window.addEventListener('keydown', this.onGlobalKey);
+    this.renderRoot.addEventListener('click', this.onRootClick);
     // Listen for page-bridge messages (context attachments, field tracking).
     chrome.runtime.onMessage.addListener(this.onPageBridgeMessage);
     // Check for pending context attachments buffered before the sidebar opened.
@@ -219,6 +241,29 @@ export class AnyaApp extends LitElement {
     try { chrome.storage?.local?.set?.({ 'anya-theme': this.theme }); } catch { /* ignore */ }
   }
 
+  /** Close dropdown menus when clicking outside them. */
+  private onRootClick = (e: Event): void => {
+    const path = e.composedPath();
+    if (this.headerMenuOpen && !path.some((n) => (n as HTMLElement).classList?.contains('header-more-wrap'))) {
+      this.headerMenuOpen = false;
+    }
+    if (this.sendMenuOpen && !path.some((n) => (n as HTMLElement).classList?.contains('send-split'))) {
+      this.sendMenuOpen = false;
+    }
+    if (this.attachMenuOpen && !path.some((n) => (n as HTMLElement).classList?.contains('attach-btn') || (n as HTMLElement).classList?.contains('attach-menu'))) {
+      this.attachMenuOpen = false;
+    }
+    if (this.toolsPanelOpen && !path.some((n) => (n as HTMLElement).classList?.contains('tools-panel') || (n as HTMLElement).classList?.contains('composer-pill-btn'))) {
+      this.toolsPanelOpen = false;
+    }
+    if (this.modelMenuOpen && !path.some((n) => (n as HTMLElement).classList?.contains('model-menu') || (n as HTMLElement).classList?.contains('model-pill-btn'))) {
+      this.modelMenuOpen = false;
+    }
+    if (this.workspaceMenuOpen && !path.some((n) => (n as HTMLElement).classList?.contains('workspace-menu') || (n as HTMLElement).classList?.contains('workspace-pill-btn'))) {
+      this.workspaceMenuOpen = false;
+    }
+  };
+
   // ----- debug mode ------------------------------------------------------
   private async loadDebug(): Promise<void> {
     const v = await this.readStorage<unknown>('anya-debug');
@@ -228,6 +273,50 @@ export class AnyaApp extends LitElement {
   private toggleDebug(): void {
     this.debugOpen = !this.debugOpen;
     try { chrome.storage?.local?.set?.({ 'anya-debug': this.debugOpen }); } catch { /* ignore */ }
+  }
+
+  // ----- tool settings ---------------------------------------------------
+  private async loadDisabledTools(): Promise<void> {
+    const arr = await this.readStorage<string[]>('anya-disabled-tools');
+    if (Array.isArray(arr)) this.disabledTools = new Set(arr.filter((s) => typeof s === 'string'));
+  }
+
+  private persistDisabledTools(): void {
+    const arr = [...this.disabledTools];
+    try { chrome.storage?.local?.set?.({ 'anya-disabled-tools': arr }); } catch { /* ignore */ }
+    // Notify the bridge so future sessions exclude these tools.
+    this.bridgeSend({ type: 'tool-config', disabledTools: arr });
+  }
+
+  private toggleTool(name: string): void {
+    const next = new Set(this.disabledTools);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    this.disabledTools = next;
+    this.persistDisabledTools();
+  }
+
+  private toggleToolGroup(groupId: string, enable: boolean): void {
+    const group = TOOL_GROUPS.find((g) => g.id === groupId);
+    if (!group) return;
+    const next = new Set(this.disabledTools);
+    for (const t of group.tools) {
+      if (enable) next.delete(t.name);
+      else next.add(t.name);
+    }
+    this.disabledTools = next;
+    this.persistDisabledTools();
+  }
+
+  private toggleToolGroupCollapse(groupId: string): void {
+    const next = new Set(this.toolGroupCollapsed);
+    if (next.has(groupId)) next.delete(groupId);
+    else next.add(groupId);
+    this.toolGroupCollapsed = next;
+  }
+
+  private toggleToolsPanel(): void {
+    this.toolsPanelOpen = !this.toolsPanelOpen;
   }
 
   private openRemoteDebugSettings(): void {
@@ -296,6 +385,7 @@ export class AnyaApp extends LitElement {
     this.unsubMessage?.();
     this.unsubDisconnect?.();
     window.removeEventListener('keydown', this.onGlobalKey);
+    this.renderRoot.removeEventListener('click', this.onRootClick);
     chrome.runtime.onMessage.removeListener(this.onPageBridgeMessage);
     if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
     // Flush any debounced persist before tearing down so the latest state
@@ -364,7 +454,7 @@ export class AnyaApp extends LitElement {
     const now = Date.now();
     const chat: Chat = {
       id,
-      title: 'new chat',
+      title: 'New Chat',
       messages: [],
       toolCalls: {},
       createdAt: now,
@@ -469,6 +559,9 @@ export class AnyaApp extends LitElement {
         : m),
     }));
     this.streamingIds.delete(chatId);
+    // Don't drain the queue here — the SDK's session.idle (→ done →
+    // finishStream) will fire after the abort completes and drain it.
+    // Draining here would race with that done event.
   };
 
   // ----- message-level actions (copy / delete / regenerate) -------------
@@ -508,7 +601,7 @@ export class AnyaApp extends LitElement {
   private autoTitleIfNeeded(chatId: string, userText: string): void {
     const c = this.chats.find((x) => x.id === chatId);
     if (!c) return;
-    if (c.title && c.title !== 'new chat') return;
+    if (c.title && c.title !== 'New Chat') return;
     const title = userText.replace(/\s+/g, ' ').trim().slice(0, 60) || 'untitled';
     this.mutateChat(chatId, (c) => ({ ...c, title }));
   }
@@ -631,7 +724,24 @@ export class AnyaApp extends LitElement {
         this.bridgeLogFile = typeof data.logFile === 'string' ? data.logFile : null;
         this.playwrightMode = data.playwrightMode === 'extension' ? 'extension' : 'cdp';
         if (this.playwrightMode === 'extension') this.refreshBoundTab();
+        // Send any persisted disabled-tools list so the bridge filters tools for new sessions.
+        if (this.disabledTools.size > 0) {
+          this.bridgeSend({ type: 'tool-config', disabledTools: [...this.disabledTools] });
+        }
+        // Request available models from the SDK.
+        this.bridgeSend({ type: 'list-models' });
         break;
+      case 'models': {
+        const models = Array.isArray(data.models) ? data.models : [];
+        this.availableModels = models.map((m: any) => ({
+          id: String(m.id ?? ''),
+          name: String(m.name ?? m.id ?? ''),
+          contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : undefined,
+          billingMultiplier: typeof m.billingMultiplier === 'number' ? m.billingMultiplier : undefined,
+        }));
+        // Keep selectedModel empty = "Auto" (SDK picks the best model).
+        break;
+      }
       case 'log': {
         const ts = typeof data.ts === 'string' ? Date.parse(data.ts) : Date.now();
         const level = data.level === 'warn' || data.level === 'error' ? data.level : 'info';
@@ -908,10 +1018,21 @@ export class AnyaApp extends LitElement {
       }
       case 'browse_history': {
         const query = String(args.query ?? '');
-        const maxResults = Math.min(Number(args.maxResults || 50), 200);
-        const daysBack = Math.min(Number(args.daysBack || 7), 90);
-        const startTime = Date.now() - daysBack * 86_400_000;
-        const results = await chrome.history.search({ text: query, startTime, maxResults });
+        const maxResults = Math.min(Number(args.maxResults || 100), 500);
+        const searchOpts: chrome.history.SearchQuery = { text: query, maxResults };
+        if (typeof args.startTime === 'string' && args.startTime) {
+          const t = Date.parse(args.startTime as string);
+          if (!isNaN(t)) searchOpts.startTime = t;
+        }
+        if (typeof args.endTime === 'string' && args.endTime) {
+          const t = Date.parse(args.endTime as string);
+          if (!isNaN(t)) searchOpts.endTime = t;
+        }
+        // Fallback: if no startTime given, default to last 7 days
+        if (searchOpts.startTime === undefined) {
+          searchOpts.startTime = Date.now() - 7 * 86_400_000;
+        }
+        const results = await chrome.history.search(searchOpts);
         return results.map((r) => ({
           url: r.url,
           title: r.title,
@@ -1281,12 +1402,25 @@ export class AnyaApp extends LitElement {
 
   private finishStream(chatId: string): void {
     const sid = this.streamingIds.get(chatId);
-    if (!sid) return;
-    this.mutateChat(chatId, (c) => ({
-      ...c,
-      messages: c.messages.map((m) => m.id === sid ? { ...m, pending: false } : m),
-    }));
-    this.streamingIds.delete(chatId);
+    if (sid) {
+      this.mutateChat(chatId, (c) => ({
+        ...c,
+        messages: c.messages.map((m) => m.id === sid ? { ...m, pending: false } : m),
+      }));
+      this.streamingIds.delete(chatId);
+    }
+    // Close the send-options dropdown when streaming finishes.
+    if (chatId === this.currentChatId) this.sendMenuOpen = false;
+    // Drain client-side queue: if a queued prompt is waiting for this chat,
+    // dispatch it now.  This fires even when cancelStream already cleared
+    // the sid — the abort's session.idle → done triggers the drain.
+    if (!this.streamingIds.has(chatId)) {
+      const idx = this.pendingQueue.findIndex((p) => p.chatId === chatId);
+      if (idx !== -1) {
+        const [queued] = this.pendingQueue.splice(idx, 1);
+        void this.dispatchPrompt(queued.chatId, queued.text, 'enqueue', queued.ctx);
+      }
+    }
   }
 
   private pushSystem(chatId: string, text: string, kind: ChatMessage['kind'] = 'normal'): void {
@@ -1373,6 +1507,13 @@ export class AnyaApp extends LitElement {
     this.attachMenuOpen = false;
     this.scrollToBottom();
 
+    // If streaming and mode is enqueue, queue client-side and DON'T send
+    // to the SDK yet.  The queued prompt is dispatched after the current
+    // turn finishes (see finishStream → pendingQueue drain).
+    if (mode === 'enqueue' && this.streamingIds.has(chatId)) {
+      this.pendingQueue.push({ chatId, text, ctx: ctxSnapshot });
+      return;
+    }
     void this.dispatchPrompt(chatId, text, mode, ctxSnapshot);
   };
 
@@ -1991,7 +2132,14 @@ export class AnyaApp extends LitElement {
   // ----- 📎 attach menu -------------------------------------------------
 
   // Handle folder-pick result from bridge.
+  private pendingWorkspacePick = false;
   private handleFolderPickResult(path: string): void {
+    if (this.pendingWorkspacePick) {
+      // Workspace selector flow: only set cwd, no attachment.
+      this.pendingWorkspacePick = false;
+      this.setWorkspaceFolder(path);
+      return;
+    }
     const folderName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
     this.commitAttachment({
       kind: 'folder',
@@ -2007,6 +2155,31 @@ export class AnyaApp extends LitElement {
       this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
       this.persistChats();
     }
+  }
+
+  // ----- Workspace selector ------------------------------------------------
+  private pickWorkspaceFolder(): void {
+    this.pendingWorkspacePick = true;
+    this.bridgeSend({ type: 'folder-pick' });
+  }
+
+  private setWorkspaceFolder(path: string): void {
+    if (!this.currentChatId) return;
+    this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
+    this.persistChats();
+    const folderName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
+    this.pushSystem(this.currentChatId, `Workspace set to **${folderName}**\n\`${path}\``, 'normal');
+  }
+
+  private clearWorkspace(): void {
+    if (!this.currentChatId) return;
+    this.chats = this.chats.map((c) => {
+      if (c.id !== this.currentChatId) return c;
+      const { cwd: _, ...rest } = c;
+      return rest as typeof c;
+    });
+    this.persistChats();
+    this.pushSystem(this.currentChatId, 'Workspace cleared. Using default Anya workspace.', 'normal');
   }
 
   // ----- render ----------------------------------------------------------
@@ -2026,7 +2199,7 @@ export class AnyaApp extends LitElement {
     }
     const expanded = this.toolExpanded.has(tc.toolCallId);
     const icon =
-      tc.status === 'running' ? '◐' : tc.status === 'success' ? '●' : '✕';
+      tc.status === 'running' ? '⟳' : tc.status === 'success' ? '✓' : '✕';
     const elapsed = tc.finishedAt
       ? `${tc.finishedAt - tc.startedAt}ms`
       : tc.status === 'running'
@@ -2122,8 +2295,8 @@ export class AnyaApp extends LitElement {
         : nothing}
       ${isThinking
         ? html`<div class="thinking" title="agent is working">
-            <span class="thinking-dots"><span></span><span></span><span></span></span>
-            <span class="thinking-text">${m.intent ? m.intent : 'thinking…'}</span>
+            <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="thinking-text">${m.intent ? m.intent : 'Thinking…'}</span>
           </div>`
         : nothing}
       ${m.text || (!m.pending && !isThinking)
@@ -2144,11 +2317,11 @@ export class AnyaApp extends LitElement {
   }
 
   private roleLabel(m: ChatMessage): string {
-    if (m.role === 'user') return 'YOU';
-    if (m.role === 'assistant') return 'COPILOT';
-    if (m.kind === 'error') return 'ERROR';
-    if (m.kind === 'denied') return 'DENIED';
-    return 'SYSTEM';
+    if (m.role === 'user') return 'You';
+    if (m.role === 'assistant') return 'Copilot';
+    if (m.kind === 'error') return 'Error';
+    if (m.kind === 'denied') return 'Denied';
+    return 'System';
   }
 
   // ----- debug panel rendering -----------------------------------------
@@ -2211,6 +2384,75 @@ export class AnyaApp extends LitElement {
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
   }
 
+  // ----- tools settings panel -------------------------------------------
+  private renderToolsPanel() {
+    const enabledCount = TOOL_GROUPS.reduce((n, g) => n + g.tools.filter((t) => !this.disabledTools.has(t.name)).length, 0);
+    const totalCount = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0);
+    return html`
+      <section class="tools-panel">
+        <div class="tools-bar">
+          <span>🔧 TOOLS · ${enabledCount}/${totalCount} enabled</span>
+          <span class="grow"></span>
+          <button @click=${() => { this.disabledTools = new Set(); this.persistDisabledTools(); }} title="Enable all">all on</button>
+          <button @click=${() => {
+            const all = new Set<string>();
+            for (const g of TOOL_GROUPS) for (const t of g.tools) all.add(t.name);
+            this.disabledTools = all;
+            this.persistDisabledTools();
+          }} title="Disable all">all off</button>
+        </div>
+        <div class="tools-hint">These are Anya's built-in browser tools — on top of any MCP servers loaded from your workspace.</div>
+        <div class="tools-groups">
+          ${TOOL_GROUPS.map((group) => {
+            const collapsed = this.toolGroupCollapsed.has(group.id);
+            const groupEnabled = group.tools.filter((t) => !this.disabledTools.has(t.name)).length;
+            const groupTotal = group.tools.length;
+            const allOn = groupEnabled === groupTotal;
+            const allOff = groupEnabled === 0;
+            return html`
+              <div class="tool-group ${collapsed ? 'collapsed' : ''}">
+                <div class="tool-group-header" @click=${() => this.toggleToolGroupCollapse(group.id)}>
+                  <span class="tool-group-chevron">${collapsed ? '▸' : '▾'}</span>
+                  <span class="tool-group-icon">${group.icon}</span>
+                  <span class="tool-group-label">${group.label}</span>
+                  <span class="tool-group-count">${groupEnabled}/${groupTotal}</span>
+                  <button
+                    class="tool-group-toggle ${allOn ? 'on' : allOff ? 'off' : 'partial'}"
+                    @click=${(e: Event) => { e.stopPropagation(); this.toggleToolGroup(group.id, !allOn); }}
+                    title=${allOn ? 'Disable all in group' : 'Enable all in group'}
+                  >${allOn ? 'on' : allOff ? 'off' : 'partial'}</button>
+                </div>
+                ${!collapsed ? html`
+                  <div class="tool-group-body">
+                    ${group.tools.map((tool) => {
+                      const enabled = !this.disabledTools.has(tool.name);
+                      return html`
+                        <label class="tool-item ${enabled ? '' : 'disabled'}">
+                          <span class="tool-switch">
+                            <input
+                              type="checkbox"
+                              .checked=${enabled}
+                              @change=${() => this.toggleTool(tool.name)}
+                            />
+                            <span class="tool-slider"></span>
+                          </span>
+                          <span class="tool-info">
+                            <span class="tool-name">${tool.label}</span>
+                            <span class="tool-desc">${tool.description}</span>
+                          </span>
+                        </label>
+                      `;
+                    })}
+                  </div>
+                ` : nothing}
+              </div>
+            `;
+          })}
+        </div>
+      </section>
+    `;
+  }
+
   render() {
     const online = this.connected;
     const pid = this.bridgePid ?? '—';
@@ -2239,26 +2481,30 @@ export class AnyaApp extends LitElement {
               title="New chat (Ctrl+N)"
               aria-label="New chat"
             >＋</button>
-            ${this.playwrightMode === 'cdp' ? html`
+            <span class="header-more-wrap">
               <button
-                class="icon-btn"
-                @click=${() => this.openRemoteDebugSettings()}
-                title="Open browser remote debugging settings"
-                aria-label="Open remote debugging settings"
-              >🔌</button>
-            ` : nothing}
-            <button
-              class="icon-btn ${this.debugOpen ? 'active' : ''}"
-              @click=${() => this.toggleDebug()}
-              title="Toggle bridge debug panel"
-              aria-label="Toggle debug panel"
-            >🐛</button>
-            <button
-              class="icon-btn"
-              @click=${this.toggleTheme}
-              title="Toggle light/dark theme"
-              aria-label="Toggle theme"
-            >${this.theme === 'dark' ? '☀' : '☾'}</button>
+                class="icon-btn ${this.headerMenuOpen ? 'active' : ''}"
+                @click=${() => { this.headerMenuOpen = !this.headerMenuOpen; }}
+                title="More options"
+                aria-label="More options"
+              >⋯</button>
+              ${this.headerMenuOpen ? html`
+                <div class="header-menu">
+                  ${this.playwrightMode === 'cdp' ? html`
+                    <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.openRemoteDebugSettings(); }}>
+                      <span class="header-menu-icon">🔌</span> Remote Debug
+                    </button>
+                  ` : nothing}
+                  <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.toggleDebug(); }}>
+                    <span class="header-menu-icon">🐛</span> Debug Log${this.debugOpen ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  </button>
+                  <hr class="header-menu-sep" />
+                  <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.toggleTheme(); }}>
+                    <span class="header-menu-icon">${this.theme === 'dark' ? '☀' : '☾'}</span> ${this.theme === 'dark' ? 'Light' : 'Dark'} Theme
+                  </button>
+                </div>
+              ` : nothing}
+            </span>
           </span>
         </div>
       </header>
@@ -2271,14 +2517,14 @@ export class AnyaApp extends LitElement {
         ${!online
           ? html`<div class="empty offline-banner">
               <span class="glyph">⚡</span>
-              <span class="offline-title">bridge offline</span>
+              <span class="offline-title">Bridge offline</span>
               <span class="offline-hint">Anya can't reach the local bridge process.<br/>
                 Run <code>./setup.ps1</code> to register it, then reload the extension.</span>
             </div>`
           : this.messages.length === 0
           ? html`<div class="empty">
-              <span class="glyph">/</span>
-              what's on your mind?
+              <span class="glyph">✦</span>
+              Ask Copilot anything
             </div>`
           : repeat(
               this.messages,
@@ -2286,8 +2532,8 @@ export class AnyaApp extends LitElement {
               (m) => html`
                 <div class="msg ${m.role} ${m.kind ?? ''}" @mouseleave=${() => { if (this.msgMenuId === m.id) this.msgMenuId = null; }}>
                   <div class="meta">
+                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? '✦' : '◈'}</span>
                     <span class="role">${this.roleLabel(m)}</span>
-                    <span class="rule"></span>
                     <span class="ts">${this.fmtTime(m.ts)}</span>
                     <button class="msg-menu-btn" @click=${() => { this.msgMenuId = this.msgMenuId === m.id ? null : m.id; }} title="Actions">⋯</button>
                     ${this.msgMenuId === m.id ? html`
@@ -2324,28 +2570,13 @@ export class AnyaApp extends LitElement {
           </div>
         ` : nothing}
         <div class="composer-row">
-          <button class="attach-btn" @click=${() => { this.attachMenuOpen = !this.attachMenuOpen; }} title="Attach context (📎)" aria-label="Attach">📎</button>
-          ${this.attachMenuOpen ? html`
-            <div class="attach-menu">
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tab'); }}>🌐 Current tab</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('selection'); }}>✂️ Selection</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tabs'); }}>📑 All open tabs</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('clipboard'); }}>📋 Clipboard</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('url'); }}>🔗 URL</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('title'); }}>📌 Title</button>
-              <hr class="attach-menu-sep" />
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('bookmarks'); }}>🔖 Bookmarks</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('history'); }}>📜 Recent history</button>
-              <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('folder'); }}>📁 Folder...</button>
-            </div>
-          ` : nothing}
           <div class="composer-input">
             <div class="composer-mirror" aria-hidden="true">${this.renderMentionedText(this.composerText)}${this.composerText.endsWith('\n') ? ' ' : ''}</div>
             <textarea
               id="prompt-input"
               rows="1"
               spellcheck="false"
-              placeholder=${online ? 'next to your browser. what should we do?' : 'bridge offline — waiting to reconnect…'}
+              placeholder=${online ? 'Ask Copilot anything…' : 'Bridge offline — waiting to reconnect…'}
               ?disabled=${!online}
               @keydown=${this.onKeyDown}
               @input=${this.onInput}
@@ -2353,35 +2584,113 @@ export class AnyaApp extends LitElement {
               @scroll=${this.onComposerScroll}
             ></textarea>
           </div>
-          ${this.currentChatId && this.streamingIds.has(this.currentChatId)
-            ? html`<span class="send-group streaming">
-                <button
-                  class="send-icon"
-                  @click=${() => this.send('enqueue')}
+          <div class="composer-actions">
+            <button class="attach-btn" @click=${() => { this.attachMenuOpen = !this.attachMenuOpen; }} title="Attach context (＋)" aria-label="Add context">＋</button>
+            ${this.attachMenuOpen ? html`
+              <div class="attach-menu">
+                <div class="attach-menu-section">CONTEXT</div>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tab'); }}><span class="attach-menu-icon">🌐</span> Current tab</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('selection'); }}><span class="attach-menu-icon">✂️</span> Selection</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('tabs'); }}><span class="attach-menu-icon">📑</span> All open tabs</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('clipboard'); }}><span class="attach-menu-icon">📋</span> Clipboard</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('url'); }}><span class="attach-menu-icon">🔗</span> URL</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('title'); }}><span class="attach-menu-icon">📌</span> Title</button>
+                <hr class="attach-menu-sep" />
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('bookmarks'); }}><span class="attach-menu-icon">🔖</span> Bookmarks</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('history'); }}><span class="attach-menu-icon">📜</span> Recent history</button>
+                <button class="attach-menu-item" @click=${() => { this.attachMenuOpen = false; this.attach('folder'); }}><span class="attach-menu-icon">📁</span> Folder...</button>
+              </div>
+            ` : nothing}
+            <button class="model-pill-btn" @click=${() => { this.modelMenuOpen = !this.modelMenuOpen; }} title="Select model">
+              ${this.selectedModel ? this.availableModels.find((m) => m.id === this.selectedModel)?.name ?? this.selectedModel : 'Auto'} ▾
+            </button>
+            ${this.modelMenuOpen ? html`
+              <div class="model-menu">
+                <div class="model-menu-header">Select model</div>
+                <button class="model-menu-item ${!this.selectedModel ? 'active' : ''}" @click=${() => { this.selectedModel = ''; this.bridgeSend({ type: 'set-model', model: '' }); this.modelMenuOpen = false; }}>
+                  <span class="model-menu-check">${!this.selectedModel ? '✓' : ''}</span>
+                  <span class="model-menu-info"><span class="model-menu-name">Auto</span><span class="model-menu-detail">SDK picks best model</span></span>
+                </button>
+                ${this.availableModels.length > 0 ? html`<hr class="model-menu-sep" />` : nothing}
+                ${this.availableModels.map((m) => html`
+                  <button class="model-menu-item ${m.id === this.selectedModel ? 'active' : ''}" @click=${() => { this.selectedModel = m.id; this.bridgeSend({ type: 'set-model', model: m.id }); this.modelMenuOpen = false; }}>
+                    <span class="model-menu-check">${m.id === this.selectedModel ? '✓' : ''}</span>
+                    <span class="model-menu-info">
+                      <span class="model-menu-name">${m.name}</span>
+                      <span class="model-menu-detail">${m.contextWindow ? `${Math.round(m.contextWindow / 1000)}K context` : ''}${m.billingMultiplier && m.billingMultiplier !== 1 ? ` · ${m.billingMultiplier}x` : ''}</span>
+                    </span>
+                  </button>
+                `)}
+                ${this.availableModels.length === 0 ? html`
+                  <div class="model-menu-empty">Loading models…</div>
+                ` : nothing}
+              </div>
+            ` : nothing}
+            <button class="workspace-pill-btn" @click=${() => { this.workspaceMenuOpen = !this.workspaceMenuOpen; }} title=${this.currentChat?.cwd ? `Workspace: ${this.currentChat.cwd}` : 'Default Anya workspace'}>
+              📁 ${this.currentChat?.cwd ? this.currentChat.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : 'Anya'} ▾
+            </button>
+            ${this.workspaceMenuOpen ? html`
+              <div class="workspace-menu">
+                <div class="workspace-menu-header">Workspace</div>
+                ${this.currentChat?.cwd ? html`
+                  <div class="workspace-menu-current">
+                    <span class="workspace-menu-path" title=${this.currentChat.cwd}>📁 ${this.currentChat.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</span>
+                    <button class="workspace-menu-clear" @click=${() => { this.clearWorkspace(); this.workspaceMenuOpen = false; }} title="Clear workspace">✕</button>
+                  </div>
+                  <span class="workspace-menu-fullpath">${this.currentChat.cwd}</span>
+                  <hr class="workspace-menu-sep" />
+                ` : nothing}
+                <button class="workspace-menu-item" @click=${() => { this.workspaceMenuOpen = false; this.pickWorkspaceFolder(); }}>
+                  <span class="workspace-menu-icon">📂</span> Open folder…
+                </button>
+              </div>
+            ` : nothing}
+            <button class="composer-pill-btn" @click=${() => this.toggleToolsPanel()} title="Configure tools">
+              🔧 ${TOOL_GROUPS.reduce((n, g) => n + g.tools.filter((t) => !this.disabledTools.has(t.name)).length, 0)}/${TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0)}
+            </button>
+            <span class="composer-spacer"></span>
+            ${this.toolsPanelOpen ? this.renderToolsPanel() : nothing}
+            ${this.currentChatId && this.streamingIds.has(this.currentChatId)
+              ? html`<span class="send-split">
+                  <button
+                    class="send-btn stop-primary"
+                    @click=${() => this.cancelStream(this.currentChatId)}
+                    title="Stop generating (Esc)"
+                    aria-label="Stop"
+                  >◼</button>
+                  ${!this.draftEmpty || this.contextAttachments.length > 0 ? html`
+                    <button
+                      class="send-split-chevron"
+                      @click=${() => { this.sendMenuOpen = !this.sendMenuOpen; }}
+                      title="More send options"
+                      aria-label="Send options"
+                    >▾</button>
+                    ${this.sendMenuOpen ? html`
+                      <div class="send-menu">
+                        <button
+                          class="send-menu-item"
+                          @click=${() => { this.sendMenuOpen = false; this.send('immediate'); }}
+                        ><span class="send-menu-icon">↯</span> Stop and Send<span class="send-menu-kbd">Alt+Enter</span></button>
+                        <button
+                          class="send-menu-item"
+                          @click=${() => { this.sendMenuOpen = false; this.send('enqueue'); }}
+                        ><span class="send-menu-icon">＋</span> Add to Queue<span class="send-menu-kbd">Enter</span></button>
+                        <hr class="send-menu-sep" />
+                        <button
+                          class="send-menu-item"
+                          @click=${() => { this.sendMenuOpen = false; this.cancelStream(this.currentChatId); }}
+                        ><span class="send-menu-icon">◼</span> Stop Generating<span class="send-menu-kbd">Esc</span></button>
+                      </div>
+                    ` : nothing}
+                  ` : nothing}
+                </span>`
+              : html`<button
+                  class="send-btn"
+                  @click=${() => this.send()}
                   ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
-                  title="Queue after current turn (Enter)"
-                  aria-label="Queue"
-                >＋<span class="kbd">↵</span></button>
-                <button
-                  class="send-icon steer-btn"
-                  @click=${() => this.send('immediate')}
-                  ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
-                  title="Send immediately, interrupt current turn (Ctrl+Enter)"
-                  aria-label="Steer"
-                >↯<span class="kbd">⌃↵</span></button>
-                <button
-                  class="send-icon stop-btn"
-                  @click=${() => this.cancelStream(this.currentChatId)}
-                  title="Stop generating (Esc)"
-                  aria-label="Stop"
-                >◼</button>
-              </span>`
-            : html`<button
-                class="send-btn"
-                @click=${() => this.send()}
-                ?disabled=${(this.draftEmpty && this.contextAttachments.length === 0) || !online}
-                title="Send (Enter)"
-              >send<span class="kbd">↵</span></button>`}
+                  title="Send (Enter)"
+                >↑</button>`}
+          </div>
         </div>
       </footer>
 

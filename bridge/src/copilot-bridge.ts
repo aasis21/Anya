@@ -74,6 +74,8 @@ export class CopilotBridge {
   private rpc: ToolRpc;
   private chats = new Map<string, ChatHandle>();
   private creating = new Map<string, Promise<ChatHandle>>();
+  private disabledTools: Set<string> = new Set();
+  private selectedModel = '';
 
   constructor() {
     this.rpc = new ToolRpc((frame) => this.emit(frame));
@@ -95,6 +97,21 @@ export class CopilotBridge {
 
   callExtension<T = unknown>(tool: string, args: unknown = {}): Promise<T> {
     return this.rpc.call<T>(tool, args);
+  }
+
+  /**
+   * Update the set of tool names that should be excluded from new sessions.
+   * Existing sessions keep their original tool set.
+   */
+  setDisabledTools(names: Set<string>): void {
+    this.disabledTools = names;
+    log('disabled tools updated:', [...names].join(', ') || '(none)');
+  }
+
+  /** Set the model to use for new sessions. Empty string = SDK default. */
+  setModel(model: string): void {
+    this.selectedModel = model;
+    log('model updated:', model || '(default)');
   }
 
   private emit(event: BridgeEvent): void {
@@ -172,6 +189,23 @@ export class CopilotBridge {
     return this.client;
   }
 
+  /** List models available through the Copilot SDK. */
+  async listModels(): Promise<Array<{ id: string; name: string; contextWindow?: number; vision?: boolean; reasoning?: boolean; policy?: string; billingMultiplier?: number; reasoningEfforts?: string[]; defaultEffort?: string }>> {
+    const client = await this.ensureClient();
+    const models = await client.listModels();
+    return models.map((m: any) => ({
+      id: String(m.id ?? ''),
+      name: String(m.name ?? m.id ?? ''),
+      contextWindow: m.capabilities?.limits?.max_context_window_tokens,
+      vision: m.capabilities?.supports?.vision,
+      reasoning: m.capabilities?.supports?.reasoningEffort,
+      policy: m.policy?.state,
+      billingMultiplier: m.billing?.multiplier,
+      reasoningEfforts: m.supportedReasoningEfforts,
+      defaultEffort: m.defaultReasoningEffort,
+    }));
+  }
+
   private getOrCreateChat(chatId: string, cwd?: string): Promise<ChatHandle> {
     const existing = this.chats.get(chatId);
     // If the caller supplies a cwd that differs from the existing session's
@@ -202,13 +236,21 @@ export class CopilotBridge {
     mkdirSync(workingDirectory, { recursive: true });
     const agentPrompt = loadAgentPrompt();
     const pwMode = getPlaywrightMode();
-    const tools = [...buildContextTools(this.rpc), ...buildPlaywrightTools(pwMode)];
-    log('creating chat session:', chatId, 'playwrightMode:', pwMode);
+    const allTools = [...buildContextTools(this.rpc), ...buildPlaywrightTools(pwMode)];
+    // Filter out tools the user has disabled via the sidebar settings panel.
+    const tools = this.disabledTools.size > 0
+      ? allTools.filter((t) => !this.disabledTools.has(t.name))
+      : allTools;
+    log('creating chat session:', chatId, 'playwrightMode:', pwMode,
+      'tools:', tools.length, '/', allTools.length,
+      this.disabledTools.size > 0 ? `(${this.disabledTools.size} disabled)` : '',
+      this.selectedModel ? `model: ${this.selectedModel}` : '');
     const session = await client.createSession({
       clientName: 'Anya',
       streaming: true,
       workingDirectory,
       tools,
+      ...(this.selectedModel ? { model: this.selectedModel } : {}),
       customAgents: [{
         name: 'anya',
         displayName: 'Anya',
