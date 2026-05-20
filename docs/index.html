@@ -66,7 +66,7 @@
   </h1>
 
   <p class="hero-sub">
-    Anya puts GitHub Copilot in your browser sidebar — it reads your tabs, searches your bookmarks, checks your history, and drives your pages. Point at something specific when you need precision.
+    Anya puts GitHub Copilot in your browser sidebar — it reads your tabs, searches your bookmarks, checks your history, and drives your pages. Pick your model, attach any context, and let it work.
   </p>
 
   <div class="hero-install">
@@ -98,15 +98,25 @@
     <li>
       <span class="feat-num">02</span>
       <h3>Acts on your browser.</h3>
-      <p>Fill forms, click through wizards, navigate dashboards — Anya drives <em>your</em> logged-in browser via Playwright. Focus a text field and ask what to write — one click inserts it.</p>
+      <p>Fill forms, click through wizards, navigate dashboards — Anya drives <em>your</em> logged-in browser via Playwright. Toggle approval for write tools and you Allow / Deny each action, or leave it off and let Anya flow.</p>
     </li>
     <li>
       <span class="feat-num">03</span>
       <h3>Your repo too.</h3>
-      <p>Attach a local folder — the SDK loads your skills, prompts, and file tools. Read files, grep, edit, run shell commands, all while the AI is also looking at your browser.</p>
+      <p>Attach a local folder — the SDK loads your skills, prompts, MCP servers, and file tools. Read files, grep, edit, run shell commands, all while the AI is also looking at your browser.</p>
     </li>
     <li>
       <span class="feat-num">04</span>
+      <h3>Multi-chat, your way.</h3>
+      <p>Pin, tag, search, rename, export chats to Markdown. Pick your model — GPT-4o, Claude, or Auto. Slash commands and hotkeys for power users. Everything persists across restarts.</p>
+    </li>
+    <li>
+      <span class="feat-num">05</span>
+      <h3>Point at anything.</h3>
+      <p>Right-click any element → "Add to Anya". Or use 📎 and <code>@</code> references to attach tabs, selections, bookmarks, history, clipboard, images, or local folders. Context chips travel with your prompt.</p>
+    </li>
+    <li>
+      <span class="feat-num">06</span>
       <h3>Nothing leaves your machine.</h3>
       <p>Your existing GitHub Copilot seat, your browser, your laptop. Chats live in <code>chrome.storage</code>. The bridge runs locally. No server, no telemetry, no cloud sync.</p>
     </li>
@@ -151,7 +161,7 @@
     <article class="prefix">
       <div class="prefix-glyph slash">⚡</div>
       <h3>Let it drive</h3>
-      <p class="prefix-meaning">Anya connects to your tab and acts — clicks, fills, navigates, screenshots. You stay in the loop; it does the repetitive work.</p>
+      <p class="prefix-meaning">Anya connects to your tab and acts — clicks, fills, navigates, screenshots. You stay in control with optional approval for every write action.</p>
       <ul class="prefix-list">
         <li>"Fill every field on this form"</li>
         <li>"Click approve on all pending items"</li>
@@ -220,7 +230,6 @@
   </header>
 
   <p style="text-align:center; font-size: 0.85rem; opacity: 0.6; margin: -0.5rem 0 1.5rem;">Works on: <strong>Edge</strong> · <strong>Chrome</strong> · <strong>Brave</strong> · <strong>Vivaldi</strong> · <strong>Chromium</strong> · <strong>Arc</strong></p>
-  </header>
 
   <div class="install-grid">
     <div class="terminal">
@@ -278,7 +287,7 @@
 
 <section id="under" class="diagram-section">
   <header class="section-head centered">
-    <span class="kicker">04 · Under the hood</span>
+    <span class="kicker">05 · Under the hood</span>
     <h2>Simple architecture.<br/>Serious power.</h2>
     <p class="section-lede">A sidebar extension, a content script on every page, and a local Node bridge. No servers. No relays. Everything on your machine.</p>
   </header>
@@ -312,8 +321,8 @@
 
 <section class="quote">
   <p>
-    <span class="quote-mark">“</span>Your browser is my workspace.<br/>
-    Tabs are my files. Bookmarks are my knowledge graph.<span class="quote-mark">”</span>
+    <span class="quote-mark">"</span>Your browser is my workspace.<br/>
+    Tabs are my files. Bookmarks and history are my knowledge graph.<span class="quote-mark">"</span>
   </p>
   <cite>— Anya</cite>
 </section>

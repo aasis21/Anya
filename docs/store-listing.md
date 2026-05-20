@@ -27,6 +27,7 @@ It uses the official @github/copilot-sdk and your existing Copilot subscription.
 What it does well:
 • Read what you're looking at — "@tab tldr", "summarise this PR", "what does selection mean?"
 • Drive your real, logged-in browser — fill forms, click through wizards, navigate dashboards. No reauth, no captcha redo.
+• Stay in control — toggle "Require approval for write tools" and Anya pauses before any write, shell, or MCP action. Allow or Deny each call. Read tools always auto-approve.
 • Reason across many tabs at once — "@tabs which of these is red?", "diff GitHub PR vs ADO work item".
 • Use your bookmarks as a knowledge graph — "open the order release page", "group these by topic".
 • Bring your repo into the loop — point Anya at a local project folder and it gets the full Copilot toolbelt (read, edit, grep, shell, MCP) right alongside the tab it's helping with.

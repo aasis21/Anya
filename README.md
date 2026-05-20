@@ -46,6 +46,10 @@ anything on a page to attach it as context.
   delete, export to Markdown. Survives restarts via `chrome.storage.local`.
 - **Streaming + tool cards.** Token-by-token streaming. Every tool call
   renders as an expandable card with args, progress, and result preview.
+- **Approval for write tools.** Toggle "Require approval for write tools"
+  in the 🔧 tools panel. When on, Anya asks before running any
+  write/shell/MCP tool — you Allow or Deny each call. Read tools always
+  auto-approve. Off by default.
 - **Live debug panel.** 🐛 button traces every Native Messaging frame.
 - **Hotkeys + slash commands.** `Ctrl+B/N/K/L/.`, `Ctrl+1..9`, plus
   `/help`, `/pin`, `/stop`, `/tag`, `/clear`, `/export`, `/open`.
@@ -287,7 +291,20 @@ delete the `~/Anya` folder if you no longer need it.
 | ☰     | Toggle the chat drawer (`Ctrl+B`)                            |
 | ＋    | New chat (`Ctrl+N`)                                          |
 | 🐛    | Toggle the bridge debug panel                                |
-| ☀ / ☾ | Toggle light / dark theme (persisted)                        |
+| ⋯     | Menu: Remote Debug, Debug Log, Dark Theme                    |
+
+### Tools panel
+
+Open via the **🔧** pill in the composer bar.
+
+- Toggle individual tools on/off across 4 groups: Browser Context,
+  Browser Actions, Playwright Connection, Playwright Driving.
+- **"Require approval for write tools"** toggle — when ON, Anya pauses
+  before executing any write/shell/MCP tool and shows an approval banner
+  above the composer with **Allow** / **Deny** buttons. Read-only tools
+  (tab content, history, selections, bookmarks search) always auto-approve.
+  Off by default.
+- **"all on" / "all off"** buttons for quick bulk toggling.
 
 ### Chat drawer
 
