@@ -57,6 +57,7 @@ export type BridgeEvent =
   | { type: 'tool-request'; id: string; tool: string; args: unknown }
   | { type: 'tool-start'; chatId: string; toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string }
   | { type: 'tool-progress'; chatId: string; toolCallId: string; message: string }
+  | { type: 'tool-partial-result'; chatId: string; toolCallId: string; partialOutput: string }
   | { type: 'tool-complete'; chatId: string; toolCallId: string; success: boolean; resultPreview?: string; error?: string }
   | { type: 'permission-request'; requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
 
@@ -375,6 +376,16 @@ export class CopilotBridge {
             chatId,
             toolCallId: data.toolCallId,
             message: data.progressMessage,
+          });
+          break;
+        }
+        case 'tool.execution_partial_result': {
+          const data = event.data as { toolCallId: string; partialOutput: string };
+          this.emit({
+            type: 'tool-partial-result',
+            chatId,
+            toolCallId: data.toolCallId,
+            partialOutput: typeof data.partialOutput === 'string' ? data.partialOutput : '',
           });
           break;
         }

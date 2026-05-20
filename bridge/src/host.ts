@@ -100,6 +100,14 @@ copilot.onEvent((event) => {
         message: event.message,
       });
       break;
+    case 'tool-partial-result':
+      transport.send({
+        type: 'tool-partial-result',
+        chatId: event.chatId,
+        toolCallId: event.toolCallId,
+        partialOutput: event.partialOutput,
+      });
+      break;
     case 'tool-complete':
       log('→ tool-complete', event.toolCallId, 'success=', event.success);
       transport.send({

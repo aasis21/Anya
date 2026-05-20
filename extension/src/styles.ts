@@ -284,6 +284,7 @@ export const sidebarStyles = css`
     }
     .msg.user .meta .avatar { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
     .msg.assistant .meta .avatar { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #6ee7b7)); color: #fff; }
+    .msg.assistant .meta .avatar .avatar-icon { width: 14px; height: 14px; display: block; }
     .msg .meta .role { color: var(--fg-dim); font-weight: 600; font-size: 11.5px; letter-spacing: 0.03em; }
     .msg.user   .meta .role { color: var(--fg); }
     .msg.system .meta .role { color: var(--fg-faint); }
@@ -412,6 +413,16 @@ export const sidebarStyles = css`
     }
     .toolcall .tc-detail .tc-section { color: var(--fg-faint); margin-top: 6px; font-weight: 700; letter-spacing: 0.08em; }
     .toolcall .tc-detail .tc-section:first-child { margin-top: 0; }
+    .toolcall .tc-detail .tc-partial {
+      margin: 2px 0 0;
+      font-size: 11px;
+      line-height: 1.4;
+      max-height: 120px;
+      overflow-y: auto;
+      color: var(--fg-faint);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     @keyframes tc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
     /* markdown inside bubbles */

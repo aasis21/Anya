@@ -22,6 +22,8 @@ export interface ToolCall {
   startedAt: number;
   finishedAt?: number;
   progress?: string;
+  /** Streaming tool output accumulated from tool.execution_partial_result events. */
+  partialOutput?: string;
   resultPreview?: string;
   error?: string;
   /** UI-only: card is currently expanded to show args / result. */

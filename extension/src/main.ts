@@ -846,6 +846,23 @@ export class AnyaApp extends LitElement {
         }));
         break;
       }
+      case 'tool-partial-result': {
+        if (!chatId) break;
+        const tcid = String(data.toolCallId ?? '');
+        const c = this.chats.find((x) => x.id === chatId);
+        const existing = c?.toolCalls[tcid];
+        if (!existing) break;
+        const chunk = typeof data.partialOutput === 'string' ? data.partialOutput : '';
+        if (!chunk) break;
+        const next = (existing.partialOutput ?? '') + chunk;
+        // Cap to avoid unbounded growth on chatty tools; tool-complete carries the canonical result.
+        const capped = next.length > 16000 ? next.slice(next.length - 16000) : next;
+        this.mutateChat(chatId, (c) => ({
+          ...c,
+          toolCalls: { ...c.toolCalls, [tcid]: { ...existing, partialOutput: capped } },
+        }));
+        break;
+      }
       case 'tool-complete': {
         if (!chatId) break;
         const tcid = String(data.toolCallId ?? '');
@@ -893,7 +910,7 @@ export class AnyaApp extends LitElement {
         }
         break;
       case 'permission-request': {
-        const req = f as { requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
+        const req = f as unknown as { requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
         this.pendingApprovals.set(req.requestId, {
           chatId: req.chatId,
           toolName: req.toolName,
@@ -1045,7 +1062,7 @@ export class AnyaApp extends LitElement {
       case 'browse_history': {
         const query = String(args.query ?? '');
         const maxResults = Math.min(Number(args.maxResults || 100), 500);
-        const searchOpts: chrome.history.SearchQuery = { text: query, maxResults };
+        const searchOpts: { text: string; maxResults?: number; startTime?: number; endTime?: number } = { text: query, maxResults };
         if (typeof args.startTime === 'string' && args.startTime) {
           const t = Date.parse(args.startTime as string);
           if (!isNaN(t)) searchOpts.startTime = t;
@@ -2286,9 +2303,13 @@ export class AnyaApp extends LitElement {
                 ? html`<div class="tc-section">ERROR</div>${tc.error}`
                 : tc.resultPreview
                   ? html`<div class="tc-section">RESULT</div>${tc.resultPreview}`
-                  : nothing}
+                  : tc.status === 'running' && tc.partialOutput
+                    ? html`<div class="tc-section">OUTPUT</div><pre class="tc-partial">${tc.partialOutput}</pre>`
+                    : nothing}
             </div>`
-          : nothing}
+          : tc.status === 'running' && tc.partialOutput
+            ? html`<div class="tc-detail"><pre class="tc-partial">${tc.partialOutput.length > 200 ? '…' + tc.partialOutput.slice(-200) : tc.partialOutput}</pre></div>`
+            : nothing}
       </div>
     `;
   }
@@ -2597,7 +2618,7 @@ export class AnyaApp extends LitElement {
           ? html`<div class="empty">
               <span class="glyph">A</span>
               <span class="empty-title">Anya, in your browser</span>
-              <span class="empty-sub">Ask about any tab, drive pages, search bookmarks — or attach a folder for code tools.</span>
+              <span class="empty-sub">Read and summarise tabs, automate pages with Playwright,<br/>search bookmarks &amp; history — or attach a folder for code tools.</span>
             </div>`
           : repeat(
               this.messages,
@@ -2605,7 +2626,7 @@ export class AnyaApp extends LitElement {
               (m) => html`
                 <div class="msg ${m.role} ${m.kind ?? ''}" @mouseleave=${() => { if (this.msgMenuId === m.id) this.msgMenuId = null; }}>
                   <div class="meta">
-                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? '◆' : '◈'}</span>
+                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? html`<img src="icons/icon16.png" alt="A" class="avatar-icon"/>` : '◈'}</span>
                     <span class="role">${this.roleLabel(m)}</span>
                     <span class="ts">${this.fmtTime(m.ts)}</span>
                     <button class="msg-menu-btn" @click=${() => { this.msgMenuId = this.msgMenuId === m.id ? null : m.id; }} title="Actions">⋯</button>
