@@ -2617,8 +2617,8 @@ export class AnyaApp extends LitElement {
           : this.messages.length === 0
           ? html`<div class="empty">
               <span class="glyph">A</span>
-              <span class="empty-title">GitHub Copilot, in your browser</span>
-              <span class="empty-sub">Ask about any tab, drive pages, search bookmarks &amp; history,<br/>pick your model, approve every action — or just let it flow.</span>
+              <span class="empty-title">GitHub Copilot, in your browser!!</span>
+              <span class="empty-sub">Read tabs. Drive pages. Search bookmarks.<br/>Pick your model. Approve actions or let it flow.</span>
             </div>`
           : repeat(
               this.messages,
