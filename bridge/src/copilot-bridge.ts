@@ -1,5 +1,5 @@
 import { CopilotClient, approveAll, type CopilotSession } from '@github/copilot-sdk';
-import type { SessionEvent } from '@github/copilot-sdk';
+import type { SessionEvent, PermissionRequest, PermissionRequestResult } from '@github/copilot-sdk';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,7 +57,8 @@ export type BridgeEvent =
   | { type: 'tool-request'; id: string; tool: string; args: unknown }
   | { type: 'tool-start'; chatId: string; toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string }
   | { type: 'tool-progress'; chatId: string; toolCallId: string; message: string }
-  | { type: 'tool-complete'; chatId: string; toolCallId: string; success: boolean; resultPreview?: string; error?: string };
+  | { type: 'tool-complete'; chatId: string; toolCallId: string; success: boolean; resultPreview?: string; error?: string }
+  | { type: 'permission-request'; requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
 
 export type BridgeEventHandler = (event: BridgeEvent) => void;
 
@@ -76,6 +77,10 @@ export class CopilotBridge {
   private creating = new Map<string, Promise<ChatHandle>>();
   private disabledTools: Set<string> = new Set();
   private selectedModel = '';
+  private autoApprove = true;
+  /** Resolvers for pending permission requests waiting on user decision. */
+  private permissionResolvers = new Map<string, (approved: boolean) => void>();
+  private permissionSeq = 0;
 
   constructor() {
     this.rpc = new ToolRpc((frame) => this.emit(frame));
@@ -112,6 +117,51 @@ export class CopilotBridge {
   setModel(model: string): void {
     this.selectedModel = model;
     log('model updated:', model || '(default)');
+  }
+
+  setAutoApprove(value: boolean): void {
+    this.autoApprove = value;
+    log('auto-approve updated:', value);
+  }
+
+  /** Resolve a pending permission request from the UI. */
+  resolvePermission(requestId: string, approved: boolean): void {
+    const resolver = this.permissionResolvers.get(requestId);
+    if (resolver) {
+      resolver(approved);
+      this.permissionResolvers.delete(requestId);
+      log('permission resolved:', requestId, approved ? 'approved' : 'denied');
+    } else {
+      warn('no pending permission for requestId:', requestId);
+    }
+  }
+
+  /** Permission handler: auto-approves reads, asks user for write/shell/mcp. */
+  private makePermissionHandler(chatId: string) {
+    return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+      // Always auto-approve read-only requests.
+      if (request.kind === 'read' || this.autoApprove) {
+        return { kind: 'approved' };
+      }
+      // Write/shell/mcp/custom-tool: ask the user.
+      const requestId = `perm-${++this.permissionSeq}`;
+      log('permission request:', requestId, request.kind, request.toolCallId);
+      this.emit({
+        type: 'permission-request',
+        requestId,
+        chatId,
+        toolName: String(request.toolCallId ?? request.kind),
+        kind: request.kind,
+        arguments: request,
+      });
+      return new Promise<PermissionRequestResult>((resolve) => {
+        this.permissionResolvers.set(requestId, (approved) => {
+          resolve(approved
+            ? { kind: 'approved' }
+            : { kind: 'denied-interactively-by-user' });
+        });
+      });
+    };
   }
 
   private emit(event: BridgeEvent): void {
@@ -258,7 +308,7 @@ export class CopilotBridge {
         prompt: agentPrompt,
       }],
       agent: 'anya',
-      onPermissionRequest: approveAll,
+      onPermissionRequest: this.makePermissionHandler(chatId),
     });
     log('chat session created:', chatId, 'sessionId=', session.sessionId);
     const handle: ChatHandle = { chatId, session, workingDirectory };

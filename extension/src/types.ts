@@ -169,6 +169,10 @@ export interface ToolMeta {
   label: string;
   /** One-line description shown below the label. */
   description: string;
+  /** True for tools that modify browser state (tabs, bookmarks, DOM, storage).
+   *  Write tools go through the approval flow when auto-approve is off;
+   *  read tools (`write` absent or false) always execute immediately. */
+  write?: boolean;
 }
 
 export interface ToolGroup {
@@ -201,10 +205,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
     label: 'Browser Actions',
     icon: '🖱️',
     tools: [
-      { name: 'focus_tab', label: 'Focus Tab', description: 'Bring a tab to the foreground' },
-      { name: 'open_tab', label: 'Open Tab', description: 'Open a new tab at a URL' },
-      { name: 'close_tab', label: 'Close Tab', description: 'Close one or more tabs' },
-      { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Read and manage bookmarks' },
+      { name: 'focus_tab', label: 'Focus Tab', description: 'Bring a tab to the foreground', write: true },
+      { name: 'open_tab', label: 'Open Tab', description: 'Open a new tab at a URL', write: true },
+      { name: 'close_tab', label: 'Close Tab', description: 'Close one or more tabs', write: true },
+      { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Read and manage bookmarks', write: true },
     ],
   },
   {
@@ -212,10 +216,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
     label: 'Playwright Connection',
     icon: '🔗',
     tools: [
-      { name: 'bind_tab', label: 'Bind Tab', description: 'Bind a tab for automation (extension mode)' },
-      { name: 'unbind_tab', label: 'Unbind Tab', description: 'Release the bound tab' },
-      { name: 'connect_browser', label: 'Connect Browser', description: 'Attach via CDP (cdp mode)' },
-      { name: 'disconnect_browser', label: 'Disconnect', description: 'Release CDP connection' },
+      { name: 'bind_tab', label: 'Bind Tab', description: 'Bind a tab for automation (extension mode)', write: true },
+      { name: 'unbind_tab', label: 'Unbind Tab', description: 'Release the bound tab', write: true },
+      { name: 'connect_browser', label: 'Connect Browser', description: 'Attach via CDP (cdp mode)', write: true },
+      { name: 'disconnect_browser', label: 'Disconnect', description: 'Release CDP connection', write: true },
     ],
   },
   {
@@ -224,10 +228,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
     icon: '🎭',
     tools: [
       { name: 'bound_tabs', label: 'Bound Tabs', description: 'List tabs under Playwright control' },
-      { name: 'drive_tab', label: 'Drive Tab', description: 'Page-scoped DOM, nav, screenshots, eval' },
-      { name: 'drive_browser', label: 'Drive Browser', description: 'Browser/session/multi-tab lifecycle' },
-      { name: 'drive_context', label: 'Drive Context', description: 'Cookies, storage, auth, network mocking' },
-      { name: 'drive_devtools', label: 'Drive DevTools', description: 'Console, network log, tracing, video' },
+      { name: 'drive_tab', label: 'Drive Tab', description: 'Page-scoped DOM, nav, screenshots, eval', write: true },
+      { name: 'drive_browser', label: 'Drive Browser', description: 'Browser/session/multi-tab lifecycle', write: true },
+      { name: 'drive_context', label: 'Drive Context', description: 'Cookies, storage, auth, network mocking', write: true },
+      { name: 'drive_devtools', label: 'Drive DevTools', description: 'Console, network log, tracing, video', write: true },
     ],
   },
 ];

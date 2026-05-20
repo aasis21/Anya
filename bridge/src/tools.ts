@@ -92,7 +92,6 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
         required: ['tabId'],
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('focus_tab', args)),
     }),
     defineTool('open_tab', {
@@ -108,7 +107,6 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
         required: ['url'],
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('open_tab', args)),
     }),
     defineTool('close_tab', {
@@ -130,7 +128,6 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
         },
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('close_tab', args)),
     }),
 
@@ -190,7 +187,6 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
         required: ['op'],
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('manage_bookmarks', args)),
     }),
 
@@ -248,7 +244,6 @@ function buildExtensionTools(): Tool[] {
         },
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => {
         const a = (args ?? {}) as { hint?: unknown };
         const hint = typeof a.hint === 'string' && a.hint.trim() ? a.hint.trim() : undefined;
@@ -272,7 +267,6 @@ function buildExtensionTools(): Tool[] {
         'you are done with browser automation, or before binding a different tab if you want ' +
         'to be explicit. `bind_tab` also auto-replaces, so calling unbind first is optional.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
-      skipPermission: true,
       handler: async () => {
         const ok = await unbindTab();
         return JSON.stringify({ ok });
@@ -300,7 +294,6 @@ function buildCdpTools(): Tool[] {
         },
         additionalProperties: false,
       },
-      skipPermission: true,
       handler: async (args) => {
         const a = (args ?? {}) as { browser?: unknown };
         const browser = typeof a.browser === 'string' && a.browser.trim() ? a.browser.trim() : 'msedge';
@@ -313,7 +306,6 @@ function buildCdpTools(): Tool[] {
         'Release the CDP connection to the browser. Use when you are done with browser ' +
         'automation. The browser stays open — only the Playwright control is released.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
-      skipPermission: true,
       handler: async () => {
         const ok = await disconnectBrowser();
         return JSON.stringify({ ok });
@@ -467,7 +459,6 @@ function buildDriveTool(name: string, description: string): Tool {
       required: ['argv'],
       additionalProperties: false,
     },
-    skipPermission: true,
     handler: async (args) => {
       const a = (args ?? {}) as { argv?: unknown };
       if (!Array.isArray(a.argv) || a.argv.some((v) => typeof v !== 'string')) {

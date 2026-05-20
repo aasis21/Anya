@@ -127,6 +127,10 @@ export class AnyaApp extends LitElement {
   @state() private modelMenuOpen = false;
   // Workspace selector
   @state() private workspaceMenuOpen = false;
+  // Approval mode: true = auto-approve all, false = ask user for write tools
+  @state() private autoApprove = true;
+  /** Pending permission requests from the bridge, keyed by requestId. */
+  private pendingApprovals = new Map<string, { chatId: string; toolName: string; kind: string; args?: unknown }>();
   /** Client-side queue for prompts sent while streaming. Drained in finishStream. */
   private pendingQueue: Array<{ chatId: string; text: string; ctx: ContextAttachment[] }> = [];
 
@@ -204,6 +208,7 @@ export class AnyaApp extends LitElement {
     this.loadTheme();
     this.loadDebug();
     void this.loadDisabledTools();
+    void this.loadAutoApprove();
     void this.loadChats();
     void this.loadQuickPrompts();
     window.addEventListener('keydown', this.onGlobalKey);
@@ -279,6 +284,16 @@ export class AnyaApp extends LitElement {
   private async loadDisabledTools(): Promise<void> {
     const arr = await this.readStorage<string[]>('anya-disabled-tools');
     if (Array.isArray(arr)) this.disabledTools = new Set(arr.filter((s) => typeof s === 'string'));
+  }
+
+  private async loadAutoApprove(): Promise<void> {
+    const v = await this.readStorage<boolean>('anya-auto-approve');
+    if (typeof v === 'boolean') this.autoApprove = v;
+  }
+
+  private persistAutoApprove(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-auto-approve': this.autoApprove }); } catch { /* ignore */ }
+    this.bridgeSend({ type: 'set-auto-approve', autoApprove: this.autoApprove });
   }
 
   private persistDisabledTools(): void {
@@ -877,6 +892,17 @@ export class AnyaApp extends LitElement {
           this.handleFolderPickResult(f.path);
         }
         break;
+      case 'permission-request': {
+        const req = f as { requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
+        this.pendingApprovals.set(req.requestId, {
+          chatId: req.chatId,
+          toolName: req.toolName,
+          kind: req.kind,
+          args: req.arguments,
+        });
+        this.requestUpdate();
+        break;
+      }
       default:
         console.debug('[Anya] unknown frame:', f);
     }
@@ -2182,6 +2208,36 @@ export class AnyaApp extends LitElement {
     this.pushSystem(this.currentChatId, 'Workspace cleared. Using default Anya workspace.', 'normal');
   }
 
+  // ----- Approval handling ------------------------------------------------
+  private respondToApproval(requestId: string, approved: boolean): void {
+    this.bridgeSend({
+      type: 'permission-response',
+      requestId,
+      approved,
+    });
+    this.pendingApprovals.delete(requestId);
+    this.requestUpdate();
+  }
+
+  private renderApprovalBanners() {
+    if (this.pendingApprovals.size === 0) return nothing;
+    const entries = [...this.pendingApprovals.entries()].filter(
+      ([, v]) => v.chatId === this.currentChatId,
+    );
+    if (entries.length === 0) return nothing;
+    return entries.map(([id, req]) => html`
+      <div class="approval-banner">
+        <span class="approval-icon">⚠️</span>
+        <span class="approval-info">
+          <span class="approval-tool">${req.toolName}</span>
+          <span class="approval-kind">${req.kind}</span>
+        </span>
+        <button class="approval-btn approve" @click=${() => this.respondToApproval(id, true)}>Allow</button>
+        <button class="approval-btn deny" @click=${() => this.respondToApproval(id, false)}>Deny</button>
+      </div>
+    `);
+  }
+
   // ----- render ----------------------------------------------------------
   private fmtTime(ts: number): string {
     const d = new Date(ts);
@@ -2318,7 +2374,7 @@ export class AnyaApp extends LitElement {
 
   private roleLabel(m: ChatMessage): string {
     if (m.role === 'user') return 'You';
-    if (m.role === 'assistant') return 'Copilot';
+    if (m.role === 'assistant') return 'Anya';
     if (m.kind === 'error') return 'Error';
     if (m.kind === 'denied') return 'Denied';
     return 'System';
@@ -2402,6 +2458,22 @@ export class AnyaApp extends LitElement {
           }} title="Disable all">all off</button>
         </div>
         <div class="tools-hint">These are Anya's built-in browser tools — on top of any MCP servers loaded from your workspace.</div>
+        <div class="tools-approval-row">
+          <label class="tool-item approval-toggle">
+            <span class="tool-switch">
+              <input
+                type="checkbox"
+                .checked=${!this.autoApprove}
+                @change=${() => { this.autoApprove = !this.autoApprove; this.persistAutoApprove(); }}
+              />
+              <span class="tool-slider"></span>
+            </span>
+            <span class="tool-info">
+              <span class="tool-name">Require approval for write tools</span>
+              <span class="tool-desc">${this.autoApprove ? 'Auto-approving all tools' : 'Will ask before write/shell/MCP tools run'}</span>
+            </span>
+          </label>
+        </div>
         <div class="tools-groups">
           ${TOOL_GROUPS.map((group) => {
             const collapsed = this.toolGroupCollapsed.has(group.id);
@@ -2523,8 +2595,9 @@ export class AnyaApp extends LitElement {
             </div>`
           : this.messages.length === 0
           ? html`<div class="empty">
-              <span class="glyph">✦</span>
-              Ask Copilot anything
+              <span class="glyph">A</span>
+              <span class="empty-title">Anya, in your browser</span>
+              <span class="empty-sub">Ask about any tab, drive pages, search bookmarks — or attach a folder for code tools.</span>
             </div>`
           : repeat(
               this.messages,
@@ -2532,7 +2605,7 @@ export class AnyaApp extends LitElement {
               (m) => html`
                 <div class="msg ${m.role} ${m.kind ?? ''}" @mouseleave=${() => { if (this.msgMenuId === m.id) this.msgMenuId = null; }}>
                   <div class="meta">
-                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? '✦' : '◈'}</span>
+                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? '◆' : '◈'}</span>
                     <span class="role">${this.roleLabel(m)}</span>
                     <span class="ts">${this.fmtTime(m.ts)}</span>
                     <button class="msg-menu-btn" @click=${() => { this.msgMenuId = this.msgMenuId === m.id ? null : m.id; }} title="Actions">⋯</button>
@@ -2553,6 +2626,7 @@ export class AnyaApp extends LitElement {
       </main>
 
       <footer>
+        ${this.renderApprovalBanners()}
         ${this.autocomplete ? this.renderAutocomplete() : nothing}
         ${this.contextAttachments.length > 0 ? html`
           <div class="ctx-strip">
@@ -2576,7 +2650,7 @@ export class AnyaApp extends LitElement {
               id="prompt-input"
               rows="1"
               spellcheck="false"
-              placeholder=${online ? 'Ask Copilot anything…' : 'Bridge offline — waiting to reconnect…'}
+              placeholder=${online ? 'Ask or tell Anya what to do…' : 'Bridge offline — waiting to reconnect…'}
               ?disabled=${!online}
               @keydown=${this.onKeyDown}
               @input=${this.onInput}

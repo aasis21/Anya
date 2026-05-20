@@ -111,6 +111,17 @@ copilot.onEvent((event) => {
         error: event.error,
       });
       break;
+    case 'permission-request':
+      log('→ permission-request', event.requestId, event.kind);
+      transport.send({
+        type: 'permission-request',
+        requestId: event.requestId,
+        chatId: event.chatId,
+        toolName: event.toolName,
+        kind: event.kind,
+        arguments: event.arguments,
+      });
+      break;
   }
 });
 
@@ -256,6 +267,19 @@ transport.onFrame(async (raw) => {
       const model = typeof frame.model === 'string' ? frame.model : '';
       log('set-model:', model || '(default)');
       copilot.setModel(model);
+      break;
+    }
+    case 'set-auto-approve': {
+      const autoApprove = frame.autoApprove === true;
+      log('set-auto-approve:', autoApprove);
+      copilot.setAutoApprove(autoApprove);
+      break;
+    }
+    case 'permission-response': {
+      const requestId = typeof frame.requestId === 'string' ? frame.requestId : '';
+      const approved = frame.approved === true;
+      log('permission-response:', requestId, approved ? 'approved' : 'denied');
+      copilot.resolvePermission(requestId, approved);
       break;
     }
     case 'list-models': {

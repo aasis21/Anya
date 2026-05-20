@@ -187,18 +187,43 @@ export const sidebarStyles = css`
     main::-webkit-scrollbar-thumb:hover { background: var(--fg-faint); }
 
     main > .empty {
-      padding: 60px 18px;
+      padding: 80px 24px 60px;
       color: var(--fg-faint);
       font-size: 11px;
       text-align: center;
       letter-spacing: 0.06em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
     }
     .empty .glyph {
       color: var(--accent);
-      font-size: 28px;
-      display: block;
-      margin-bottom: 10px;
-      font-weight: 700;
+      font-size: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      margin-bottom: 8px;
+      font-weight: 800;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      letter-spacing: -0.02em;
+    }
+    .empty .empty-title {
+      color: var(--fg);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .empty .empty-sub {
+      color: var(--fg-dim);
+      font-size: 11.5px;
+      line-height: 1.5;
+      max-width: 260px;
+      letter-spacing: 0;
     }
     .empty .hint {
       margin-top: 14px;
@@ -693,6 +718,71 @@ export const sidebarStyles = css`
     }
     .workspace-menu-item:hover { background: var(--bg-bubble); color: var(--fg); }
     .workspace-menu-icon { font-size: 13px; flex-shrink: 0; }
+
+    /* ── Approval banner ────────────────────────────────── */
+    .approval-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-soft);
+      border: 1px solid #d4a017;
+      border-radius: 8px;
+      margin: 0 8px 6px;
+      animation: attachMenuIn 0.15s ease-out;
+    }
+    .approval-icon { font-size: 16px; flex-shrink: 0; }
+    .approval-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .approval-tool {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .approval-kind {
+      font-size: 10px;
+      color: var(--fg-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .approval-btn {
+      font-size: 11px;
+      font-family: inherit;
+      padding: 3px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid var(--bg-rule);
+      transition: background 120ms ease, color 120ms ease;
+      flex-shrink: 0;
+    }
+    .approval-btn.approve {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .approval-btn.approve:hover { filter: brightness(1.15); }
+    .approval-btn.deny {
+      background: var(--bg);
+      color: var(--fg-dim);
+    }
+    .approval-btn.deny:hover { background: var(--bg-bubble); color: var(--fg); }
+
+    /* ── Approval toggle in tools panel ─────────────────── */
+    .tools-approval-row {
+      padding: 4px 8px 2px;
+      border-bottom: 1px solid var(--bg-rule);
+    }
+    .approval-toggle .tool-desc {
+      font-style: italic;
+    }
     .attach-menu-item.selected { color: var(--accent); font-weight: 500; }
     .ac-popup {
       position: absolute;
