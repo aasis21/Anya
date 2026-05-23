@@ -262,6 +262,11 @@ export const sidebarStyles = css`
       padding: 8px 16px 10px;
       animation: slideIn 280ms cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .msg.assistant.continuation {
+      padding-top: 2px;
+      padding-bottom: 4px;
+    }
+    .msg.assistant.continuation .meta { display: none; }
     @keyframes slideIn {
       from { opacity: 0; transform: translateY(6px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -326,7 +331,7 @@ export const sidebarStyles = css`
     }
 
     /* tool call cards (inline in assistant messages, like VS Code Copilot) */
-    .toolcalls { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+    .toolcalls { display: flex; flex-direction: column; gap: 4px; margin: 0 0 4px; }
     .intent-line {
       color: var(--fg-dim);
       font-style: italic;
@@ -501,6 +506,23 @@ export const sidebarStyles = css`
       flex: 0 0 auto;
       position: relative;
       padding: 6px 10px;
+    }
+    .new-activity-btn {
+      align-self: center;
+      margin: 0 0 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+      background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+      color: var(--fg);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 120ms ease, transform 120ms ease;
+    }
+    .new-activity-btn:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
     }
     .composer-row {
       display: flex;

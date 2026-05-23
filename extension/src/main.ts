@@ -230,6 +230,8 @@ export class AnyaApp extends LitElement {
   // Chats whose stream the user cancelled. We keep painting nothing for further
   // deltas until the bridge sends `done`, then we drop the id.
   private cancelledChats: Set<string> = new Set();
+  @state() private followTranscript = true;
+  @state() private hasNewBelow = false;
   // Per-message hover toolbar — id of the message whose ⋯ menu is open.
   @state() private msgMenuId: string | null = null;
 
@@ -627,8 +629,10 @@ export class AnyaApp extends LitElement {
     this.currentChatId = id;
     this.chatDrawerOpen = false;
     this.searchOpen = false;
+    this.followTranscript = true;
+    this.hasNewBelow = false;
     this.persistChats();
-    this.scrollToBottom();
+    this.scrollToBottom(true);
   };
 
   private deleteChat = (id: string): void => {
@@ -717,6 +721,25 @@ export class AnyaApp extends LitElement {
   // ----- message-level actions (copy / delete / regenerate) -------------
   private copyMessage = (m: ChatMessage): void => {
     navigator.clipboard?.writeText(m.text).catch(() => { /* ignore */ });
+    this.msgMenuId = null;
+  };
+
+  private copyAssistantTurnFromIndex = (idx: number): void => {
+    if (idx < 0 || idx >= this.messages.length) return;
+    if (this.messages[idx]?.role !== 'assistant') return;
+
+    let start = idx;
+    while (start > 0 && this.messages[start - 1].role === 'assistant') start--;
+
+    const parts: string[] = [];
+    for (let i = start; i <= idx; i++) {
+      const t = this.messages[i].text?.trim();
+      if (t) parts.push(t);
+    }
+
+    const text = parts.join('\n\n');
+    if (!text) return;
+    navigator.clipboard?.writeText(text).catch(() => { /* ignore */ });
     this.msgMenuId = null;
   };
 
@@ -1426,6 +1449,31 @@ export class AnyaApp extends LitElement {
       });
       return;
     }
+
+    const current = this.chats
+      .find((x) => x.id === chatId)
+      ?.messages.find((m) => m.id === sid);
+
+    // If we already streamed assistant text, start a fresh tool segment so the
+    // transcript reads naturally: assistant text -> tools -> assistant text.
+    if (current && current.text.trim().length > 0) {
+      this.mutateChat(chatId, (c) => ({
+        ...c,
+        messages: c.messages.map((m) => (m.id === sid ? { ...m, pending: false } : m)),
+      }));
+      const id = `m${Date.now()}`;
+      this.streamingIds.set(chatId, id);
+      this.appendMessage(chatId, {
+        id,
+        role: 'assistant',
+        text: '',
+        pending: true,
+        ts: Date.now(),
+        toolCallIds: [toolCallId],
+      });
+      return;
+    }
+
     this.mutateChat(chatId, (c) => ({
       ...c,
       messages: c.messages.map((m) => {
@@ -1480,6 +1528,24 @@ export class AnyaApp extends LitElement {
       this.streamingIds.set(chatId, id);
       this.appendMessage(chatId, { id, role: 'assistant', text: chunk, pending: true, ts: Date.now() });
     } else {
+      const current = this.chats
+        .find((x) => x.id === chatId)
+        ?.messages.find((m) => m.id === sid);
+
+      // If current segment is a tool block, start a fresh text segment so the
+      // transcript alternates cleanly: tools -> assistant text.
+      if (current && (current.toolCallIds?.length ?? 0) > 0 && !current.text) {
+        this.mutateChat(chatId, (c) => ({
+          ...c,
+          messages: c.messages.map((m) => (m.id === sid ? { ...m, pending: false } : m)),
+        }));
+        const id = `m${Date.now()}`;
+        this.streamingIds.set(chatId, id);
+        this.appendMessage(chatId, { id, role: 'assistant', text: chunk, pending: true, ts: Date.now() });
+        if (chatId === this.currentChatId) this.scrollToBottom();
+        return;
+      }
+
       this.mutateChat(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) => m.id === sid ? { ...m, text: m.text + chunk } : m),
@@ -1536,9 +1602,27 @@ export class AnyaApp extends LitElement {
     if (chatId === this.currentChatId) this.scrollToBottom();
   }
 
-  private scrollToBottom(): void {
+  private isTranscriptNearBottom(threshold = 28): boolean {
+    const el = this.transcript;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  }
+
+  private onTranscriptScroll = (): void => {
+    const nearBottom = this.isTranscriptNearBottom();
+    this.followTranscript = nearBottom;
+    if (nearBottom) this.hasNewBelow = false;
+  };
+
+  private scrollToBottom(force = false): void {
     queueMicrotask(() => {
-      if (this.transcript) this.transcript.scrollTop = this.transcript.scrollHeight;
+      if (!this.transcript) return;
+      if (!force && !this.followTranscript) {
+        this.hasNewBelow = true;
+        return;
+      }
+      this.transcript.scrollTop = this.transcript.scrollHeight;
+      this.hasNewBelow = false;
     });
   }
 
@@ -1589,7 +1673,7 @@ export class AnyaApp extends LitElement {
     this.syncDraft('');
     this.contextAttachments = [];
     this.attachMenuOpen = false;
-    this.scrollToBottom();
+    this.scrollToBottom(true);
 
     // If streaming and mode is enqueue, queue client-side and DON'T send
     // to the SDK yet.  The queued prompt is dispatched after the current
@@ -2376,7 +2460,7 @@ export class AnyaApp extends LitElement {
     return parts.length === 0 ? text : parts;
   }
 
-  private renderBubble(m: ChatMessage) {
+  private renderBubble(m: ChatMessage, opts?: { assistantTurnTail?: boolean; assistantIndex?: number }) {
     if (m.role === 'system') {
       return html`<div class="bubble">${m.text}</div>`;
     }
@@ -2403,7 +2487,9 @@ export class AnyaApp extends LitElement {
     const cards = ids
       .map((id) => this.toolCalls.get(id))
       .filter((tc): tc is ToolCall => !!tc);
-    const html_ = marked.parse(m.text || '') as string;
+    const text = m.text || '';
+    const hasVisibleText = text.trim().length > 0;
+    const html_ = marked.parse(text) as string;
     // Pending-but-empty assistant messages mean the model is thinking
     // (turn started, but no tokens or tool calls yet). Show an animated
     // thinking line so the UI doesn't appear frozen.
@@ -2418,12 +2504,15 @@ export class AnyaApp extends LitElement {
             <span class="thinking-text">${m.intent ? m.intent : 'Thinking…'}</span>
           </div>`
         : nothing}
-      ${m.text || (!m.pending && !isThinking)
+      ${hasVisibleText || (m.pending && text.length > 0)
         ? html`<div class="bubble">
             ${unsafeHTML(html_)}${m.pending && m.text ? html`<span class="caret"></span>` : nothing}
-            ${!m.pending && m.text ? html`
+            ${!m.pending && hasVisibleText && (opts?.assistantTurnTail ?? true) ? html`
               <div class="bubble-actions">
-                <button class="bubble-action-btn" @click=${() => this.copyMessage(m)} title="Copy">📋</button>
+                <button class="bubble-action-btn" @click=${() => {
+                  if (typeof opts?.assistantIndex === 'number') this.copyAssistantTurnFromIndex(opts.assistantIndex);
+                  else this.copyMessage(m);
+                }} title="Copy whole turn">📋</button>
                 ${this.focusedField ? html`
                   <button class="bubble-action-btn" @click=${() => this.fillField(m.text)} title="Insert into field">↗</button>
                   <button class="bubble-action-btn" @click=${() => this.fillField(m.text, 'append')} title="Append to field">＋</button>
@@ -2737,7 +2826,7 @@ export class AnyaApp extends LitElement {
       ${this.searchOpen ? this.renderSearchOverlay() : nothing}
       ${this.debugOpen ? this.renderDebugPanel() : nothing}
 
-      <main>
+      <main @scroll=${this.onTranscriptScroll}>
         ${!online
           ? html`<div class="empty offline-banner">
               <span class="glyph">⚡</span>
@@ -2752,32 +2841,49 @@ export class AnyaApp extends LitElement {
               <span class="empty-sub">Read tabs. Drive pages. Search bookmarks.<br/>Pick your model. Approve actions or let it flow.</span>
             </div>`
           : repeat(
-              this.messages,
-              (m) => m.id,
-              (m) => html`
-                <div class="msg ${m.role} ${m.kind ?? ''}" @mouseleave=${() => { if (this.msgMenuId === m.id) this.msgMenuId = null; }}>
-                  <div class="meta">
-                    <span class="avatar">${m.role === 'user' ? '⊹' : m.role === 'assistant' ? html`<img src="icons/icon16.png" alt="A" class="avatar-icon"/>` : '◈'}</span>
-                    <span class="role">${this.roleLabel(m)}</span>
-                    <span class="ts">${this.fmtTime(m.ts)}</span>
-                    <button class="msg-menu-btn" @click=${() => { this.msgMenuId = this.msgMenuId === m.id ? null : m.id; }} title="Actions">⋯</button>
-                    ${this.msgMenuId === m.id ? html`
-                      <span class="msg-menu">
-                        <button @click=${() => this.copyMessage(m)} title="Copy">copy</button>
-                        ${m.role === 'user' ? html`
-                          <button @click=${() => this.regenerateFromMessage(this.currentChatId, m.id)} title="Re-send">resend</button>
-                        ` : nothing}
-                        <button @click=${() => this.deleteMessage(this.currentChatId, m.id)} title="Delete">del</button>
-                      </span>
-                    ` : nothing}
-                  </div>
-                  ${this.renderBubble(m)}
+              this.messages.map((m, i) => ({
+                m,
+                i,
+                continuation:
+                  i > 0
+                  && this.messages[i - 1].role === 'assistant'
+                  && m.role === 'assistant',
+                assistantTurnTail:
+                  m.role === 'assistant'
+                  && (i === this.messages.length - 1 || this.messages[i + 1].role !== 'assistant'),
+              })),
+              (x) => x.m.id,
+              (x) => html`
+                <div class="msg ${x.m.role} ${x.m.kind ?? ''} ${x.continuation ? 'continuation' : ''}" @mouseleave=${() => { if (this.msgMenuId === x.m.id) this.msgMenuId = null; }}>
+                  ${!x.continuation ? html`
+                    <div class="meta">
+                      <span class="avatar">${x.m.role === 'user' ? '⊹' : x.m.role === 'assistant' ? html`<img src="icons/icon16.png" alt="A" class="avatar-icon"/>` : '◈'}</span>
+                      <span class="role">${this.roleLabel(x.m)}</span>
+                      <span class="ts">${this.fmtTime(x.m.ts)}</span>
+                      <button class="msg-menu-btn" @click=${() => { this.msgMenuId = this.msgMenuId === x.m.id ? null : x.m.id; }} title="Actions">⋯</button>
+                      ${this.msgMenuId === x.m.id ? html`
+                        <span class="msg-menu">
+                          <button @click=${() => this.copyMessage(x.m)} title="Copy">copy</button>
+                          ${x.m.role === 'user' ? html`
+                            <button @click=${() => this.regenerateFromMessage(this.currentChatId, x.m.id)} title="Re-send">resend</button>
+                          ` : nothing}
+                          <button @click=${() => this.deleteMessage(this.currentChatId, x.m.id)} title="Delete">del</button>
+                        </span>
+                      ` : nothing}
+                    </div>
+                  ` : nothing}
+                  ${this.renderBubble(x.m, { assistantTurnTail: x.assistantTurnTail, assistantIndex: x.i })}
                 </div>
               `,
             )}
       </main>
 
       <footer>
+        ${this.hasNewBelow ? html`
+          <button class="new-activity-btn" @click=${() => this.scrollToBottom(true)}>
+            New activity below ↓
+          </button>
+        ` : nothing}
         ${this.renderApprovalBanners()}
         ${this.autocomplete ? this.renderAutocomplete() : nothing}
         ${this.contextAttachments.length > 0 ? html`
