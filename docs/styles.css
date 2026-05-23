@@ -575,6 +575,10 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   border: 1px solid var(--rule);
   background: var(--surface-1);
   transition: border-color 0.25s ease, background 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 210px;
 }
 .use-grid li:hover {
   border-color: var(--accent);
@@ -588,7 +592,8 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   font-size: 17px;
   line-height: 1.35;
   color: var(--bone);
-  margin: 0 0 10px;
+  margin: 0;
+  min-height: 46px;
 }
 .use-grid .use-who {
   font-family: var(--mono);
@@ -600,7 +605,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   margin-bottom: 6px;
 }
 .use-grid .use-outcome {
-  margin: 0;
+  margin: auto 0 0;
   color: var(--bone-dim);
   font-size: 14px;
   line-height: 1.5;
