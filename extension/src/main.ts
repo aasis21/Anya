@@ -322,6 +322,9 @@ export class AnyaApp extends LitElement {
   private unsubDisconnect?: () => void;
   /** Per-chat streaming-message id. */
   private streamingIds: Map<string, string> = new Map();
+  /** Coalesced streaming text chunks per chat to reduce re-render churn. */
+  private pendingDeltaByChat: Map<string, string> = new Map();
+  private deltaFlushTimerByChat: Map<string, number> = new Map();
   private persistTimer: number | null = null;
 
   connectedCallback(): void {
@@ -532,6 +535,9 @@ export class AnyaApp extends LitElement {
     this.renderRoot.removeEventListener('click', this.onRootClick);
     chrome.runtime.onMessage.removeListener(this.onPageBridgeMessage);
     if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
+    for (const timer of this.deltaFlushTimerByChat.values()) clearTimeout(timer);
+    this.deltaFlushTimerByChat.clear();
+    this.pendingDeltaByChat.clear();
     // Flush any debounced persist before tearing down so the latest state
     // survives reload, then clear the timer.
     if (this.persistTimer != null) {
@@ -1458,7 +1464,16 @@ export class AnyaApp extends LitElement {
     }));
   }
 
-  private appendDelta(chatId: string, chunk: string): void {
+  private flushDeltaBuffer(chatId: string): void {
+    const timer = this.deltaFlushTimerByChat.get(chatId);
+    if (typeof timer === 'number') {
+      clearTimeout(timer);
+      this.deltaFlushTimerByChat.delete(chatId);
+    }
+    const chunk = this.pendingDeltaByChat.get(chatId);
+    if (!chunk) return;
+    this.pendingDeltaByChat.delete(chatId);
+
     const sid = this.streamingIds.get(chatId);
     if (!sid) {
       const id = `m${Date.now()}`;
@@ -1473,7 +1488,21 @@ export class AnyaApp extends LitElement {
     if (chatId === this.currentChatId) this.scrollToBottom();
   }
 
+  private scheduleDeltaFlush(chatId: string): void {
+    if (this.deltaFlushTimerByChat.has(chatId)) return;
+    const timer = window.setTimeout(() => this.flushDeltaBuffer(chatId), 33);
+    this.deltaFlushTimerByChat.set(chatId, timer);
+  }
+
+  private appendDelta(chatId: string, chunk: string): void {
+    if (!chunk) return;
+    const prev = this.pendingDeltaByChat.get(chatId) ?? '';
+    this.pendingDeltaByChat.set(chatId, prev + chunk);
+    this.scheduleDeltaFlush(chatId);
+  }
+
   private finishStream(chatId: string): void {
+    this.flushDeltaBuffer(chatId);
     const sid = this.streamingIds.get(chatId);
     if (sid) {
       this.mutateChat(chatId, (c) => ({
