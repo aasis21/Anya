@@ -1494,6 +1494,19 @@ export const sidebarStyles = css`
       border-radius: 6px;
     }
     .chat-title-pill:hover { background: var(--bg-soft); color: var(--accent); }
+    .chat-title-edit {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: var(--bg-soft);
+      color: var(--fg);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 3px 6px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+    }
 
     /* ---- chat drawer (B4) ---- */
     .drawer-scrim {
@@ -1534,12 +1547,13 @@ export const sidebarStyles = css`
     }
     .chat-row {
       display: grid;
-      grid-template-columns: 1fr auto auto auto;
+      grid-template-columns: 1fr;
       align-items: center;
       gap: 6px;
       padding: 8px 12px;
       cursor: pointer;
       border-left: 2px solid transparent;
+      position: relative;
     }
     .chat-row:hover { background: var(--bg-bubble); }
     .chat-row.current { border-left-color: var(--accent); background: var(--accent-soft); }
@@ -1556,18 +1570,40 @@ export const sidebarStyles = css`
       grid-row: 2;
       font-size: 10px;
       color: var(--fg-faint);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .chat-row .icon-btn { grid-row: 1 / span 2; opacity: 0.5; }
-    .chat-row:hover .icon-btn { opacity: 1; }
-    .chat-rename {
-      grid-column: 1 / 2;
-      grid-row: 1 / span 2;
-      background: var(--code-bg);
-      color: var(--fg);
-      border: 1px solid var(--accent);
-      padding: 4px 6px;
-      font: inherit;
-      font-size: 12px;
+    .chat-actions {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 120ms ease;
+      z-index: 1;
+    }
+    .chat-actions .icon-btn {
+      opacity: 1;
+      transform: none;
+    }
+    .chat-row:hover .chat-actions,
+    .chat-row.current .chat-actions,
+    .chat-row:focus-within .chat-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .chat-row:hover .chat-title,
+    .chat-row.current .chat-title,
+    .chat-row:focus-within .chat-title,
+    .chat-row:hover .chat-meta,
+    .chat-row.current .chat-meta,
+    .chat-row:focus-within .chat-meta {
+      padding-right: 88px;
     }
     .drawer-section {
       border-top: 1px solid var(--bg-rule);
@@ -1583,7 +1619,9 @@ export const sidebarStyles = css`
       margin-bottom: 6px;
     }
     .qp-btn {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
       width: 100%;
       text-align: left;
       background: transparent;
@@ -1594,8 +1632,23 @@ export const sidebarStyles = css`
       font: inherit;
       font-size: 11px;
       cursor: pointer;
+      border-radius: 6px;
     }
     .qp-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .qp-label {
+      font-weight: 600;
+      color: var(--fg);
+      font-size: 11.5px;
+      line-height: 1.35;
+    }
+    .qp-hint {
+      color: var(--fg-faint);
+      font-size: 10px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     /* ---- search overlay (C4) ---- */
     .search-scrim {
@@ -1710,7 +1763,6 @@ export const sidebarStyles = css`
     }
 
     /* ---- D1 pinned + D6 tags + D7 stats ---- */
-    .pin-badge { color: var(--accent); margin-right: 4px; }
     .icon-btn.active { color: var(--accent); }
     .drawer-subtitle {
       padding: 6px 12px 2px;

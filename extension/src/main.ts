@@ -824,6 +824,7 @@ export class AnyaApp extends LitElement {
         this.quickPrompts = arr.map((p: any) => ({
           id: String(p.id),
           label: String(p.label),
+          hint: typeof p.hint === 'string' ? p.hint : undefined,
           body: String(p.body),
         }));
       }
@@ -2857,9 +2858,35 @@ export class AnyaApp extends LitElement {
             title="Toggle chat drawer (Ctrl+B)"
             aria-label="Toggle chats"
           >☰</button>
-          <span class="chat-title-pill" @click=${() => { if (cur) this.renamingChatId = cur.id; }}>
-            ${cur ? cur.title : 'no chat'}
-          </span>
+          ${cur && this.renamingChatId === cur.id ? html`
+            <input
+              class="chat-title-edit"
+              .value=${cur.title}
+              maxlength="80"
+              autofocus
+              @keydown=${(e: KeyboardEvent) => {
+                const input = e.target as HTMLInputElement;
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const next = input.value.trim();
+                  if (next) this.renameChat(cur.id, next);
+                  else this.renamingChatId = null;
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  this.renamingChatId = null;
+                }
+              }}
+              @blur=${(e: FocusEvent) => {
+                const next = (e.target as HTMLInputElement).value.trim();
+                if (next) this.renameChat(cur.id, next);
+                else this.renamingChatId = null;
+              }}
+            />
+          ` : html`
+            <span class="chat-title-pill" @click=${() => { if (cur) this.renamingChatId = cur.id; }}>
+              ${cur ? cur.title : 'no chat'}
+            </span>
+          `}
           <span
             class="signal ${online ? 'on' : ''}"
             title=${online ? `Bridge live · v${this.bridgeVersion} · pid ${pid}` : 'Bridge offline'}
@@ -3183,7 +3210,8 @@ export class AnyaApp extends LitElement {
           <div class="drawer-section-title">QUICK PROMPTS</div>
           ${repeat(this.quickPrompts, (q) => q.id, (q) => html`
             <button class="qp-btn" @click=${() => this.insertQuickPrompt(q)} title=${q.body}>
-              ${q.label}
+              <span class="qp-label">${q.label}</span>
+              <span class="qp-hint">${q.hint ?? q.body}</span>
             </button>
           `)}
         </div>
@@ -3194,42 +3222,29 @@ export class AnyaApp extends LitElement {
 
   private renderChatRow(c: Chat) {
     const isCurrent = c.id === this.currentChatId;
-    const editing = this.renamingChatId === c.id;
     const tokens = Math.round(c.messages.reduce((n, m) => n + m.text.length, 0) / 4);
     const age = this.fmtRelative(c.updatedAt);
     const tags = c.tags ?? [];
     return html`
-      <div class="chat-row ${isCurrent ? 'current' : ''}" @click=${() => !editing && this.switchChat(c.id)}>
-        ${editing ? html`
-          <input
-            class="chat-rename"
-            .value=${c.title}
-            @click=${(e: Event) => e.stopPropagation()}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === 'Enter') { e.preventDefault(); this.renameChat(c.id, (e.target as HTMLInputElement).value); }
-              else if (e.key === 'Escape') { this.renamingChatId = null; }
-            }}
-            @blur=${(e: FocusEvent) => this.renameChat(c.id, (e.target as HTMLInputElement).value)}
-          />
-        ` : html`
-          <span class="chat-title">
-            ${c.pinned ? html`<span class="pin-badge">★</span>` : ''}
-            ${c.title}
-          </span>
-          <span class="chat-meta">
-            ${c.messages.length} msg · ~${tokens} tok · ${age}
-            ${c.cwd ? html`<span class="tag-chip mini" title=${c.cwd}>📁 ${c.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</span>` : ''}
-            ${tags.map((t) => html`<span class="tag-chip mini">#${t}</span>`)}
-          </span>
-        `}
-        <button
-          class="icon-btn ${c.pinned ? 'active' : ''}"
-          @click=${(e: Event) => { e.stopPropagation(); this.togglePin(c.id); }}
-          title=${c.pinned ? 'Unpin' : 'Pin chat'}
-        >${c.pinned ? '★' : '☆'}</button>
-        <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this.renamingChatId = c.id; }} title="Rename">✎</button>
-        <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this.exportChat(c.id); }} title="Export to markdown">⬇</button>
-        <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this.deleteChat(c.id); }} title="Delete chat">×</button>
+      <div class="chat-row ${isCurrent ? 'current' : ''}" @click=${() => this.switchChat(c.id)}>
+        <span class="chat-title">
+          ${c.title}
+        </span>
+        <span class="chat-meta">
+          ${c.pinned ? html`<span class="tag-chip mini">pinned</span>` : nothing}
+          ${c.messages.length} msg · ~${tokens} tok · ${age}
+          ${c.cwd ? html`<span class="tag-chip mini" title=${c.cwd}>📁 ${c.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</span>` : ''}
+          ${tags.map((t) => html`<span class="tag-chip mini">#${t}</span>`) }
+        </span>
+        <span class="chat-actions">
+          <button
+            class="icon-btn ${c.pinned ? 'active' : ''}"
+            @click=${(e: Event) => { e.stopPropagation(); this.togglePin(c.id); }}
+            title=${c.pinned ? 'Unpin' : 'Pin chat'}
+          >📌</button>
+          <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this.exportChat(c.id); }} title="Export to markdown">⬇</button>
+          <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this.deleteChat(c.id); }} title="Delete chat">×</button>
+        </span>
       </div>
     `;
   }

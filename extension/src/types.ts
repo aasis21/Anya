@@ -74,16 +74,48 @@ export interface Chat {
 export interface QuickPrompt {
   id: string;
   label: string;
+  hint?: string;
   body: string;
 }
 
 /** Built-in starter prompts; users can add/remove their own at runtime. */
 export const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
-  { id: 'qp-summarize', label: 'Summarize page', body: 'Summarize @tab in 5 bullets and end with a one-line verdict.' },
-  { id: 'qp-translate', label: 'Translate selection', body: 'Translate @selection to English. Preserve formatting.' },
-  { id: 'qp-explain', label: 'Explain code', body: 'Explain what the code in @selection does. Be concise and technical.' },
-  { id: 'qp-reply', label: 'Draft reply', body: 'Draft a polite reply to @selection. Match the tone.' },
-  { id: 'qp-compare', label: 'Compare tabs', body: 'Compare what is open across @tabs and tell me the key differences.' },
+  {
+    id: 'qp-summarize',
+    label: 'Summarize This Page',
+    hint: 'Key points, risks, and next actions',
+    body: 'Summarize @tab into key points, risks, and next actions. Keep it under 8 bullets.',
+  },
+  {
+    id: 'qp-actions',
+    label: 'Extract Action Items',
+    hint: 'Turn page content into a task list',
+    body: 'From @tab, extract concrete action items with owner (if known), due date (if mentioned), and priority.',
+  },
+  {
+    id: 'qp-explain',
+    label: 'Explain Selected Code',
+    hint: 'Purpose, flow, and edge cases',
+    body: 'Explain the code in @selection: purpose, execution flow, assumptions, and edge cases. Keep it concise and technical.',
+  },
+  {
+    id: 'qp-reply',
+    label: 'Draft Reply (2 Versions)',
+    hint: 'Concise + detailed response',
+    body: 'Draft a reply to @selection in the same tone. Provide two versions: concise and detailed.',
+  },
+  {
+    id: 'qp-compare',
+    label: 'Compare Open Tabs',
+    hint: 'Overlaps, differences, best source',
+    body: 'Compare @tabs and return overlaps, differences, and which tab should be treated as the primary source of truth.',
+  },
+  {
+    id: 'qp-downloads',
+    label: 'Find Recent Download',
+    hint: 'Locate likely file quickly',
+    body: 'Check my recent downloads and suggest the most relevant file for this task, including filename and when it was downloaded.',
+  },
 ];
 
 /** One row in the live debug panel — either a frame or a bridge log line. */
