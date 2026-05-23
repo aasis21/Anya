@@ -58,6 +58,7 @@
   <li><strong>Active tab content / DOM</strong> — only when you ask. Used to summarise pages, extract selections, drive forms via Playwright.</li>
   <li><strong>Open tabs (titles + URLs)</strong> — only when you reference them (e.g. <code>@tabs</code> or "diff what I have open"). The list never leaves your machine unless you submit it as part of a prompt.</li>
   <li><strong>Bookmarks</strong> — only when you reference a workflow ("open the order release page") or ask Anya to reorganise. Anya never modifies bookmarks without your explicit confirmation.</li>
+  <li><strong>Downloads list</strong> — only when you ask Anya to inspect downloads (for example "show recent downloads" or "find that installer").</li>
   <li><strong>Clipboard</strong> — read only when you type <code>@clipboard</code> in a prompt.</li>
   <li><strong>Local files</strong> — only when you point Anya at a project folder. The bridge spawns the same SDK toolbelt the terminal Copilot uses (read/edit/grep/shell). Files are never sent anywhere except as context to Copilot's API in turns where you reference them.</li>
 </ul>
@@ -100,6 +101,7 @@
     <tr><td style="padding: 0.5rem;"><code>scripting</code></td><td style="padding: 0.5rem;">Inject the Readability extractor on demand and run Playwright commands against a tab you bind.</td></tr>
     <tr><td style="padding: 0.5rem;"><code>storage</code></td><td style="padding: 0.5rem;">Persist your chats and preferences locally.</td></tr>
     <tr><td style="padding: 0.5rem;"><code>bookmarks</code></td><td style="padding: 0.5rem;">Search and (with confirmation) reorganise your bookmarks.</td></tr>
+    <tr><td style="padding: 0.5rem;"><code>downloads</code></td><td style="padding: 0.5rem;">Search recent downloads when you explicitly ask.</td></tr>
     <tr><td style="padding: 0.5rem;"><code>clipboardRead</code></td><td style="padding: 0.5rem;">Read the clipboard only when you type <code>@clipboard</code>.</td></tr>
     <tr><td style="padding: 0.5rem;"><code>&lt;all_urls&gt;</code></td><td style="padding: 0.5rem;">Required to read or drive a tab on any site you ask Anya to work with.</td></tr>
   </tbody>

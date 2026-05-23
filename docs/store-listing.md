@@ -26,6 +26,7 @@ It uses the official @github/copilot-sdk and your existing Copilot subscription.
 
 What it does well:
 • Read what you're looking at — "@tab tldr", "summarise this PR", "what does selection mean?"
+• Find downloaded files quickly — "show downloads from today", "find the installer I downloaded"
 • Drive your real, logged-in browser — fill forms, click through wizards, navigate dashboards. No reauth, no captcha redo.
 • Stay in control — toggle "Require approval for write tools" and Anya pauses before any write, shell, or MCP action. Allow or Deny each call. Read tools always auto-approve.
 • Reason across many tabs at once — "@tabs which of these is red?", "diff GitHub PR vs ADO work item".
@@ -34,7 +35,7 @@ What it does well:
 
 Three ways to give Anya context:
 • Right-click anything on a page → "Add to Anya" captures it as context
-• 📎 menu in the composer → attach tabs, bookmarks, history, clipboard, local folders
+• 📎 menu in the composer → attach tabs, bookmarks, history, downloads, clipboard, local folders
 • @ references in the composer → @tab, @selection, @clipboard, @tabs, @bookmark:query
 • / commands → /new, /pin, /search, /export, /open
 
@@ -60,6 +61,7 @@ Provide an in-browser sidebar agent powered by the GitHub Copilot SDK that can r
 | `scripting` | Inject Mozilla Readability into a tab to extract clean Markdown when the user asks for a summary. Run Playwright commands via CDP when the user enables remote debugging. |
 | `storage` | Persist chats, settings, and pinned tabs locally via `chrome.storage.local`. |
 | `bookmarks` | Search bookmarks when the user references them ("open the order release page") and reorganise on explicit confirmation. |
+| `downloads` | Search the browser download list when the user asks (for example "show recent downloads" or "find that file I downloaded"). |
 | `clipboardRead` | Only triggered when the user types `@clipboard` in a prompt. |
 | `<all_urls>` host permissions | Required so the user can ask Anya to read or drive a page on any site. The extension does not act on any tab without an explicit user prompt referencing that tab. |
 
