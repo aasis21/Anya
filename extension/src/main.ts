@@ -482,6 +482,38 @@ export class AnyaApp extends LitElement {
     });
   }
 
+  private runUpdateFlow(): void {
+    const chatId = this.startNewChat();
+    this.renameChat(chatId, 'Check for Updates');
+
+    const text = [
+      'Run a customer-safe update for this local Anya installation using the documented scripts.',
+      '',
+      'Steps:',
+      '1) In repo root, run git pull --ff-only (if this is a git checkout).',
+      '2) Run the platform setup script from repo root:',
+      '   - Windows: pwsh ./setup.ps1 -Quiet',
+      '   - macOS/Linux: ./setup.sh --quiet',
+      '3) Verify extension and bridge builds completed and native host registration succeeded.',
+      '',
+      'Then give me a short status summary and tell me to reload the browser extension.',
+    ].join('\n');
+
+    this.appendMessage(chatId, {
+      id: `u${Date.now()}`,
+      role: 'user',
+      text,
+      ts: Date.now(),
+    });
+    this.scrollToBottom(true);
+    void this.dispatchPrompt(chatId, text, 'immediate', []);
+    this.pushSystem(
+      chatId,
+      'After update completes, reload the extension card in your browser extensions page to apply changes.',
+      'normal',
+    );
+  }
+
   private clearDebug(): void {
     this.debugEntries = [];
   }
@@ -2805,6 +2837,10 @@ export class AnyaApp extends LitElement {
               >⋯</button>
               ${this.headerMenuOpen ? html`
                 <div class="header-menu">
+                  <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.runUpdateFlow(); }}>
+                    <span class="header-menu-icon">⬆</span> Check for Updates
+                  </button>
+                  <hr class="header-menu-sep" />
                   <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.openRemoteDebugSettings(); }}>
                     <span class="header-menu-icon">🔌</span> Remote Debug
                   </button>
