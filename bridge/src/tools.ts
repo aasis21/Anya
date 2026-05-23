@@ -5,9 +5,8 @@
 // 1. Chrome-context tools (read-only) — defer to the extension over the
 //    tool-rpc channel. They wrap chrome.tabs / chrome.scripting. Always present.
 //
-// 2. Playwright tools — mode-dependent:
-//    - "extension" mode: bind_tab / unbind_tab / bound_tabs + drive_* family
-//    - "cdp" mode: connect_browser / disconnect_browser / bound_tabs + drive_* family
+// 2. CDP Playwright tools:
+//    connect_browser / disconnect_browser / bound_tabs + drive_* family
 //
 //    The drive_* family is four sibling tools, all thin wrappers over the
 //    `playwright-cli` binary. They differ ONLY in description (which
@@ -24,12 +23,10 @@ import { defineTool, type Tool } from '@github/copilot-sdk';
 import { spawn } from 'node:child_process';
 import { error, log, warn } from './log.js';
 import type { ToolRpc } from './tool-rpc.js';
-import type { PlaywrightMode } from './config.js';
 import { PLAYWRIGHT_CLI } from './config.js';
 import {
-  bindTab, getBoundTab, getBoundTabFile, getPlaywrightCwd, unbindTab,
-  connectBrowser, disconnectBrowser, getCdpSessionId, isCdpConnected,
-  runPlaywrightCmd,
+  connectBrowser, disconnectBrowser, getCdpSessionId,
+  runPlaywrightCmd, getPlaywrightCwd,
 } from './sessions.js';
 
 const PLAYWRIGHT_TIMEOUT_MS = 60_000;
@@ -217,65 +214,10 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('browse_history', args)),
     }),
-
-    // ---------------- tab binding (extension mode) / browser connect (cdp mode) ----------------
   ];
 }
 
-// ==================== Extension-mode Playwright tools ====================
-
-function buildExtensionTools(): Tool[] {
-  return [
-    defineTool('bind_tab', {
-      description:
-        'Open a Playwright connect dialog so the user can pick which browser tab to bind for ' +
-        'browser automation. Only ONE tab can be bound at a time — calling `bind_tab` again ' +
-        'replaces the prior binding. After the user clicks Connect on a tab, that tab becomes ' +
-        'driveable via the `drive_*` family (`drive_tab`, `drive_browser`, ' +
-        '`drive_context`, `drive_devtools`). Use the optional `hint` to label ' +
-        'this binding so you can ' +
-        'remember which tab you wanted (e.g. "Gmail compose", "PR review"). ' +
-        'After calling, prompt the user to click Connect, then poll `bound_tabs` until the ' +
-        '`status` flips from "waiting-for-connect" to "connected".',
-      parameters: {
-        type: 'object',
-        properties: {
-          hint: { type: 'string', description: 'Human-readable label for this binding.' },
-        },
-        additionalProperties: false,
-      },
-      handler: async (args) => {
-        const a = (args ?? {}) as { hint?: unknown };
-        const hint = typeof a.hint === 'string' && a.hint.trim() ? a.hint.trim() : undefined;
-        const tab = bindTab({ hint });
-        return JSON.stringify({
-          ok: true,
-          sessionId: tab.sessionId,
-          status: tab.status,
-          hint: tab.hint,
-          stateFile: getBoundTabFile(),
-          message:
-            'A connect dialog should now be open in the browser. Ask the user to click ' +
-            'Connect on the tab they want bound, then call `bound_tabs` to confirm and ' +
-            'use the `drive_*` tools to act on it.',
-        });
-      },
-    }),
-    defineTool('unbind_tab', {
-      description:
-        'Release the currently bound tab (kills the playwright-cli attach process). Use when ' +
-        'you are done with browser automation, or before binding a different tab if you want ' +
-        'to be explicit. `bind_tab` also auto-replaces, so calling unbind first is optional.',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
-      handler: async () => {
-        const ok = await unbindTab();
-        return JSON.stringify({ ok });
-      },
-    }),
-  ];
-}
-
-// ==================== CDP-mode Playwright tools ====================
+// ==================== CDP Playwright tools ====================
 
 function buildCdpTools(): Tool[] {
   return [
@@ -314,36 +256,30 @@ function buildCdpTools(): Tool[] {
   ];
 }
 
-// ==================== Shared Playwright tools (both modes) ====================
+// ==================== Shared Playwright tools ====================
 
 function buildSharedPlaywrightTools(): Tool[] {
   return [
     defineTool('bound_tabs', {
       description:
-        'List the tabs currently under Playwright control. In extension mode this returns ' +
-        'the single bound tab. In CDP mode this returns all tabs the browser has open. ' +
-        'Use to confirm a connection is active before calling any `drive_*` tool.',
+        'List the tabs currently under Playwright control via CDP. Returns all tabs the ' +
+        'browser has open. Use to confirm a connection is active before calling any `drive_*` tool.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
       skipPermission: true,
       handler: async () => {
-        // CDP mode: use tab-list for multi-tab info
         const cdpSid = getCdpSessionId();
-        if (cdpSid) {
-          const result = await runPlaywrightCmd(['tab-list'], cdpSid, 8_000);
+        if (!cdpSid) {
           return JSON.stringify({
-            ok: result.ok,
-            mode: 'cdp',
-            sessionId: cdpSid,
-            tabs: result.ok ? result.stdout : undefined,
-            error: result.ok ? undefined : result.stderr.trim().split(/\r?\n/)[0],
+            ok: false,
+            error: 'No CDP connection. Call `connect_browser` first.',
           });
         }
-        // Extension mode: single bound tab
+        const result = await runPlaywrightCmd(['tab-list'], cdpSid, 8_000);
         return JSON.stringify({
-          ok: true,
-          mode: 'extension',
-          stateFile: getBoundTabFile(),
-          boundTab: getBoundTab(),
+          ok: result.ok,
+          sessionId: cdpSid,
+          tabs: result.ok ? result.stdout : undefined,
+          error: result.ok ? undefined : result.stderr.trim().split(/\r?\n/)[0],
         });
       },
     }),
@@ -355,15 +291,6 @@ function buildSharedPlaywrightTools(): Tool[] {
 }
 
 // ---- Descriptions for the drive_* family ---------------------------------
-//
-// All four tools share the same handler — they shell out to `playwright-cli`
-// with `argv` forwarded verbatim. They differ only in description, which
-// advertises a focused subset of subcommands. Pick the family that matches
-// the JOB; argv routing is unconstrained, so a wrong pick still works, but
-// the right pick gives the model better priors when constructing argv.
-//
-// Universal escape hatch: any tool accepts `["--help"]` to dump the full
-// `playwright-cli` command list.
 
 const DRIVE_TAB_DESC =
   'Drive the currently focused page. Thin wrapper over the `playwright-cli` ' +
@@ -383,7 +310,7 @@ const DRIVE_TAB_DESC =
   'For console logs / network requests / tracing use `drive_devtools`. ' +
   'Call ["--help"] to list every supported subcommand. ' +
   'Pre-flight: `bound_tabs` must show a connection — otherwise call ' +
-  '`connect_browser` (CDP mode) or `bind_tab` (extension mode).';
+  '`connect_browser` first.';
 
 const DRIVE_BROWSER_DESC =
   'Drive the browser/session itself — anything NOT scoped to a single page. ' +
@@ -464,40 +391,22 @@ function buildDriveTool(name: string, description: string): Tool {
       if (!Array.isArray(a.argv) || a.argv.some((v) => typeof v !== 'string')) {
         return JSON.stringify({ ok: false, error: 'argv must be an array of strings' });
       }
-      // Try CDP session first, then extension session.
       const cdpSid = getCdpSessionId();
-      if (cdpSid) {
-        return runPlaywright(a.argv as string[], cdpSid, name);
-      }
-      const tab = getBoundTab();
-      if (!tab) {
+      if (!cdpSid) {
         return JSON.stringify({
           ok: false,
-          error: 'No browser connection. Call `connect_browser` (CDP mode) or `bind_tab` (extension mode) first.',
+          error: 'No browser connection. Call `connect_browser` first.',
         });
       }
-      if (tab.status === 'waiting-for-connect') {
-        return JSON.stringify({
-          ok: false,
-          error: `Bound tab session ${tab.sessionId} is still waiting for the user to click Connect. Ask the user to do so, then retry.`,
-        });
-      }
-      if (tab.status === 'dead') {
-        return JSON.stringify({
-          ok: false,
-          error: `Bound tab session ${tab.sessionId} is dead (tab closed or browser quit). Call \`bind_tab\` to bind a fresh tab.`,
-        });
-      }
-      return runPlaywright(a.argv as string[], tab.sessionId, name);
+      return runPlaywright(a.argv as string[], cdpSid, name);
     },
   });
 }
 
 // ==================== Public builder ====================
 
-export function buildPlaywrightTools(mode: PlaywrightMode): Tool[] {
-  const modeTools = mode === 'cdp' ? buildCdpTools() : buildExtensionTools();
-  return [...modeTools, ...buildSharedPlaywrightTools()];
+export function buildPlaywrightTools(): Tool[] {
+  return [...buildCdpTools(), ...buildSharedPlaywrightTools()];
 }
 
 function runPlaywright(argv: string[], sessionId: string, toolName = 'drive'): Promise<string> {

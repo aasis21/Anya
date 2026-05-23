@@ -7,7 +7,6 @@ import { error, log, warn } from './log.js';
 import { sessionsDir } from './paths.js';
 import { ToolRpc } from './tool-rpc.js';
 import { buildContextTools, buildPlaywrightTools } from './tools.js';
-import { getPlaywrightMode } from './config.js';
 
 const SESSIONS_ROOT = sessionsDir();
 
@@ -286,13 +285,12 @@ export class CopilotBridge {
     const workingDirectory = cwd ?? join(SESSIONS_ROOT, safeId);
     mkdirSync(workingDirectory, { recursive: true });
     const agentPrompt = loadAgentPrompt();
-    const pwMode = getPlaywrightMode();
-    const allTools = [...buildContextTools(this.rpc), ...buildPlaywrightTools(pwMode)];
+    const allTools = [...buildContextTools(this.rpc), ...buildPlaywrightTools()];
     // Filter out tools the user has disabled via the sidebar settings panel.
     const tools = this.disabledTools.size > 0
       ? allTools.filter((t) => !this.disabledTools.has(t.name))
       : allTools;
-    log('creating chat session:', chatId, 'playwrightMode:', pwMode,
+    log('creating chat session:', chatId,
       'tools:', tools.length, '/', allTools.length,
       this.disabledTools.size > 0 ? `(${this.disabledTools.size} disabled)` : '',
       this.selectedModel ? `model: ${this.selectedModel}` : '');

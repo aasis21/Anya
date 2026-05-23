@@ -1,6 +1,6 @@
 // Cross-platform path resolver for Anya bridge.
 //
-// All on-disk state (logs, sessions, bound-tab.json, the playwright cwd)
+// All on-disk state (logs, sessions, the playwright cwd)
 // lives under a single per-OS data directory:
 //
 //   Windows : %LOCALAPPDATA%\Anya
@@ -49,10 +49,6 @@ export function sessionsDir(): string {
 
 export function playwrightCwd(): string {
   return join(dataDir(), 'playwright');
-}
-
-export function boundTabFile(): string {
-  return join(dataDir(), 'bound-tab.json');
 }
 
 export function logFile(): string {

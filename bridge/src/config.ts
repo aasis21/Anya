@@ -4,10 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export type PlaywrightMode = 'cdp' | 'extension';
-
 interface AnyaConfig {
-  playwrightMode?: PlaywrightMode;
+  [key: string]: unknown;
 }
 
 const CONFIG_FILE = join(homedir(), '.anya', 'config.json');
@@ -29,11 +27,6 @@ function loadConfig(): AnyaConfig {
     cached = {};
   }
   return cached;
-}
-
-export function getPlaywrightMode(): PlaywrightMode {
-  const mode = loadConfig().playwrightMode;
-  return mode === 'extension' ? 'extension' : 'cdp';
 }
 
 export const PLAYWRIGHT_CLI = process.env.ANYA_PLAYWRIGHT_CLI ?? 'playwright-cli';

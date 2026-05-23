@@ -4,7 +4,7 @@
  * High-level layout (top → bottom of the file):
  *   1. Imports + small pure helpers (summariseTab).
  *   2. AnyaApp (`<anya-app>`):
- *        - reactive @state fields (UI + chat store + debug + bound tab)
+ *        - reactive @state fields (UI + chat store + debug)
  *        - lifecycle: connectedCallback / disconnectedCallback
  *        - chat store: load / persist / new / switch / delete / rename / pin / tag
  *        - message-level actions, cancel stream
@@ -27,7 +27,6 @@ import {
   type ToolCall,
   type ChatMessage,
   type Chat,
-  type BoundTab,
   type QuickPrompt,
   type DebugEntry,
   type FocusedField,
@@ -67,7 +66,6 @@ export class AnyaApp extends LitElement {
   @state() private bridgePid: number | null = null;
   @state() private bridgeVersion = '?';
   @state() private bridgeLogFile: string | null = null;
-  @state() private playwrightMode: 'cdp' | 'extension' = 'cdp';
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private draftEmpty = true;
   /** Mirror of textarea content. Drives the highlight overlay so recognised
@@ -169,11 +167,6 @@ export class AnyaApp extends LitElement {
   ];
   /** Native messaging caps frames near 4MB. base64 inflates ~1.33×. */
   private static readonly ATTACHMENT_TOTAL_LIMIT = 3 * 1024 * 1024;
-
-  // Single bound Playwright tab (was: array of sessions).
-  @state() private boundTab: BoundTab | null = null;
-  @state() private pwLoading = false;
-  @state() private pwError: string | null = null;
 
   private get currentChat(): Chat | null {
     return this.chats.find((c) => c.id === this.currentChatId) ?? null;
@@ -737,8 +730,6 @@ export class AnyaApp extends LitElement {
         this.bridgePid = Number(data.pid) || null;
         this.bridgeVersion = String(data.version ?? '?');
         this.bridgeLogFile = typeof data.logFile === 'string' ? data.logFile : null;
-        this.playwrightMode = data.playwrightMode === 'extension' ? 'extension' : 'cdp';
-        if (this.playwrightMode === 'extension') this.refreshBoundTab();
         // Send any persisted disabled-tools list so the bridge filters tools for new sessions.
         if (this.disabledTools.size > 0) {
           this.bridgeSend({ type: 'tool-config', disabledTools: [...this.disabledTools] });
@@ -882,23 +873,6 @@ export class AnyaApp extends LitElement {
             },
           },
         }));
-        if (existing.toolName === 'drive_tab' || existing.toolName === 'drive_browser' || existing.toolName === 'drive_context' || existing.toolName === 'drive_devtools' || existing.toolName === 'browser') this.refreshBoundTab();
-        break;
-      }
-      case 'pw-status-result':
-      case 'pw-bind-result':
-      case 'pw-unbind-result': {
-        this.pwLoading = false;
-        const bt = data.boundTab && typeof data.boundTab === 'object'
-          ? (data.boundTab as BoundTab) : null;
-        this.boundTab = bt;
-        if (!data.ok) this.pwError = String(data.error ?? `${f.type} failed`);
-        else this.pwError = null;
-        if (f.type === 'pw-bind-result' && data.ok) {
-          // Status flips from 'waiting-for-connect' → 'connected' after
-          // the user clicks the picker button. Poll a few times.
-          for (const ms of [1500, 3500, 6000, 10000, 15000]) setTimeout(() => this.refreshBoundTab(), ms);
-        }
         break;
       }
       case 'chat-deleted':
@@ -1105,86 +1079,6 @@ export class AnyaApp extends LitElement {
           if (resp?.ok) return resp.value;
           throw new Error(resp?.error || 'Field not found');
         }
-      }
-      case 'resolve_pw_tab': {
-        // Bridge-internal: locate which chrome tab a Playwright session is
-        // bound to. URL-first; only scans for the injected marker when
-        // multiple chrome tabs share the URL (and the bridge has just
-        // injected the marker).
-        const sid = String(args.sid ?? args.sessionId ?? '');
-        const url = String(args.url ?? '');
-        const useMarker = args.useMarker === true;
-        if (!sid) throw new Error('resolve_pw_tab: sid required');
-
-        const all = await chrome.tabs.query({});
-        const isRestricted = (u: string) =>
-          u.startsWith('chrome://') ||
-          u.startsWith('edge://') ||
-          u.startsWith('about:') ||
-          u.startsWith('chrome-extension://') ||
-          u.startsWith('moz-extension://') ||
-          u.startsWith('devtools://');
-
-        const candidates = all.filter(
-          (t) => typeof t.id === 'number' && !!t.url && !isRestricted(t.url),
-        );
-
-        // Match URL exactly first, then with hash/trailing-slash normalised.
-        const norm = (u: string) => u.replace(/\/+$/, '').split('#')[0];
-        let matches = url ? candidates.filter((t) => t.url === url) : candidates;
-        if (matches.length === 0 && url) {
-          const target = norm(url);
-          matches = candidates.filter((t) => norm(t.url ?? '') === target);
-        }
-
-        if (matches.length === 1) {
-          const t = matches[0];
-          return {
-            tabId: t.id,
-            url: t.url,
-            title: t.title,
-            windowId: t.windowId,
-            method: 'url',
-          };
-        }
-        if (matches.length === 0) {
-          return { ambiguous: false, candidates: 0 };
-        }
-        if (!useMarker) {
-          return { ambiguous: true, candidates: matches.length };
-        }
-        // Scan candidates for our marker.
-        for (const t of matches) {
-          if (typeof t.id !== 'number') continue;
-          try {
-            const [{ result } = { result: '' as unknown }] =
-              await chrome.scripting.executeScript({
-                target: { tabId: t.id },
-                func: () => {
-                  let parts = '';
-                  try { parts += String((window as Window).name ?? ''); } catch { /* ignore */ }
-                  parts += '|';
-                  try { parts += String(document.documentElement?.getAttribute('data-anya-sid') ?? ''); } catch { /* ignore */ }
-                  parts += '|';
-                  try { parts += String(sessionStorage.getItem('__anya_sid') ?? ''); } catch { /* ignore */ }
-                  return parts;
-                },
-              });
-            const s = String(result ?? '');
-            if (s.includes('anya:' + sid) || s.split('|').includes(sid)) {
-              return {
-                tabId: t.id,
-                url: t.url,
-                title: t.title,
-                windowId: t.windowId,
-                method: 'marker',
-              };
-            }
-          } catch {
-            // restricted page, ignore
-          }
-        }
-        return { ambiguous: true, candidates: matches.length, found: false };
       }
       default:
         throw new Error(`unknown tool: ${tool}`);
@@ -1482,24 +1376,6 @@ export class AnyaApp extends LitElement {
       if (this.transcript) this.transcript.scrollTop = this.transcript.scrollHeight;
     });
   }
-
-  // ----- bound-tab strip -------------------------------------------------
-  private refreshBoundTab = (): void => {
-    if (!this.connected) return;
-    this.pwLoading = true;
-    this.pwError = null;
-    this.bridgeSend({ type: 'pw-status' });
-  };
-
-  private bindNewTab = (): void => {
-    this.pwError = null;
-    this.pwLoading = true;
-    this.bridgeSend({ type: 'pw-bind' });
-  };
-
-  private unbindCurrentTab = (): void => {
-    this.bridgeSend({ type: 'pw-unbind' });
-  };
 
   // ----- send ------------------------------------------------------------
   private send = (mode: 'enqueue' | 'immediate' = 'enqueue'): void => {
@@ -2583,11 +2459,9 @@ export class AnyaApp extends LitElement {
               >⋯</button>
               ${this.headerMenuOpen ? html`
                 <div class="header-menu">
-                  ${this.playwrightMode === 'cdp' ? html`
-                    <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.openRemoteDebugSettings(); }}>
-                      <span class="header-menu-icon">🔌</span> Remote Debug
-                    </button>
-                  ` : nothing}
+                  <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.openRemoteDebugSettings(); }}>
+                    <span class="header-menu-icon">🔌</span> Remote Debug
+                  </button>
                   <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.toggleDebug(); }}>
                     <span class="header-menu-icon">🐛</span> Debug Log${this.debugOpen ? html` <span class="header-menu-check">✓</span>` : nothing}
                   </button>
@@ -2789,7 +2663,6 @@ export class AnyaApp extends LitElement {
         </div>
       </footer>
 
-      ${this.playwrightMode === 'extension' ? this.renderPwStrip() : nothing}
     `;
   }
 
@@ -3048,58 +2921,6 @@ export class AnyaApp extends LitElement {
     `;
   }
 
-  private renderPwStrip() {
-    const bt = this.boundTab;
-    if (!bt) {
-      // Empty state — single tight line, no label/dot/refresh noise.
-      return html`
-        <section class="pw-strip nobind">
-          <div class="pw-row">
-            <span class="pw-current empty">${this.pwError ?? 'no tab bound'}</span>
-            <button
-              class="pw-icon"
-              @click=${(e: Event) => { e.stopPropagation(); this.bindNewTab(); }}
-              title="Bind a tab — opens a Playwright connect dialog"
-            >＋ bind tab</button>
-          </div>
-        </section>
-      `;
-    }
-    const status = bt.status;
-    const statusDot = status === 'connected' ? '●'
-      : status === 'waiting-for-connect' ? '◌'
-      : status === 'dead' ? '✕' : '○';
-    const statusCls = status === 'connected' ? 'ok'
-      : status === 'waiting-for-connect' ? 'wait'
-      : status === 'dead' ? 'dead' : 'empty';
-    const label = bt.title || bt.url || (status === 'waiting-for-connect' ? 'waiting for Connect…' : '(no page)');
-    const sub = bt.url ?? '';
-    return html`
-      <section class="pw-strip">
-        <div class="pw-row pw-header">
-          <span class="pw-status ${statusCls}" title=${status}>${statusDot}</span>
-          <span class="pw-current ${this.pwError ? 'error' : ''}" title=${sub}>
-            ${this.pwError ?? label}
-          </span>
-          <button
-            class="pw-icon"
-            @click=${(e: Event) => { e.stopPropagation(); this.refreshBoundTab(); }}
-            title="Refresh status"
-          >${this.pwLoading ? '◐' : '⟳'}</button>
-          <button
-            class="pw-icon"
-            @click=${(e: Event) => { e.stopPropagation(); this.bindNewTab(); }}
-            title="Re-bind to a different tab (replaces current)"
-          >＋</button>
-          <button
-            class="pw-icon close"
-            @click=${(e: Event) => { e.stopPropagation(); this.unbindCurrentTab(); }}
-            title="Unbind tab"
-          >×</button>
-        </div>
-      </section>
-    `;
-  }
 }
 
 declare global {

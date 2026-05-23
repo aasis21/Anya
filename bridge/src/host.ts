@@ -1,20 +1,8 @@
 import { NativeMessagingTransport } from './native-messaging.js';
 import { CopilotBridge } from './copilot-bridge.js';
 import { error, getLogFilePath, log, setLogSink, warn } from './log.js';
-import { getConfigPath, getPlaywrightMode } from './config.js';
+import { getConfigPath } from './config.js';
 import { execSync } from 'node:child_process';
-import {
-  bindTab,
-  connectBrowser,
-  disconnectBrowser,
-  getBoundTab,
-  getBoundTabFile,
-  getCdpSessionId,
-  loadFromDisk,
-  setTabResolver,
-  shutdown,
-  unbindTab,
-} from './sessions.js';
 
 const transport = new NativeMessagingTransport();
 const copilot = new CopilotBridge();
@@ -29,30 +17,13 @@ setLogSink((entry) => {
 
 log('bridge started; pid=', process.pid, 'logFile=', getLogFilePath() ?? '(none)');
 log('config:', getConfigPath());
-log('playwrightMode:', getPlaywrightMode());
 
 transport.send({
   type: 'hello',
-  version: '0.0.4',
+  version: '0.0.5',
   pid: process.pid,
   logFile: getLogFilePath(),
-  playwrightMode: getPlaywrightMode(),
 });
-
-log('bound-tab store:', getBoundTabFile());
-setTabResolver(async (sid, opts) => {
-  try {
-    const result = await copilot.callExtension<{
-      tabId?: number; url?: string; title?: string; windowId?: number;
-      ambiguous?: boolean; candidates?: number; method?: 'url' | 'marker';
-    } | null>('resolve_pw_tab', { sid, url: opts.url, title: opts.title, useMarker: opts.useMarker });
-    return result ?? null;
-  } catch (err) {
-    warn('tabResolver: resolve_pw_tab failed for', sid, err);
-    return null;
-  }
-});
-void loadFromDisk().catch((err) => warn('sessions: loadFromDisk failed:', err));
 
 copilot.onEvent((event) => {
   switch (event.type) {
@@ -215,26 +186,6 @@ transport.onFrame(async (raw) => {
       });
       break;
     }
-    case 'pw-status': {
-      transport.send({
-        type: 'pw-status-result',
-        ok: true,
-        boundTab: getBoundTab(),
-        stateFile: getBoundTabFile(),
-      });
-      break;
-    }
-    case 'pw-bind': {
-      const hint = typeof frame.hint === 'string' ? frame.hint : undefined;
-      const tab = bindTab({ hint });
-      transport.send({ type: 'pw-bind-result', ok: true, boundTab: tab });
-      break;
-    }
-    case 'pw-unbind': {
-      const ok = await unbindTab();
-      transport.send({ type: 'pw-unbind-result', ok, boundTab: null });
-      break;
-    }
     case 'folder-pick': {
       // Open a native OS folder picker dialog and return the selected path.
       try {
@@ -311,7 +262,6 @@ transport.onFrame(async (raw) => {
 
 transport.onClose(() => {
   log('transport closed; shutting down');
-  shutdown();
   void copilot.stop().finally(() => process.exit(0));
 });
 

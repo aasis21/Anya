@@ -87,7 +87,7 @@ Anya/
     └── src/
         ├── host.ts               # NM stdio loop + frame router + folder-pick
         ├── copilot-bridge.ts     # SessionManager (one CopilotSession per chat)
-        ├── sessions.ts           # single-bound Playwright tab
+        ├── sessions.ts           # CDP Playwright session manager
         ├── tools.ts              # SDK tool definitions
         ├── tool-rpc.ts           # bridge → extension RPC
         ├── native-messaging.ts   # length-prefixed JSON framing
@@ -422,15 +422,12 @@ not yet expose `abort()` — so we just stop painting.
 Anya can drive your real, logged-in browser — any Chromium-based browser with
 remote debugging enabled. The flow:
 
-1. Sidebar shows a "BOUND TAB" strip in the footer with status.
-2. Click **bind** → bridge spawns `playwright-cli attach`.
-3. Accept the connect dialog.
-4. Now the agent's `drive_*` tools drive _that_ tab.
-5. Click **unbind** to release.
-
-Only one tab is bound at a time by design — keeps the model's mental model
-simple ("there is one browser") and means tool calls don't need a session
-selector.
+1. Enable remote debugging: open `edge://inspect/#remote-debugging` (or
+   `chrome://inspect/...` for Chrome) and check the box.
+2. The agent calls `connect_browser` to attach via CDP.
+3. Now the agent's `drive_*` tools can drive any tab — open, switch, close,
+   click, type, screenshot, etc.
+4. `disconnect_browser` releases control; the browser stays open.
 
 ---
 
@@ -491,8 +488,8 @@ whitelists exactly that ID.
   `SessionManager`, tool/RPC handlers, and folder-pick dialog.
 - `copilot-bridge.ts` — `SessionManager`. One `CopilotClient` shared, one
   `CopilotSession` per chat id, lazy-created and cached.
-- `sessions.ts` — single-bound Playwright tab. Spawns `playwright-cli attach`,
-  polls via `playwright-cli list`, persists state to disk.
+- `sessions.ts` — CDP Playwright session manager. Connects via
+  `playwright-cli attach --cdp`, provides `runPlaywrightCmd` for tool handlers.
 - `tools.ts` — defines browser tools (`get_active_tab`, `list_tabs`,
   `get_selection`, `get_tab_content`, `browse_history`, `find_bookmarks`,
   `edit_bookmarks`, `get_attached`) and the Playwright `drive_*` family.

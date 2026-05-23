@@ -57,7 +57,7 @@ Provide an in-browser sidebar agent powered by the GitHub Copilot SDK that can r
 | `sidePanel` | Renders the Anya UI as a side panel. |
 | `tabs` | Resolve "this tab", list open tabs the user references with `@tabs`, focus tabs the user asks Anya to switch to. |
 | `activeTab` | Read the URL / title of the page the user is asking about. |
-| `scripting` | Inject Mozilla Readability into a tab to extract clean Markdown when the user asks for a summary. Run Playwright commands against a single tab the user explicitly "binds" via the connect dialog. |
+| `scripting` | Inject Mozilla Readability into a tab to extract clean Markdown when the user asks for a summary. Run Playwright commands via CDP when the user enables remote debugging. |
 | `storage` | Persist chats, settings, and pinned tabs locally via `chrome.storage.local`. |
 | `bookmarks` | Search bookmarks when the user references them ("open the order release page") and reorganise on explicit confirmation. |
 | `clipboardRead` | Only triggered when the user types `@clipboard` in a prompt. |

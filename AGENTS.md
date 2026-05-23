@@ -64,7 +64,7 @@ cd bridge;    npx tsc --noEmit
 - **Tools** for the SDK agent are defined in `bridge/src/tools.ts` via
   `defineTool(...)` from `@github/copilot-sdk`. Browser-context tools defer
   to the extension over the tool-rpc channel; Playwright driving is the
-  single bound tab in `bridge/src/sessions.ts`.
+  CDP session in `bridge/src/sessions.ts`.
 
 ## Runtime layout (per OS)
 
@@ -81,12 +81,10 @@ Inside that dir:
 
 | Path | Purpose |
 | ---- | ------- |
-| `bound-tab.json` | Active Playwright binding state (single source of truth). |
 | `sessions/<chatId>/` | Per-chat `workingDirectory` passed to `CopilotSession`. SDK-managed checkpoints, plan.md, files. |
 | `playwright/` | `cwd` pinned for spawned `playwright-cli` processes. Holds `.playwright-cli/console-*.log` and stdout dumps from `evaluate` calls. Safe to wipe. |
 | `bridge.log` | Rolling trace of every native-messaging frame and error. |
 | `com.anya.bridge.json` | Native-messaging host manifest (written by install scripts). On Windows the registry points at this single file; on macOS/Linux a copy is dropped into each browser's `NativeMessagingHosts/` dir. |
-| `attached-tabs.json` | Legacy multi-attach state. Safe to delete. |
 
 ## Things not to do
 
@@ -95,8 +93,8 @@ Inside that dir:
 - Don't hardcode `%LOCALAPPDATA%` or any OS-specific path in the bridge —
   go through `bridge/src/paths.ts` so things keep working off Windows.
 - Don't introduce telemetry, analytics, or cloud sync.
-- Don't break the single-bound-tab invariant in `sessions.ts` — the prior
-  multi-bind design is documented in `design.md` §7 as a deliberate failure.
+- Don't reintroduce extension mode in `sessions.ts` — CDP is the only
+  Playwright mode. The prior extension and multi-bind designs both failed.
 - Don't commit `extension/.extension-key.pem` (already gitignored).
 
 ## Related docs

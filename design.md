@@ -67,7 +67,7 @@ before changing architecture.
 │  │  host.ts        : NM stdio loop, frame router            │  │
 │  │  copilot-bridge : SessionManager (one CopilotSession      │  │
 │  │                   per chat id, on top of one CopilotClient│ │
-│  │  sessions.ts    : single bound Playwright tab + polling   │  │
+│  │  sessions.ts    : CDP Playwright session manager           │  │
 │  │  tools.ts       : context tools + browser tool definitions│ │
 │  │  tool-rpc.ts    : bridge → extension RPC for chrome.*     │  │
 │  └──────────────────┬────────────────────────────────────────┘  │
@@ -89,8 +89,8 @@ before changing architecture.
 | 1 | Sidebar UI               | Lit, `marked`                    | Chat surface, drawer, mentions, slash commands, debug panel   |
 | 2 | Extension layer          | `chrome.tabs/scripting/...`      | Captures browser context; mediates the bridge connection      |
 | 3 | Native Messaging bridge  | Node + `@github/copilot-sdk`     | Owns Copilot sessions, runs tools, persists state             |
-| 4 | Playwright control plane | `@playwright/cli` + extension   | Drives the user's real browser tab                            |
-| 5 | Config + logs            | `~/.anya/`, `bridge.log`    | Local-only state, optional auto-attach token, live trace      |
+| 4 | Playwright control plane | `@playwright/cli` + CDP          | Drives the user's real browser via DevTools Protocol          |
+| 5 | Config + logs            | `~/.anya/`, `bridge.log`    | Local-only state, live trace                                  |
 
 The boundary that matters most is **(2) ↔ (3)**: a length-prefixed JSON
 channel via Chromium's Native Messaging API. Everything is asynchronous; everything
@@ -113,15 +113,12 @@ beyond TypeScript types — the assumption is that both sides ship together.
 | `prompt`            | `{ chatId, text }`                               | Send a user message into a chat               |
 | `chat-delete`       | `{ chatId }`                                     | Tear down the bridge-side session for a chat  |
 | `tool-result`       | `{ requestId, ok, result?, error? }`             | Reply to a tool RPC from the bridge           |
-| `pw-bind`           | `{ hint? }`                                      | Spawn a new bound Playwright tab              |
-| `pw-unbind`         | `{}`                                             | Release the bound tab                         |
-| `pw-status`         | `{}`                                             | Force-refresh the bound tab snapshot          |
 
 ### Bridge → extension
 
 | `type`             | Payload                                                     | Purpose                                |
 | ------------------ | ----------------------------------------------------------- | -------------------------------------- |
-| `hello`            | `{ version, pid, logFile, playwrightMode }`                 | Sent on connect                        |
+| `hello`            | `{ version, pid, logFile }`                                 | Sent on connect                        |
 | `delta`            | `{ chatId, text }`                                          | Streaming chunk                        |
 | `message`          | `{ chatId, text }`                                          | Final assistant message text           |
 | `done`             | `{ chatId }`                                                | Stream complete                        |
@@ -130,7 +127,6 @@ beyond TypeScript types — the assumption is that both sides ship together.
 | `tool-progress`    | `{ chatId, toolCallId, message }`                           | Tool emitted progress                  |
 | `tool-complete`    | `{ chatId, toolCallId, success, resultPreview?, error? }`   | Tool finished                          |
 | `tool-request`     | `{ requestId, name, args }`                                 | Bridge needs a `chrome.*` lookup       |
-| `pw-status`        | `{ tab: BoundTab }`                                         | Snapshot of the bound tab              |
 | `log`              | `{ level, summary, detail? }`                               | Mirrored bridge log line               |
 
 ### Frames the user sees
@@ -175,9 +171,8 @@ agent's filesystem tools operate without colliding across chats.
 ### Persistence
 
 - **Bridge side:** session state is stateless across bridge restarts (the
-  Copilot SDK manages its own sessions). The bridge does persist the bound
-  Playwright tab to `~/.anya/playwright-session.json` so a bridge restart
-  doesn't kill a working tab.
+  Copilot SDK manages its own sessions). CDP connections are re-established
+  on demand via `connect_browser`.
 - **Extension side:** `chrome.storage.local` holds the chat list, the current
   chat id, the theme, the debug-mode flag, and quick prompts. Writes are
   debounced (250 ms), and `disconnectedCallback` flushes any pending write
@@ -192,8 +187,8 @@ There are two flavours of tools:
 ### Bridge-resident tools
 
 Defined in `bridge/src/tools.ts` via the SDK's `defineTool()`. They run inside
-the bridge process. `browser` is the prime example — it shells out to
-`playwright-cli` against the bound tab.
+the bridge process. The `drive_*` family is the prime example — they shell out
+to `playwright-cli` against the CDP session.
 
 ### Extension-resident tools (RPC)
 
@@ -240,36 +235,26 @@ budget.
 
 ## 7. Playwright control plane
 
-The agent drives the user's real browser via the `browser` tool. Mechanics:
+The agent drives the user's real browser via CDP (Chrome DevTools Protocol).
+No connect dialog, no separate extension required. Mechanics:
 
-1. The user clicks **bind** in the sidebar's footer strip.
-2. The bridge spawns `playwright-cli attach --extension=msedge` with a
-   minted `sessionId`.
-3. The Playwright MCP Bridge extension (separate install) shows a
-   **Connect?** dialog. The user accepts.
-4. The bridge starts polling `playwright-cli list` to track URL/title/status.
-5. Subsequent `browser` tool calls invoke `playwright-cli` with the same
-   `sessionId`, scoping every command to that tab.
-6. **unbind** kills the child process and clears the bound state.
+1. The user enables remote debugging in their browser
+   (`edge://inspect/#remote-debugging` → check the box).
+2. The agent calls `connect_browser` which runs
+   `playwright-cli attach --cdp=msedge` with a minted `sessionId`.
+3. The CDP connection gives full multi-tab control — the agent can open,
+   switch, and close tabs via the `drive_*` tool family.
+4. `disconnect_browser` releases the connection; the browser stays open.
 
-### Why one tab at a time?
+### History: abandoned approaches
 
-Earlier versions tried multi-tab attachment with marker injection to
-disambiguate which tab the model meant. It failed: the model gets confused,
-the polling overhead multiplies, and the connect dialog flow gets
-unrecoverably messy when you have three pending dialogs at once. The current
-design — one bound tab, replace on rebind — keeps the user's mental model
-("there is _the_ browser") aligned with the bridge's.
+Earlier versions tried two other designs, both deliberately removed:
 
-### Polling loop
-
-`startPolling()` schedules a `tick` that runs `playwright-cli list`, updates
-the bound-tab snapshot, and reschedules itself. Two safety properties:
-
-- **Sessionid capture.** `tick` captures the sessionid at start. If `bindTab`
-  replaces the binding mid-await, the orphan tick bails instead of scheduling
-  a new timer onto the new binding.
-- **Adaptive interval.** 8 s when connected, 2 s while waiting for connect.
+- **Multi-tab binding** with marker injection to disambiguate which tab the
+  model meant. Failed: the model gets confused, polling overhead multiplies.
+- **Extension mode** (`playwright-cli attach --extension`) with a connect
+  dialog per tab. Failed: the dialog flow is unrecoverably messy, and
+  single-tab binding is too limiting. CDP replaced it entirely.
 
 ---
 
@@ -329,17 +314,15 @@ several streams have completed.
   from the user's existing `copilot` login.
 - **MCP servers** are loaded from `~/.copilot/mcp-config.json` — same as the
   CLI. Anya does not introduce a new MCP config surface.
-- **Playwright auto-attach token** — no longer used. The default CDP mode
-  connects via remote debugging without a token. Extension mode (fallback)
-  uses the connect dialog.
+- **Playwright connection** — CDP mode only. Connects via remote debugging
+  without a token. The user must enable remote debugging in their browser.
 - **User content** (page text, selection, tab list) is sent only when the
   user explicitly invokes a mention or the agent calls a tool. There is no
   background scraping.
 
 `onPermissionRequest: approveAll` is wired up: the bridge auto-approves every
 SDK permission request because in this UI the implicit consent comes from
-binding the Playwright tab. Revisit if Anya ever ships outside developer
-mode.
+enabling remote debugging. Revisit if Anya ever ships outside developer mode.
 
 ---
 
@@ -353,9 +336,8 @@ These are easy to get wrong; they are documented here so we don't lose them.
 - `stop()` rejects all in-flight RPCs, clears the `creating` map (so just-
   resolved sessions don't attach to a dead client), disconnects every cached
   `CopilotSession`, and clears the `client` and `starting` refs.
-- `sessions.ts` keeps the bound Playwright child until the user explicitly
-  unbinds. Rebinding without unbinding does the right thing — it kills the
-  prior child first.
+- `sessions.ts` manages the CDP connection. `disconnectBrowser()` releases
+  the session cleanly.
 
 ### Extension
 
@@ -409,9 +391,8 @@ point referenced by the Native Messaging manifest; it just shells to `node`.
 
 | Path                                          | Contents                                       |
 | --------------------------------------------- | ---------------------------------------------- |
-| `~/.anya/config.json`                    | Playwright mode, future settings                |
+| `~/.anya/config.json`                    | Future settings                                |
 | `~/.anya/sessions/<chatId>/`             | Per-chat Copilot working directory             |
-| `~/.anya/playwright-session.json`        | Persisted bound tab snapshot                   |
 | `%LOCALAPPDATA%\Anya\bridge.log`         | Append-only bridge log                         |
 | `chrome.storage.local`                        | Extension state (chats, theme, prompts, debug) |
 
@@ -419,6 +400,7 @@ point referenced by the Native Messaging manifest; it just shells to `node`.
 
 ## 12. Things deliberately out of scope
 
+- **Extension-mode Playwright.** Tried; replaced by CDP (see §7).
 - **Multiple browsers bound at once.** Tried; failed on UX grounds (see §7).
 - **Cross-machine sync.** No cloud means no sync. Use the export-to-Markdown
   flow if you want to move a conversation.

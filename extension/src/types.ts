@@ -69,22 +69,6 @@ export interface Chat {
   cwd?: string;
 }
 
-/**
- * Mirror of the bridge's bound Playwright tab. `status === 'connected'` means
- * the user accepted the Playwright extension's connect dialog.
- */
-export interface BoundTab {
-  sessionId: string;
-  status: 'waiting-for-connect' | 'connected' | 'dead' | 'none';
-  url: string | null;
-  title: string | null;
-  hint: string | null;
-  chromeTabId: number | null;
-  chromeWindowId: number | null;
-  attachedAt: string;
-  lastSeenAt: string | null;
-  markerInjected: boolean;
-}
 
 /** A reusable prompt template the user can insert with one click. */
 export interface QuickPrompt {
@@ -191,49 +175,33 @@ export interface ToolGroup {
  */
 export const TOOL_GROUPS: ToolGroup[] = [
   {
-    id: 'browser-read',
-    label: 'Browser Context',
+    id: 'browser',
+    label: 'Browser',
     icon: '🌐',
     tools: [
-      { name: 'get_active_tab', label: 'Active Tab', description: 'Get the focused tab info' },
-      { name: 'list_tabs', label: 'List Tabs', description: 'List all open tabs' },
-      { name: 'get_selection', label: 'Selection', description: 'Get highlighted text on a page' },
-      { name: 'get_tab_content', label: 'Tab Content', description: 'Read the page as Markdown' },
-      { name: 'browse_history', label: 'History', description: 'Search browser history' },
+      { name: 'get_active_tab', label: 'Current Tab', description: 'See what page you\'re on' },
+      { name: 'get_tab_content', label: 'Page Content', description: 'Read the page as text' },
+      { name: 'get_selection', label: 'Selection', description: 'Grab highlighted text' },
+      { name: 'list_tabs', label: 'Open Tabs', description: 'See all your open tabs' },
+      { name: 'open_tab', label: 'Open Tab', description: 'Open a new tab', write: true },
+      { name: 'close_tab', label: 'Close Tab', description: 'Close tabs', write: true },
+      { name: 'focus_tab', label: 'Switch Tab', description: 'Jump to a tab', write: true },
+      { name: 'browse_history', label: 'History', description: 'Search past visits' },
+      { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Find and manage bookmarks', write: true },
     ],
   },
   {
-    id: 'browser-actions',
-    label: 'Browser Actions',
-    icon: '🖱️',
-    tools: [
-      { name: 'focus_tab', label: 'Focus Tab', description: 'Bring a tab to the foreground', write: true },
-      { name: 'open_tab', label: 'Open Tab', description: 'Open a new tab at a URL', write: true },
-      { name: 'close_tab', label: 'Close Tab', description: 'Close one or more tabs', write: true },
-      { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Read and manage bookmarks', write: true },
-    ],
-  },
-  {
-    id: 'playwright-connect',
-    label: 'Playwright Connection',
-    icon: '🔗',
-    tools: [
-      { name: 'bind_tab', label: 'Bind Tab', description: 'Bind a tab for automation (extension mode)', write: true },
-      { name: 'unbind_tab', label: 'Unbind Tab', description: 'Release the bound tab', write: true },
-      { name: 'connect_browser', label: 'Connect Browser', description: 'Attach via CDP (cdp mode)', write: true },
-      { name: 'disconnect_browser', label: 'Disconnect', description: 'Release CDP connection', write: true },
-    ],
-  },
-  {
-    id: 'playwright-drive',
-    label: 'Playwright Driving',
+    id: 'automation',
+    label: 'Automation',
     icon: '🎭',
     tools: [
-      { name: 'bound_tabs', label: 'Bound Tabs', description: 'List tabs under Playwright control' },
-      { name: 'drive_tab', label: 'Drive Tab', description: 'Page-scoped DOM, nav, screenshots, eval', write: true },
-      { name: 'drive_browser', label: 'Drive Browser', description: 'Browser/session/multi-tab lifecycle', write: true },
-      { name: 'drive_context', label: 'Drive Context', description: 'Cookies, storage, auth, network mocking', write: true },
-      { name: 'drive_devtools', label: 'Drive DevTools', description: 'Console, network log, tracing, video', write: true },
+      { name: 'connect_browser', label: 'Connect', description: 'Start controlling the browser', write: true },
+      { name: 'disconnect_browser', label: 'Disconnect', description: 'Stop controlling the browser', write: true },
+      { name: 'bound_tabs', label: 'Status', description: 'Check the connection' },
+      { name: 'drive_tab', label: 'Interact', description: 'Click, type, fill, screenshot', write: true },
+      { name: 'drive_browser', label: 'Manage Tabs', description: 'Open, close, switch tabs', write: true },
+      { name: 'drive_context', label: 'Data & State', description: 'Cookies, storage, auth, network', write: true },
+      { name: 'drive_devtools', label: 'Inspect', description: 'Console, network, tracing', write: true },
     ],
   },
 ];
