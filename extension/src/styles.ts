@@ -1205,6 +1205,11 @@ export const sidebarStyles = css`
       text-transform: uppercase;
     }
     .debug-bar button:hover { color: var(--accent); border-color: var(--accent); }
+    .debug-bar button.active {
+      color: var(--fg);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+    }
     .debug-path {
       padding: 4px 12px;
       color: var(--fg-faint);
@@ -1229,6 +1234,8 @@ export const sidebarStyles = css`
       line-height: 1.5;
     }
     .debug-row:hover { background: var(--bg-bubble); }
+    .debug-row.no-detail { cursor: default; }
+    .debug-row.synthetic .summary { color: var(--fg-dim); font-style: italic; }
     .debug-row .ts { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
     .debug-row .tag {
       font-weight: 700;

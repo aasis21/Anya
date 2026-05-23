@@ -2415,7 +2415,76 @@ export class AnyaApp extends LitElement {
   }
 
   // ----- debug panel rendering -----------------------------------------
+  @state() private debugFilter: 'all' | 'errors' | 'stream' | 'tools' = 'all';
   @state() private debugExpanded = new Set<string>();
+
+  private frameTypeFromSummary(summary: string): string | null {
+    const m = /^\s*[←→]\s+([a-z0-9-]+)/i.exec(summary);
+    return m?.[1]?.toLowerCase() ?? null;
+  }
+
+  private debugFilterMatches(entry: DebugEntry): boolean {
+    const frameType = this.frameTypeFromSummary(entry.summary);
+    switch (this.debugFilter) {
+      case 'errors':
+        return entry.level === 'error'
+          || entry.level === 'warn'
+          || entry.kind === 'error'
+          || /\berror\b|\bdenied\b|\bfailed\b/i.test(entry.summary);
+      case 'stream':
+        return frameType === 'turn-start'
+          || frameType === 'intent'
+          || frameType === 'delta'
+          || frameType === 'message'
+          || frameType === 'done';
+      case 'tools':
+        return (frameType?.startsWith('tool-') ?? false)
+          || frameType === 'permission-denied'
+          || /\btool\b|\bpermission\b/i.test(entry.summary);
+      default:
+        return true;
+    }
+  }
+
+  private debugViewEntries(): Array<DebugEntry & { synthetic?: boolean }> {
+    const filtered = this.debugEntries.filter((e) => this.debugFilterMatches(e));
+    const out: Array<DebugEntry & { synthetic?: boolean }> = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const cur = filtered[i];
+      const isDelta = cur.kind === 'in' && this.frameTypeFromSummary(cur.summary) === 'delta';
+      if (!isDelta) {
+        out.push(cur);
+        continue;
+      }
+
+      let j = i + 1;
+      while (
+        j < filtered.length
+        && filtered[j].kind === 'in'
+        && this.frameTypeFromSummary(filtered[j].summary) === 'delta'
+      ) {
+        j++;
+      }
+      const run = filtered.slice(i, j);
+      if (run.length === 1) {
+        out.push(cur);
+      } else {
+        const first = run[0];
+        const last = run[run.length - 1];
+        const spanMs = Math.max(0, last.ts - first.ts);
+        out.push({
+          id: `agg:${first.id}:${last.id}`,
+          ts: last.ts,
+          kind: 'in',
+          summary: `← delta ×${run.length} (${spanMs}ms burst)`,
+          detail: `Collapsed ${run.length} consecutive delta frames from ${this.fmtDebugTime(first.ts)} to ${this.fmtDebugTime(last.ts)}.`,
+          synthetic: true,
+        });
+      }
+      i = j - 1;
+    }
+    return out;
+  }
 
   private toggleDebugRow(id: string): void {
     const next = new Set(this.debugExpanded);
@@ -2426,11 +2495,32 @@ export class AnyaApp extends LitElement {
 
   private renderDebugPanel() {
     const path = this.bridgeLogFile;
+    const viewEntries = this.debugViewEntries();
     return html`
       <section class="debug">
         <div class="debug-bar">
-          <span>BRIDGE TRACE · ${this.debugEntries.length}/${DEBUG_MAX_ENTRIES}</span>
+          <span>BRIDGE TRACE · ${viewEntries.length}/${this.debugEntries.length}</span>
           <span class="grow"></span>
+          <button
+            class=${this.debugFilter === 'all' ? 'active' : ''}
+            @click=${() => { this.debugFilter = 'all'; }}
+            title="Show all rows"
+          >all</button>
+          <button
+            class=${this.debugFilter === 'errors' ? 'active' : ''}
+            @click=${() => { this.debugFilter = 'errors'; }}
+            title="Show warnings and errors"
+          >errors</button>
+          <button
+            class=${this.debugFilter === 'stream' ? 'active' : ''}
+            @click=${() => { this.debugFilter = 'stream'; }}
+            title="Show streaming lifecycle rows"
+          >stream</button>
+          <button
+            class=${this.debugFilter === 'tools' ? 'active' : ''}
+            @click=${() => { this.debugFilter = 'tools'; }}
+            title="Show tool and permission rows"
+          >tools</button>
           <button @click=${() => this.copyDebug()} title="Copy all entries">copy</button>
           <button @click=${() => this.clearDebug()} title="Clear panel">clear</button>
         </div>
@@ -2442,17 +2532,18 @@ export class AnyaApp extends LitElement {
             >📁 ${path}</div>`
           : nothing}
         <div class="debug-list">
-          ${this.debugEntries.length === 0
+          ${viewEntries.length === 0
             ? html`<div class="debug-empty">no traffic yet — send a prompt</div>`
             : repeat(
-                this.debugEntries,
+                viewEntries,
                 (e) => e.id,
                 (e) => {
                   const expanded = this.debugExpanded.has(e.id);
                   const tag = e.kind === 'log' ? (e.level ?? 'log') : e.kind;
-                  const cls = `debug-row ${e.kind} ${e.level ?? ''} ${expanded ? 'expanded' : ''}`;
+                  const canExpand = !!e.detail;
+                  const cls = `debug-row ${e.kind} ${e.level ?? ''} ${expanded ? 'expanded' : ''} ${canExpand ? '' : 'no-detail'} ${'synthetic' in e && e.synthetic ? 'synthetic' : ''}`;
                   return html`
-                    <div class=${cls} @click=${() => this.toggleDebugRow(e.id)}>
+                    <div class=${cls} @click=${() => { if (canExpand) this.toggleDebugRow(e.id); }}>
                       <span class="ts">${this.fmtDebugTime(e.ts)}</span>
                       <span class="tag">${tag}</span>
                       <span class="summary">${e.summary}</span>
