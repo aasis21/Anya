@@ -214,6 +214,35 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       skipPermission: true,
       handler: async (args) => JSON.stringify(await rpc.call('browse_history', args)),
     }),
+
+    defineTool('browse_downloads', {
+      description:
+        'Search the user\'s browser downloads. Returns recent download items with file name, ' +
+        'source URL, state, size, and timestamps.\n\n' +
+        'Parameters:\n' +
+        '- `query` (string, optional) — text matched against filename/url.\n' +
+        '- `state` (string, optional) — one of `in_progress`, `complete`, `interrupted`.\n' +
+        '- `maxResults` (number, optional, default 50).\n' +
+        '- `startTime` / `endTime` (string, optional) — ISO 8601 time bounds on startTime.\n\n' +
+        'USE CASES: "what did I download today", "find that installer", "recent completed downloads".',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search text matched against filename/url.' },
+          state: {
+            type: 'string',
+            enum: ['in_progress', 'complete', 'interrupted'],
+            description: 'Filter by download state.',
+          },
+          maxResults: { type: 'number', description: 'Max entries to return (default 50).' },
+          startTime: { type: 'string', description: 'ISO 8601 timestamp — only results after this time.' },
+          endTime: { type: 'string', description: 'ISO 8601 timestamp — only results before this time.' },
+        },
+        additionalProperties: false,
+      },
+      skipPermission: true,
+      handler: async (args) => JSON.stringify(await rpc.call('browse_downloads', args)),
+    }),
   ];
 }
 

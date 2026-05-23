@@ -187,6 +187,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
       { name: 'close_tab', label: 'Close Tab', description: 'Close tabs', write: true },
       { name: 'focus_tab', label: 'Switch Tab', description: 'Jump to a tab', write: true },
       { name: 'browse_history', label: 'History', description: 'Search past visits' },
+      { name: 'browse_downloads', label: 'Downloads', description: 'Search recent downloads' },
       { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Find and manage bookmarks', write: true },
     ],
   },

@@ -68,6 +68,7 @@ const TOOL_LABELS: Record<string, string> = {
   close_tab: 'Close Tab',
   focus_tab: 'Switch Tab',
   browse_history: 'History',
+  browse_downloads: 'Downloads',
   manage_bookmarks: 'Bookmarks',
   connect_browser: 'Connect',
   disconnect_browser: 'Disconnect',
@@ -121,6 +122,10 @@ function friendlyArgs(toolName: string, args: unknown): string {
       return typeof a.windowId === 'number' ? `window ${a.windowId}` : '';
     case 'browse_history':
       return typeof a.query === 'string' && a.query ? `"${a.query}"` : '';
+    case 'browse_downloads':
+      if (typeof a.query === 'string' && a.query) return `"${a.query}"`;
+      if (typeof a.state === 'string' && a.state) return a.state;
+      return '';
     case 'manage_bookmarks':
       return typeof a.op === 'string' ? a.op : '';
     case 'connect_browser':
@@ -1252,6 +1257,45 @@ export class AnyaApp extends LitElement {
           title: r.title,
           lastVisit: r.lastVisitTime ? new Date(r.lastVisitTime).toISOString() : null,
           visitCount: r.visitCount ?? 0,
+        }));
+      }
+      case 'browse_downloads': {
+        const query = String(args.query ?? '');
+        const stateRaw = String(args.state ?? '');
+        const state = ['in_progress', 'complete', 'interrupted'].includes(stateRaw)
+          ? stateRaw as 'in_progress' | 'complete' | 'interrupted'
+          : undefined;
+        const maxResults = Math.min(Math.max(Number(args.maxResults || 50), 1), 200);
+        const searchOpts: chrome.downloads.DownloadQuery = {
+          query: query ? [query] : undefined,
+          state,
+          limit: maxResults,
+          orderBy: ['-startTime'],
+        };
+        if (typeof args.startTime === 'string' && args.startTime) {
+          const t = Date.parse(args.startTime);
+          if (!isNaN(t)) searchOpts.startedAfter = new Date(t);
+        }
+        if (typeof args.endTime === 'string' && args.endTime) {
+          const t = Date.parse(args.endTime);
+          if (!isNaN(t)) searchOpts.startedBefore = new Date(t);
+        }
+
+        const items = await chrome.downloads.search(searchOpts);
+        return items.map((d) => ({
+          id: d.id,
+          fileName: d.filename,
+          fileSize: d.fileSize,
+          url: d.url,
+          finalUrl: d.finalUrl,
+          state: d.state,
+          danger: d.danger,
+          exists: d.exists,
+          mime: d.mime,
+          startTime: d.startTime ?? null,
+          endTime: d.endTime ?? null,
+          byExtensionName: d.byExtensionName,
+          byExtensionId: d.byExtensionId,
         }));
       }
       case 'get_attached': {
