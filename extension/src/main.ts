@@ -58,6 +58,142 @@ function summariseTab(tab: chrome.tabs.Tab): {
   };
 }
 
+// --------------- friendly tool display ---------------
+const TOOL_LABELS: Record<string, string> = {
+  get_active_tab: 'Current Tab',
+  get_tab_content: 'Page Content',
+  get_selection: 'Selection',
+  list_tabs: 'Open Tabs',
+  open_tab: 'Open Tab',
+  close_tab: 'Close Tab',
+  focus_tab: 'Switch Tab',
+  browse_history: 'History',
+  manage_bookmarks: 'Bookmarks',
+  connect_browser: 'Connect',
+  disconnect_browser: 'Disconnect',
+  bound_tabs: 'Status',
+  drive_tab: 'Interact',
+  drive_browser: 'Manage Tabs',
+  drive_context: 'Data & State',
+  drive_devtools: 'Inspect',
+};
+
+function toTitleWords(value: string): string {
+  const ACRONYMS = new Set(['api', 'cli', 'cdp', 'id', 'mcp', 'sdk', 'ui', 'url']);
+  const normalized = value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._-]+/g, ' ')
+    .trim();
+  if (!normalized) return value;
+  return normalized
+    .split(/\s+/)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (ACRONYMS.has(lower)) return lower.toUpperCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
+}
+
+function formatToolDisplayName(toolName: string, mcpServerName?: string): string {
+  const localLabel = TOOL_LABELS[toolName] ?? toTitleWords(toolName);
+  if (!mcpServerName) return localLabel;
+  return `${toTitleWords(mcpServerName)}:${localLabel}`;
+}
+
+/** Produce a short, human-readable summary of tool arguments. */
+function friendlyArgs(toolName: string, args: unknown): string {
+  if (!args || typeof args !== 'object') return '';
+  const a = args as Record<string, unknown>;
+  switch (toolName) {
+    case 'open_tab':
+      return typeof a.url === 'string' ? shortenUrl(a.url) : '';
+    case 'close_tab':
+      if (Array.isArray(a.tabIds)) return `${a.tabIds.length} tabs`;
+      if (typeof a.tabId === 'number') return `tab ${a.tabId}`;
+      return 'active tab';
+    case 'focus_tab':
+      return typeof a.tabId === 'number' ? `tab ${a.tabId}` : '';
+    case 'get_tab_content':
+    case 'get_selection':
+      return typeof a.tabId === 'number' ? `tab ${a.tabId}` : '';
+    case 'list_tabs':
+      return typeof a.windowId === 'number' ? `window ${a.windowId}` : '';
+    case 'browse_history':
+      return typeof a.query === 'string' && a.query ? `"${a.query}"` : '';
+    case 'manage_bookmarks':
+      return typeof a.op === 'string' ? a.op : '';
+    case 'connect_browser':
+      return typeof a.browser === 'string' && a.browser !== 'msedge' ? a.browser : '';
+    case 'drive_tab':
+    case 'drive_browser':
+    case 'drive_context':
+    case 'drive_devtools':
+      if (Array.isArray(a.argv) && a.argv.length > 0) return friendlyArgv(a.argv as string[]);
+      return '';
+    default:
+      return '';
+  }
+}
+
+/** Summarise a playwright-cli argv into a readable phrase. */
+function friendlyArgv(argv: string[]): string {
+  const cmd = argv[0] ?? '';
+  const rest = argv.slice(1);
+  switch (cmd) {
+    case 'goto': return rest[0] ? shortenUrl(rest[0]) : 'navigate';
+    case 'click': return rest[0] ? `click ${rest[0]}` : 'click';
+    case 'dblclick': return rest[0] ? `double-click ${rest[0]}` : 'double-click';
+    case 'type': return rest[0] ? `type "${trunc(rest[0], 30)}"` : 'type';
+    case 'fill': return rest.length >= 2 ? `fill ${rest[0]}` : 'fill';
+    case 'press': return rest[0] ? `press ${rest[0]}` : 'press';
+    case 'hover': return rest[0] ? `hover ${rest[0]}` : 'hover';
+    case 'select': return rest[0] ? `select ${rest[0]}` : 'select';
+    case 'check': return rest[0] ? `check ${rest[0]}` : 'check';
+    case 'uncheck': return rest[0] ? `uncheck ${rest[0]}` : 'uncheck';
+    case 'screenshot': return 'screenshot';
+    case 'pdf': return 'save PDF';
+    case 'snapshot': return 'snapshot';
+    case 'eval': return 'evaluate';
+    case 'run-code': return 'run code';
+    case 'reload': return 'reload';
+    case 'go-back': return 'back';
+    case 'go-forward': return 'forward';
+    case 'tab-list': return 'list tabs';
+    case 'tab-new': return rest[0] ? `new tab → ${shortenUrl(rest[0])}` : 'new tab';
+    case 'tab-close': return rest[0] ? `close tab ${rest[0]}` : 'close tab';
+    case 'tab-select': return rest[0] ? `switch to tab ${rest[0]}` : 'switch tab';
+    case 'resize': return rest.length >= 2 ? `resize ${rest[0]}×${rest[1]}` : 'resize';
+    case 'cookie-list': return 'list cookies';
+    case 'cookie-get': return rest[0] ? `cookie "${rest[0]}"` : 'get cookie';
+    case 'cookie-set': return rest[0] ? `set cookie "${rest[0]}"` : 'set cookie';
+    case 'cookie-clear': return 'clear cookies';
+    case 'localstorage-list': return 'list localStorage';
+    case 'localstorage-get': return rest[0] ? `localStorage "${rest[0]}"` : 'get localStorage';
+    case 'console': return rest[0] ? `console (${rest[0]})` : 'console';
+    case 'network': return 'network requests';
+    case 'tracing-start': return 'start tracing';
+    case 'tracing-stop': return 'stop tracing';
+    case 'dialog-accept': return 'accept dialog';
+    case 'dialog-dismiss': return 'dismiss dialog';
+    default: return argv.join(' ');
+  }
+}
+
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname === '/' ? '' : u.pathname;
+    return trunc(u.hostname + path, 40);
+  } catch {
+    return trunc(url, 40);
+  }
+}
+
+function trunc(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
 @customElement('anya-app')
 export class AnyaApp extends LitElement {
   static styles = sidebarStyles;
@@ -2122,7 +2258,7 @@ export class AnyaApp extends LitElement {
       <div class="approval-banner">
         <span class="approval-icon">⚠️</span>
         <span class="approval-info">
-          <span class="approval-tool">${req.toolName}</span>
+          <span class="approval-tool">${formatToolDisplayName(req.toolName)}</span>
           <span class="approval-kind">${req.kind}</span>
         </span>
         <button class="approval-btn approve" @click=${() => this.respondToApproval(id, true)}>Allow</button>
@@ -2154,10 +2290,11 @@ export class AnyaApp extends LitElement {
       : tc.status === 'running'
         ? (tc.progress ?? 'running…')
         : '';
-    const argsLine = tc.arguments && Object.keys(tc.arguments as object).length > 0
-      ? JSON.stringify(tc.arguments)
-      : '';
-    const displayName = tc.mcpServerName ? `${tc.mcpServerName}:${tc.toolName}` : tc.toolName;
+    const argsLine = friendlyArgs(tc.toolName, tc.arguments)
+      || (tc.arguments && Object.keys(tc.arguments as object).length > 0
+        ? JSON.stringify(tc.arguments)
+        : '');
+    const displayName = formatToolDisplayName(tc.toolName, tc.mcpServerName);
     return html`
       <div
         class="toolcall ${tc.status}"
