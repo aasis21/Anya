@@ -268,6 +268,17 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 }
 .hero-sub code { font-size: 0.88em; }
 
+.hero-proof {
+  margin: 14px 0 0;
+  max-width: 760px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--bone-dim);
+  letter-spacing: 0.01em;
+  animation: fade-up 1s ease-out 0.48s both;
+}
+
 .hero-install {
   margin: 32px 0 28px;
   max-width: 760px;
