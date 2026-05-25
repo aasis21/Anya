@@ -69,6 +69,7 @@ const TOOL_LABELS: Record<string, string> = {
   focus_tab: 'Switch Tab',
   browse_history: 'History',
   browse_downloads: 'Downloads',
+  search_chats: 'Chat History',
   manage_bookmarks: 'Bookmarks',
   connect_browser: 'Connect',
   disconnect_browser: 'Disconnect',
@@ -1298,6 +1299,56 @@ export class AnyaApp extends LitElement {
           byExtensionName: d.byExtensionName,
           byExtensionId: d.byExtensionId,
         }));
+      }
+      case 'search_chats': {
+        const op = String(args.op ?? 'list');
+        const query = String(args.query ?? '').toLowerCase();
+        const chatId = String(args.chatId ?? '');
+        const limit = Math.min(Math.max(Number(args.limit || 20), 1), 100);
+
+        if (op === 'read') {
+          if (!chatId) throw new Error('search_chats: chatId required for "read" op');
+          const chat = this.chats.find((c) => c.id === chatId);
+          if (!chat) throw new Error(`search_chats: chat "${chatId}" not found`);
+          return {
+            id: chat.id,
+            title: chat.title,
+            createdAt: new Date(chat.createdAt).toISOString(),
+            updatedAt: new Date(chat.updatedAt).toISOString(),
+            pinned: chat.pinned ?? false,
+            tags: chat.tags ?? [],
+            cwd: chat.cwd ?? null,
+            messages: chat.messages.map((m) => ({
+              role: m.role,
+              text: m.text.slice(0, 2000),
+              ts: new Date(m.ts).toISOString(),
+              kind: m.kind ?? 'normal',
+            })),
+          };
+        }
+
+        let results = this.chats;
+        if (op === 'search' && query) {
+          results = results.filter((c) =>
+            c.title.toLowerCase().includes(query) ||
+            c.messages.some((m) => m.text.toLowerCase().includes(query)),
+          );
+        }
+
+        return results
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, limit)
+          .map((c) => ({
+            id: c.id,
+            title: c.title,
+            messageCount: c.messages.length,
+            createdAt: new Date(c.createdAt).toISOString(),
+            updatedAt: new Date(c.updatedAt).toISOString(),
+            pinned: c.pinned ?? false,
+            tags: c.tags ?? [],
+            cwd: c.cwd ?? null,
+            preview: c.messages.filter((m) => m.role === 'user').slice(0, 2).map((m) => m.text.slice(0, 100)),
+          }));
       }
       case 'get_attached': {
         // Unified tool: fetch fresh content of an attached element or field.

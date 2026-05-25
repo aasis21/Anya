@@ -215,6 +215,37 @@ export function buildContextTools(rpc: ToolRpc): Tool[] {
       handler: async (args) => JSON.stringify(await rpc.call('browse_history', args)),
     }),
 
+    defineTool('search_chats', {
+      description:
+        'Search past Anya chat sessions stored in the browser. Returns chat metadata and ' +
+        'optionally message content.\n\n' +
+        'Parameters:\n' +
+        '- `op` (string) — operation: "list" (all chats summary), "search" (filter by query), ' +
+        '"read" (full messages for a specific chat).\n' +
+        '- `query` (string, optional) — for "search": substring match against title and message text.\n' +
+        '- `chatId` (string, optional) — for "read": the chat id to retrieve full messages from.\n' +
+        '- `limit` (number, optional, default 20) — max chats to return for list/search.\n\n' +
+        'USE CASES: "what did we talk about last time?", "find our conversation about X", ' +
+        '"show me chat history", "what did Anya help me with?".',
+      parameters: {
+        type: 'object',
+        properties: {
+          op: {
+            type: 'string',
+            enum: ['list', 'search', 'read'],
+            description: 'Operation: list all chats, search by query, or read a specific chat.',
+          },
+          query: { type: 'string', description: '(search) Substring to match against titles and messages.' },
+          chatId: { type: 'string', description: '(read) Chat id to retrieve full messages from.' },
+          limit: { type: 'number', description: '(list/search) Max results. Default 20.' },
+        },
+        required: ['op'],
+        additionalProperties: false,
+      },
+      skipPermission: true,
+      handler: async (args) => JSON.stringify(await rpc.call('search_chats', args)),
+    }),
+
     defineTool('browse_downloads', {
       description:
         'Search the user\'s browser downloads. Returns recent download items with file name, ' +

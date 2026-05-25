@@ -220,6 +220,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
       { name: 'focus_tab', label: 'Switch Tab', description: 'Jump to a tab', write: true },
       { name: 'browse_history', label: 'History', description: 'Search past visits' },
       { name: 'browse_downloads', label: 'Downloads', description: 'Search recent downloads' },
+      { name: 'search_chats', label: 'Chat History', description: 'Search past Anya conversations' },
       { name: 'manage_bookmarks', label: 'Bookmarks', description: 'Find and manage bookmarks', write: true },
     ],
   },
