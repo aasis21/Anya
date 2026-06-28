@@ -24,6 +24,14 @@ import { marked } from 'marked';
 import { nativeBridge, type Frame } from './native-bridge.js';
 import { sidebarStyles } from './styles.js';
 import {
+  WebSpeechInput,
+  WebSpeechOutput,
+  DEFAULT_VOICE_SETTINGS,
+  type VoiceInput,
+  type VoiceOutput,
+  type VoiceSettings,
+} from './voice/index.js';
+import {
   type ToolCall,
   type ChatMessage,
   type Chat,
@@ -311,6 +319,14 @@ export class AnyaApp extends LitElement {
   @state() private modelMenuOpen = false;
   // Workspace selector
   @state() private workspaceMenuOpen = false;
+
+  // Voice I/O
+  @state() private voiceSettings: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS };
+  @state() private voiceMenuOpen = false;
+  @state() private isListening = false;
+  @state() private isSpeaking = false;
+  private voiceInput: VoiceInput = new WebSpeechInput();
+  private voiceOutput: VoiceOutput = new WebSpeechOutput();
   // Approval mode: true = auto-approve all, false = ask user for write tools
   @state() private autoApprove = true;
   /** Pending permission requests from the bridge, keyed by requestId. */
@@ -399,6 +415,7 @@ export class AnyaApp extends LitElement {
     void this.loadChats();
     void this.loadQuickPrompts();
     void this.loadInputHistory();
+    void this.loadVoiceSettings();
     window.addEventListener('keydown', this.onGlobalKey);
     this.renderRoot.addEventListener('click', this.onRootClick);
     // Listen for page-bridge messages (context attachments, field tracking).
@@ -435,6 +452,82 @@ export class AnyaApp extends LitElement {
 
   private persistInputHistory(): void {
     try { chrome.storage?.local?.set?.({ 'anya-input-history': this.inputHistory.slice(-100) }); } catch { /* ignore */ }
+  }
+
+  // ─── Voice I/O ────────────────────────────────────────────────────
+
+  private async loadVoiceSettings(): Promise<void> {
+    const s = await this.readStorage<VoiceSettings>('anya-voice-settings');
+    if (s) this.voiceSettings = { ...DEFAULT_VOICE_SETTINGS, ...s };
+    this.voiceOutput.rate = this.voiceSettings.rate;
+    this.voiceOutput.pitch = this.voiceSettings.pitch;
+    if (this.voiceSettings.voiceId) this.voiceOutput.setVoice(this.voiceSettings.voiceId);
+    this.setupVoiceHandlers();
+  }
+
+  private persistVoiceSettings(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-voice-settings': this.voiceSettings }); } catch { /* ignore */ }
+  }
+
+  private setupVoiceHandlers(): void {
+    this.voiceInput.onResult = (text, isFinal) => {
+      const ta = this.textarea;
+      if (!ta) return;
+      if (isFinal) {
+        // Append final text with a space
+        const current = ta.value;
+        const prefix = current && !current.endsWith(' ') ? ' ' : '';
+        ta.value = current + prefix + text;
+        this.syncDraft(ta.value);
+        if (this.voiceSettings.autoSubmit) {
+          this.voiceInput.stop();
+          this.send();
+        }
+      } else {
+        // Show interim in a non-destructive way — update a visual indicator only
+        // We don't modify textarea for interim results to avoid cursor jumps
+      }
+    };
+    this.voiceInput.onError = (error) => {
+      this.isListening = false;
+      if (error === 'not-allowed') {
+        this.recordDebug({ kind: 'log', level: 'warn', summary: 'Microphone access denied' });
+      }
+    };
+    this.voiceInput.onEnd = () => {
+      this.isListening = false;
+    };
+  }
+
+  private toggleVoiceInput(): void {
+    if (this.isListening) {
+      this.voiceInput.stop();
+      this.isListening = false;
+    } else {
+      this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
+      this.voiceInput.start();
+      this.isListening = true;
+    }
+  }
+
+  private speakMessage(text: string): void {
+    if (this.isSpeaking) {
+      this.voiceOutput.stop();
+      this.isSpeaking = false;
+      return;
+    }
+    this.voiceOutput.onEnd = () => { this.isSpeaking = false; };
+    this.voiceOutput.onError = () => { this.isSpeaking = false; };
+    this.isSpeaking = true;
+    this.voiceOutput.speak(text);
+  }
+
+  private updateVoiceSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]): void {
+    this.voiceSettings = { ...this.voiceSettings, [key]: value };
+    if (key === 'rate') this.voiceOutput.rate = value as number;
+    if (key === 'pitch') this.voiceOutput.pitch = value as number;
+    if (key === 'voiceId') this.voiceOutput.setVoice(value as string);
+    this.persistVoiceSettings();
   }
 
   private toggleTheme(): void {
@@ -1760,6 +1853,14 @@ export class AnyaApp extends LitElement {
         ...c,
         messages: c.messages.map((m) => m.id === sid ? { ...m, pending: false } : m),
       }));
+      // Auto-speak the completed assistant message
+      if (this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak && chatId === this.currentChatId) {
+        const chat = this.chats.find((c) => c.id === chatId);
+        const msg = chat?.messages.find((m) => m.id === sid);
+        if (msg?.role === 'assistant' && msg.text) {
+          this.speakMessage(msg.text);
+        }
+      }
       this.streamingIds.delete(chatId);
     }
     // Close the send-options dropdown when streaming finishes.
@@ -3072,6 +3173,23 @@ export class AnyaApp extends LitElement {
                   <button class="header-menu-item" @click=${() => { this.headerMenuOpen = false; this.toggleTheme(); }}>
                     <span class="header-menu-icon">${this.theme === 'dark' ? '☀' : '☾'}</span> ${this.theme === 'dark' ? 'Light' : 'Dark'} Theme
                   </button>
+                  <hr class="header-menu-sep" />
+                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('inputEnabled', !this.voiceSettings.inputEnabled); }}>
+                    <span class="header-menu-icon">🎤</span> Voice Input${this.voiceSettings.inputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  </button>
+                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('outputEnabled', !this.voiceSettings.outputEnabled); }}>
+                    <span class="header-menu-icon">🔊</span> Voice Output${this.voiceSettings.outputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  </button>
+                  ${this.voiceSettings.inputEnabled ? html`
+                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSubmit', !this.voiceSettings.autoSubmit); }}>
+                      <span class="header-menu-icon"></span> Auto-submit${this.voiceSettings.autoSubmit ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    </button>
+                  ` : nothing}
+                  ${this.voiceSettings.outputEnabled ? html`
+                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSpeak', !this.voiceSettings.autoSpeak); }}>
+                      <span class="header-menu-icon"></span> Auto-speak${this.voiceSettings.autoSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    </button>
+                  ` : nothing}
                 </div>
               ` : nothing}
             </span>
@@ -3121,6 +3239,9 @@ export class AnyaApp extends LitElement {
                       ${this.msgMenuId === x.m.id ? html`
                         <span class="msg-menu">
                           <button @click=${() => this.copyMessage(x.m)} title="Copy">copy</button>
+                          ${this.voiceOutput.supported && this.voiceSettings.outputEnabled ? html`
+                            <button @click=${() => this.speakMessage(x.m.text)} title=${this.isSpeaking ? 'Stop' : 'Speak'}>${this.isSpeaking ? '⏹' : '🔊'}</button>
+                          ` : nothing}
                           ${x.m.role === 'user' ? html`
                             <button @click=${() => this.regenerateFromMessage(this.currentChatId, x.m.id)} title="Re-send">resend</button>
                           ` : nothing}
@@ -3239,6 +3360,14 @@ export class AnyaApp extends LitElement {
             </button>
             <span class="composer-spacer"></span>
             ${this.toolsPanelOpen ? this.renderToolsPanel() : nothing}
+            ${this.voiceInput.supported && this.voiceSettings.inputEnabled ? html`
+              <button
+                class="mic-btn ${this.isListening ? 'listening' : ''}"
+                @click=${() => this.toggleVoiceInput()}
+                title=${this.isListening ? 'Stop listening' : 'Voice input'}
+                aria-label=${this.isListening ? 'Stop listening' : 'Start voice input'}
+              >${this.isListening ? '⏹' : '🎤'}</button>
+            ` : nothing}
             ${this.currentChatId && this.streamingIds.has(this.currentChatId)
               ? html`<span class="send-split">
                   <button

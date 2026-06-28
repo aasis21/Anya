@@ -1194,6 +1194,40 @@ export const sidebarStyles = css`
     }
     .send-btn:disabled:hover { background: var(--accent); transform: none; }
 
+    /* ---------- VOICE I/O ---------- */
+    .mic-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid var(--bg-rule);
+      background: transparent;
+      color: var(--fg-dim);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .mic-btn:hover { color: var(--fg); border-color: var(--accent); }
+    .mic-btn.listening {
+      color: var(--error);
+      border-color: var(--error);
+      background: rgba(248, 81, 73, 0.1);
+      animation: mic-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes mic-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0); }
+    }
+    .header-menu-item.sub {
+      padding-left: 28px;
+      font-size: 11px;
+      color: var(--fg-dim);
+    }
+    .header-menu-item.sub:hover { color: var(--fg); }
+
     /* ---------- DEBUG PANEL ---------- */
     .debug {
       border-bottom: 1px solid var(--bg-rule);
