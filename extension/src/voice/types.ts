@@ -79,6 +79,7 @@ export interface VoiceSettings {
   outputEnabled: boolean;
   autoSubmit: boolean;
   autoSpeak: boolean;
+  streamSpeak: boolean;
   voiceId: string;
   rate: number;
   pitch: number;
@@ -89,6 +90,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   outputEnabled: false,
   autoSubmit: true,
   autoSpeak: true,
+  streamSpeak: true,
   voiceId: '',
   rate: 1,
   pitch: 1,

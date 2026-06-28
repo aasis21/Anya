@@ -1227,6 +1227,16 @@ export const sidebarStyles = css`
       color: var(--fg-dim);
     }
     .header-menu-item.sub:hover { color: var(--fg); }
+    .header-menu-label {
+      display: block;
+      padding: 4px 12px 2px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--fg-dim);
+      opacity: 0.7;
+    }
 
     /* ---------- DEBUG PANEL ---------- */
     .debug {

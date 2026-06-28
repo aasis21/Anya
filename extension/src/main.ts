@@ -534,6 +534,7 @@ export class AnyaApp extends LitElement {
   /** Feed a delta chunk into streaming TTS. Speaks at sentence boundaries. */
   private feedStreamingSpeech(chatId: string, chunk: string): void {
     if (!this.voiceSettings.outputEnabled || !this.voiceSettings.autoSpeak) return;
+    if (!this.voiceSettings.streamSpeak) return; // Will speak at end of turn instead
     if (chatId !== this.currentChatId) return;
 
     // Start streaming for this chat
@@ -564,15 +565,25 @@ export class AnyaApp extends LitElement {
     }
   }
 
-  /** Flush any remaining speech buffer (called when stream ends). */
+  /** Flush any remaining speech buffer or speak full message (called when stream ends). */
   private flushStreamingSpeech(chatId: string): void {
-    if (this._speechStreamingFor !== chatId) return;
-    const remaining = this._speechBuffer.trim();
-    if (remaining) {
-      this.voiceOutput.speak(remaining);
+    if (this._speechStreamingFor === chatId) {
+      // Was streaming — just flush the remaining buffer
+      const remaining = this._speechBuffer.trim();
+      if (remaining) {
+        this.voiceOutput.speak(remaining);
+      }
+      this._speechBuffer = '';
+      this._speechStreamingFor = null;
+    } else if (!this.voiceSettings.streamSpeak) {
+      // End-of-turn mode — speak the full message now
+      const sid = this.streamingIds.get(chatId);
+      const chat = this.chats.find((c) => c.id === chatId);
+      const msg = chat?.messages.find((m) => m.id === sid);
+      if (msg?.role === 'assistant' && msg.text) {
+        this.speakMessage(msg.text);
+      }
     }
-    this._speechBuffer = '';
-    this._speechStreamingFor = null;
   }
 
   private updateVoiceSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]): void {
@@ -3260,20 +3271,24 @@ export class AnyaApp extends LitElement {
                     <span class="header-menu-icon">${this.theme === 'dark' ? '☀' : '☾'}</span> ${this.theme === 'dark' ? 'Light' : 'Dark'} Theme
                   </button>
                   <hr class="header-menu-sep" />
+                  <span class="header-menu-label">Voice</span>
                   <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('inputEnabled', !this.voiceSettings.inputEnabled); }}>
-                    <span class="header-menu-icon">🎤</span> Voice Input${this.voiceSettings.inputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
-                  </button>
-                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('outputEnabled', !this.voiceSettings.outputEnabled); }}>
-                    <span class="header-menu-icon">🔊</span> Voice Output${this.voiceSettings.outputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    <span class="header-menu-icon">🎤</span> Input${this.voiceSettings.inputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
                   </button>
                   ${this.voiceSettings.inputEnabled ? html`
                     <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSubmit', !this.voiceSettings.autoSubmit); }}>
                       <span class="header-menu-icon"></span> Auto-submit${this.voiceSettings.autoSubmit ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
                   ` : nothing}
+                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('outputEnabled', !this.voiceSettings.outputEnabled); }}>
+                    <span class="header-menu-icon">🔊</span> Output${this.voiceSettings.outputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  </button>
                   ${this.voiceSettings.outputEnabled ? html`
                     <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSpeak', !this.voiceSettings.autoSpeak); }}>
                       <span class="header-menu-icon"></span> Auto-speak${this.voiceSettings.autoSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    </button>
+                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('streamSpeak', !this.voiceSettings.streamSpeak); }}>
+                      <span class="header-menu-icon"></span> Stream${this.voiceSettings.streamSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
                   ` : nothing}
                 </div>
