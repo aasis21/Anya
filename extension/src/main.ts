@@ -2910,12 +2910,14 @@ export class AnyaApp extends LitElement {
     // (turn started, but no tokens or tool calls yet). Show an animated
     // thinking line so the UI doesn't appear frozen.
     const isThinking = m.pending && !m.text && cards.length === 0;
-    // Show intent as a live status line while the message is still pending
-    const showIntentAboveTools = m.pending && m.intent && cards.length > 0;
+    // Show intent as a status line above tool cards (persists after completion)
+    const showIntentAboveTools = !!m.intent && cards.length > 0;
     return html`
       ${showIntentAboveTools
-        ? html`<div class="thinking" title="agent is working">
-            <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        ? html`<div class="thinking" title="${m.pending ? 'agent is working' : 'intent'}">
+            ${m.pending
+              ? html`<span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>`
+              : nothing}
             <span class="thinking-text">${m.intent}</span>
           </div>`
         : nothing}
