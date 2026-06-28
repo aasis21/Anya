@@ -1194,8 +1194,8 @@ export const sidebarStyles = css`
     }
     .send-btn:disabled:hover { background: var(--accent); transform: none; }
 
-    /* ---------- VOICE I/O ---------- */
-    .voice-notice {
+    /* ---------- SPEECH I/O ---------- */
+    .speech-notice {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1208,7 +1208,7 @@ export const sidebarStyles = css`
       border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
       border-radius: 8px;
     }
-    .voice-notice-x {
+    .speech-notice-x {
       background: transparent;
       border: none;
       color: var(--fg-dim);
@@ -1217,7 +1217,7 @@ export const sidebarStyles = css`
       padding: 2px 4px;
       flex: 0 0 auto;
     }
-    .voice-notice-x:hover { color: var(--fg); }
+    .speech-notice-x:hover { color: var(--fg); }
     .mic-btn {
       width: 30px;
       height: 30px;

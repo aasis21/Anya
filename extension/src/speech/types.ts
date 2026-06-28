@@ -1,14 +1,14 @@
 /**
  * Voice I/O abstraction layer.
  *
- * These interfaces define the contract for speech-to-text (VoiceInput)
- * and text-to-speech (VoiceOutput). Implementations can be swapped
+ * These interfaces define the contract for speech-to-text (SpeechInput)
+ * and text-to-speech (SpeechOutput). Implementations can be swapped
  * without touching UI code — e.g. WebSpeech today, Whisper/ElevenLabs later.
  */
 
 // ─── Voice Input (STT) ───────────────────────────────────────────────
 
-export interface VoiceInputEvents {
+export interface SpeechInputEvents {
   /** Fired with transcription results. `isFinal` = no more changes to this segment. */
   onResult(text: string, isFinal: boolean): void;
   /** Fired on recognition error (e.g. no-speech, network, not-allowed). */
@@ -17,7 +17,7 @@ export interface VoiceInputEvents {
   onEnd(): void;
 }
 
-export interface VoiceInput {
+export interface SpeechInput {
   /** Whether this STT engine is available in the current environment. */
   readonly supported: boolean;
   /** Whether the engine is actively listening right now. */
@@ -34,9 +34,9 @@ export interface VoiceInput {
   continuous: boolean;
 
   // Event handlers — set these before calling start().
-  onResult: VoiceInputEvents['onResult'] | null;
-  onError: VoiceInputEvents['onError'] | null;
-  onEnd: VoiceInputEvents['onEnd'] | null;
+  onResult: SpeechInputEvents['onResult'] | null;
+  onError: SpeechInputEvents['onError'] | null;
+  onEnd: SpeechInputEvents['onEnd'] | null;
 }
 
 // ─── Voice Output (TTS) ──────────────────────────────────────────────
@@ -48,7 +48,7 @@ export interface VoiceInfo {
   local: boolean;
 }
 
-export interface VoiceOutput {
+export interface SpeechOutput {
   /** Whether this TTS engine is available in the current environment. */
   readonly supported: boolean;
   /** Whether audio is currently being spoken. */
@@ -74,7 +74,7 @@ export interface VoiceOutput {
 
 // ─── Voice Settings (persisted) ──────────────────────────────────────
 
-export interface VoiceSettings {
+export interface SpeechSettings {
   inputEnabled: boolean;
   outputEnabled: boolean;
   autoSubmit: boolean;
@@ -85,7 +85,7 @@ export interface VoiceSettings {
   pitch: number;
 }
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
   inputEnabled: false,
   outputEnabled: false,
   autoSubmit: true,

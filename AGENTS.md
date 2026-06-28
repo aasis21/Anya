@@ -65,7 +65,7 @@ cd bridge;    npx tsc --noEmit
   `defineTool(...)` from `@github/copilot-sdk`. Browser-context tools defer
   to the extension over the tool-rpc channel; Playwright driving is the
   CDP session in `bridge/src/sessions.ts`.
-- **Voice I/O** lives in `extension/src/voice/` (Web Speech API). STT and TTS
+- **Voice I/O** lives in `extension/src/speech/` (Web Speech API). STT and TTS
   both run in the side panel — there is no bridge involvement.
 
 ## Runtime layout (per OS)

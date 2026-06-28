@@ -82,7 +82,7 @@ Anya/
 │       ├── types.ts              # ContextAttachment, ChatMessage, Chat, etc.
 │       ├── native-bridge.ts      # chrome.runtime.connectNative wrapper
 │       ├── background.ts         # side panel + "Add to Anya" context menu
-│       ├── voice/                # Web Speech STT/TTS + mic-permission helper window
+│       ├── speech/               # Web Speech STT/TTS + mic-permission helper window
 │       └── page-bridge.ts        # content script: element capture, field tracking, fill
 └── bridge/                       # Node Native Messaging host
     ├── manifest.template.json

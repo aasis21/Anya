@@ -1,8 +1,8 @@
 /**
- * Web Speech API implementation of VoiceInput (STT).
+ * Web Speech API implementation of SpeechInput (STT).
  * Uses webkitSpeechRecognition / SpeechRecognition available in Chromium.
  */
-import type { VoiceInput } from './types.js';
+import type { SpeechInput } from './types.js';
 
 // Web Speech API type shims (not all TS DOM libs include these)
 interface SpeechRecognitionResult {
@@ -54,7 +54,7 @@ const SpeechRecognitionCtor: SpeechRecognitionConstructor | undefined =
  */
 const FATAL_SPEECH_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
 
-export class WebSpeechInput implements VoiceInput {
+export class WebSpeechInput implements SpeechInput {
   readonly supported: boolean;
   private _listening = false;
   private _recognition: SpeechRecognitionInstance | null = null;
@@ -64,9 +64,9 @@ export class WebSpeechInput implements VoiceInput {
   interimResults = true;
   continuous = true;
 
-  onResult: VoiceInput['onResult'] = null;
-  onError: VoiceInput['onError'] = null;
-  onEnd: VoiceInput['onEnd'] = null;
+  onResult: SpeechInput['onResult'] = null;
+  onError: SpeechInput['onError'] = null;
+  onEnd: SpeechInput['onEnd'] = null;
 
   constructor() {
     this.supported = !!SpeechRecognitionCtor;

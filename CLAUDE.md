@@ -41,7 +41,7 @@ extension/  ←──── NM frames ────→  bridge/
 - `native-bridge.ts` — `chrome.runtime.connectNative` wrapper with auto-reconnect.
 - `styles.ts` — all CSS in one tagged template. Keep it sectioned, no separate CSS files.
 - `types.ts` — shared interfaces (`ContextAttachment`, `ChatMessage`, `Chat`, `DebugEntry`, etc.).
-- `voice/` — speech-to-text + text-to-speech via the Web Speech API, plus the `mic-permission.html` helper window. Runs entirely in the panel; no bridge frames.
+- `speech/` — speech-to-text + text-to-speech via the Web Speech API, plus the `mic-permission.html` helper window. Runs entirely in the panel; no bridge frames.
 
 **Bridge** (`bridge/src/`):
 - `host.ts` — NM stdio loop and frame router. Add new frame types here.

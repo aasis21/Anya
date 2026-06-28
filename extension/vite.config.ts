@@ -18,7 +18,7 @@ function copyStaticAssets() {
 
       // Copy the mic-permission helper page (opened in a popup window to
       // surface the browser's microphone prompt for the extension origin).
-      const micPermSrc = resolve(root, 'src/voice/mic-permission.html');
+      const micPermSrc = resolve(root, 'src/speech/mic-permission.html');
       if (existsSync(micPermSrc)) {
         copyFileSync(micPermSrc, resolve(distDir, 'mic-permission.html'));
       }
@@ -48,7 +48,7 @@ export default defineConfig({
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
         'page-bridge': resolve(root, 'src/page-bridge.ts'),
-        'mic-permission': resolve(root, 'src/voice/mic-permission.ts'),
+        'mic-permission': resolve(root, 'src/speech/mic-permission.ts'),
       },
       output: {
         entryFileNames: (chunk) => {

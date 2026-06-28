@@ -1,8 +1,8 @@
 /**
- * Web Speech API implementation of VoiceOutput (TTS).
+ * Web Speech API implementation of SpeechOutput (TTS).
  * Uses window.speechSynthesis available in all modern browsers.
  */
-import type { VoiceOutput, VoiceInfo } from './types.js';
+import type { SpeechOutput, VoiceInfo } from './types.js';
 
 /** Strip markdown formatting for cleaner speech. */
 function stripMarkdown(text: string): string {
@@ -37,7 +37,7 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
-export class WebSpeechOutput implements VoiceOutput {
+export class WebSpeechOutput implements SpeechOutput {
   readonly supported: boolean;
   private _synth: SpeechSynthesis | null;
   private _voiceId = '';
@@ -46,8 +46,8 @@ export class WebSpeechOutput implements VoiceOutput {
   rate = 1;
   pitch = 1;
 
-  onEnd: VoiceOutput['onEnd'] = null;
-  onError: VoiceOutput['onError'] = null;
+  onEnd: SpeechOutput['onEnd'] = null;
+  onError: SpeechOutput['onError'] = null;
 
   constructor() {
     this._synth = globalThis.speechSynthesis ?? null;

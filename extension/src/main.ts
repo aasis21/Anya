@@ -26,11 +26,11 @@ import { sidebarStyles } from './styles.js';
 import {
   WebSpeechInput,
   WebSpeechOutput,
-  DEFAULT_VOICE_SETTINGS,
-  type VoiceInput,
-  type VoiceOutput,
-  type VoiceSettings,
-} from './voice/index.js';
+  DEFAULT_SPEECH_SETTINGS,
+  type SpeechInput,
+  type SpeechOutput,
+  type SpeechSettings,
+} from './speech/index.js';
 import {
   type ToolCall,
   type ChatMessage,
@@ -322,14 +322,14 @@ export class AnyaApp extends LitElement {
   @state() private workspaceMenuOpen = false;
 
   // Voice I/O
-  @state() private voiceSettings: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS };
-  @state() private voiceMenuOpen = false;
+  @state() private speechSettings: SpeechSettings = { ...DEFAULT_SPEECH_SETTINGS };
+  @state() private speechMenuOpen = false;
   @state() private isListening = false;
   @state() private isSpeaking = false;
-  @state() private voiceNotice = '';
-  private voiceNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-  private voiceInput: VoiceInput = new WebSpeechInput();
-  private voiceOutput: VoiceOutput = new WebSpeechOutput();
+  @state() private speechNotice = '';
+  private speechNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  private speechInput: SpeechInput = new WebSpeechInput();
+  private speechOutput: SpeechOutput = new WebSpeechOutput();
   /** Buffer for streaming TTS — accumulates delta text until a sentence boundary. */
   private _speechBuffer = '';
   private _speechStreamingFor: string | null = null;
@@ -424,13 +424,13 @@ export class AnyaApp extends LitElement {
     void this.loadChats();
     void this.loadQuickPrompts();
     void this.loadInputHistory();
-    void this.loadVoiceSettings();
+    void this.loadSpeechSettings();
     window.addEventListener('keydown', this.onGlobalKey);
     this.renderRoot.addEventListener('click', this.onRootClick);
     // Listen for page-bridge messages (context attachments, field tracking).
     chrome.runtime.onMessage.addListener(this.onPageBridgeMessage);
     // Listen for voice transcript from the voice sidebar.
-    chrome.runtime.onMessage.addListener(this.onVoiceTranscript);
+    chrome.runtime.onMessage.addListener(this.onSpeechTranscript);
     // Check for pending context attachments buffered before the sidebar opened.
     void this.loadPendingAttachments();
     // Hidden dev escape hatch — invisible to users
@@ -467,25 +467,25 @@ export class AnyaApp extends LitElement {
 
   // ─── Voice I/O ────────────────────────────────────────────────────
 
-  private async loadVoiceSettings(): Promise<void> {
-    const s = await this.readStorage<VoiceSettings>('anya-voice-settings');
-    if (s) this.voiceSettings = { ...DEFAULT_VOICE_SETTINGS, ...s };
-    this.voiceOutput.rate = this.voiceSettings.rate;
-    this.voiceOutput.pitch = this.voiceSettings.pitch;
-    if (this.voiceSettings.voiceId) this.voiceOutput.setVoice(this.voiceSettings.voiceId);
-    this.setupVoiceHandlers();
+  private async loadSpeechSettings(): Promise<void> {
+    const s = await this.readStorage<SpeechSettings>('anya-voice-settings');
+    if (s) this.speechSettings = { ...DEFAULT_SPEECH_SETTINGS, ...s };
+    this.speechOutput.rate = this.speechSettings.rate;
+    this.speechOutput.pitch = this.speechSettings.pitch;
+    if (this.speechSettings.voiceId) this.speechOutput.setVoice(this.speechSettings.voiceId);
+    this.setupSpeechHandlers();
   }
 
-  private persistVoiceSettings(): void {
-    try { chrome.storage?.local?.set?.({ 'anya-voice-settings': this.voiceSettings }); } catch { /* ignore */ }
+  private persistSpeechSettings(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-voice-settings': this.speechSettings }); } catch { /* ignore */ }
   }
 
   /** Text committed so far (before current interim). Used to show streaming voice in input. */
-  private _voiceCommitted = '';
+  private _speechCommitted = '';
   private _micPermissionPromise: Promise<boolean> | null = null;
 
-  private setupVoiceHandlers(): void {
-    this.voiceInput.onResult = (text, isFinal) => {
+  private setupSpeechHandlers(): void {
+    this.speechInput.onResult = (text, isFinal) => {
       // Ignore any trailing transcript that lands after we've stopped (e.g. the
       // final result fired by recognition.stop() when the user hits Send) so it
       // can't refill a just-cleared composer.
@@ -494,22 +494,22 @@ export class AnyaApp extends LitElement {
       if (!ta) return;
       if (isFinal) {
         // Commit final text
-        const prefix = this._voiceCommitted && !this._voiceCommitted.endsWith(' ') ? ' ' : '';
-        this._voiceCommitted += prefix + text;
-        ta.value = this._voiceCommitted;
+        const prefix = this._speechCommitted && !this._speechCommitted.endsWith(' ') ? ' ' : '';
+        this._speechCommitted += prefix + text;
+        ta.value = this._speechCommitted;
         this.syncDraft(ta.value);
-        if (this.voiceSettings.autoSubmit) {
-          this.voiceInput.stop();
+        if (this.speechSettings.autoSubmit) {
+          this.speechInput.stop();
           this.send();
         }
       } else {
         // Stream interim text into the input box
-        const prefix = this._voiceCommitted && !this._voiceCommitted.endsWith(' ') ? ' ' : '';
-        ta.value = this._voiceCommitted + prefix + text;
+        const prefix = this._speechCommitted && !this._speechCommitted.endsWith(' ') ? ' ' : '';
+        ta.value = this._speechCommitted + prefix + text;
         this.syncDraft(ta.value);
       }
     };
-    this.voiceInput.onError = (error) => {
+    this.speechInput.onError = (error) => {
       this.recordDebug({ kind: 'log', level: 'warn', summary: `voice error: ${error}` });
       // Fatal errors stop recognition for good (the engine won't auto-restart),
       // so reflect "stopped" immediately. Recoverable errors (no-speech) DO
@@ -523,28 +523,28 @@ export class AnyaApp extends LitElement {
       if (fatal) {
         this.isListening = false;
         if (error === 'not-allowed' || error === 'service-not-allowed') {
-          this.showVoiceNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
+          this.showSpeechNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
         } else {
-          this.showVoiceNotice(`Voice error: ${error}`);
+          this.showSpeechNotice(`Voice error: ${error}`);
         }
         return;
       }
       // Only surface "no speech" in single-shot (autoSubmit) mode; in continuous
       // dictation a pause legitimately fires no-speech and we keep listening.
-      if (error === 'no-speech' && this.voiceSettings.autoSubmit) {
-        this.showVoiceNotice('No speech detected.');
+      if (error === 'no-speech' && this.speechSettings.autoSubmit) {
+        this.showSpeechNotice('No speech detected.');
       }
     };
-    this.voiceInput.onEnd = () => {
+    this.speechInput.onEnd = () => {
       this.isListening = false;
     };
   }
 
   /** Show a transient voice status/error notice above the composer. */
-  private showVoiceNotice(msg: string): void {
-    this.voiceNotice = msg;
-    if (this.voiceNoticeTimer) clearTimeout(this.voiceNoticeTimer);
-    this.voiceNoticeTimer = setTimeout(() => { this.voiceNotice = ''; }, 5000);
+  private showSpeechNotice(msg: string): void {
+    this.speechNotice = msg;
+    if (this.speechNoticeTimer) clearTimeout(this.speechNoticeTimer);
+    this.speechNoticeTimer = setTimeout(() => { this.speechNotice = ''; }, 5000);
   }
 
   /**
@@ -570,7 +570,7 @@ export class AnyaApp extends LitElement {
       const st = await navigator.permissions.query({ name: 'microphone' as PermissionName });
       if (st.state === 'granted') return true;
       if (st.state === 'denied') {
-        this.showVoiceNotice('Mic blocked in browser settings. Allow it for this extension, then retry.');
+        this.showSpeechNotice('Mic blocked in browser settings. Allow it for this extension, then retry.');
         return false;
       }
     } catch {
@@ -660,47 +660,47 @@ export class AnyaApp extends LitElement {
     });
   }
 
-  private async toggleVoiceInput(): Promise<void> {
+  private async toggleSpeechInput(): Promise<void> {
     if (this.isListening) {
-      this.voiceInput.stop();
+      this.speechInput.stop();
       this.isListening = false;
       return;
     }
     const granted = await this.ensureMicPermission();
     if (!granted) {
-      if (!this.voiceNotice) {
-        this.showVoiceNotice('Microphone access is needed for voice input.');
+      if (!this.speechNotice) {
+        this.showSpeechNotice('Microphone access is needed for voice input.');
       }
       return;
     }
-    this._voiceCommitted = this.textarea?.value ?? '';
-    this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
+    this._speechCommitted = this.textarea?.value ?? '';
+    this.speechInput.continuous = !this.speechSettings.autoSubmit;
     try {
-      await this.voiceInput.start();
+      await this.speechInput.start();
     } catch (err) {
       this.recordDebug({ kind: 'log', level: 'warn', summary: `Voice start failed: ${err}` });
     }
-    this.isListening = this.voiceInput.listening;
+    this.isListening = this.speechInput.listening;
   }
 
   private speakMessage(text: string): void {
     if (this.isSpeaking) {
-      this.voiceOutput.stop();
+      this.speechOutput.stop();
       this.isSpeaking = false;
       this._speechBuffer = '';
       this._speechStreamingFor = null;
       return;
     }
-    this.voiceOutput.onEnd = () => { this.isSpeaking = false; };
-    this.voiceOutput.onError = () => { this.isSpeaking = false; };
+    this.speechOutput.onEnd = () => { this.isSpeaking = false; };
+    this.speechOutput.onError = () => { this.isSpeaking = false; };
     this.isSpeaking = true;
-    this.voiceOutput.speak(text);
+    this.speechOutput.speak(text);
   }
 
   /** Feed a delta chunk into streaming TTS. Speaks at sentence boundaries. */
   private feedStreamingSpeech(chatId: string, chunk: string): void {
-    if (!this.voiceSettings.outputEnabled || !this.voiceSettings.autoSpeak) return;
-    if (!this.voiceSettings.streamSpeak) return; // Will speak at end of turn instead
+    if (!this.speechSettings.outputEnabled || !this.speechSettings.autoSpeak) return;
+    if (!this.speechSettings.streamSpeak) return; // Will speak at end of turn instead
     if (chatId !== this.currentChatId) return;
 
     // Start streaming for this chat
@@ -708,14 +708,14 @@ export class AnyaApp extends LitElement {
       this._speechStreamingFor = chatId;
       this._speechBuffer = '';
       this.isSpeaking = true;
-      this.voiceOutput.onEnd = () => {
+      this.speechOutput.onEnd = () => {
         // Only mark not-speaking if buffer is empty, stream is done, and synth queue is drained
-        if (!this._speechBuffer && !this.streamingIds.has(chatId) && !this.voiceOutput.speaking) {
+        if (!this._speechBuffer && !this.streamingIds.has(chatId) && !this.speechOutput.speaking) {
           this.isSpeaking = false;
           this._speechStreamingFor = null;
         }
       };
-      this.voiceOutput.onError = () => { this.isSpeaking = false; };
+      this.speechOutput.onError = () => { this.isSpeaking = false; };
     }
 
     this._speechBuffer += chunk;
@@ -727,7 +727,7 @@ export class AnyaApp extends LitElement {
       const sentence = this._speechBuffer.slice(0, match.index + match[0].length).trim();
       this._speechBuffer = this._speechBuffer.slice(match.index + match[0].length);
       if (sentence) {
-        this.voiceOutput.speak(sentence);
+        this.speechOutput.speak(sentence);
       }
     }
   }
@@ -738,11 +738,11 @@ export class AnyaApp extends LitElement {
       // Was streaming — just flush the remaining buffer
       const remaining = this._speechBuffer.trim();
       if (remaining) {
-        this.voiceOutput.speak(remaining);
+        this.speechOutput.speak(remaining);
       }
       this._speechBuffer = '';
       this._speechStreamingFor = null;
-    } else if (!this.voiceSettings.streamSpeak) {
+    } else if (!this.speechSettings.streamSpeak) {
       // End-of-turn mode — speak the full message now
       const sid = this.streamingIds.get(chatId);
       const chat = this.chats.find((c) => c.id === chatId);
@@ -753,18 +753,18 @@ export class AnyaApp extends LitElement {
     }
   }
 
-  private updateVoiceSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]): void {
-    this.voiceSettings = { ...this.voiceSettings, [key]: value };
-    if (key === 'rate') this.voiceOutput.rate = value as number;
-    if (key === 'pitch') this.voiceOutput.pitch = value as number;
-    if (key === 'voiceId') this.voiceOutput.setVoice(value as string);
-    this.persistVoiceSettings();
+  private updateSpeechSetting<K extends keyof SpeechSettings>(key: K, value: SpeechSettings[K]): void {
+    this.speechSettings = { ...this.speechSettings, [key]: value };
+    if (key === 'rate') this.speechOutput.rate = value as number;
+    if (key === 'pitch') this.speechOutput.pitch = value as number;
+    if (key === 'voiceId') this.speechOutput.setVoice(value as string);
+    this.persistSpeechSettings();
   }
 
   /** Adjust TTS speed by delta, clamp to [0.25, 4], persist. Applied from next utterance. */
   private adjustTtsSpeed(delta: number): void {
-    const next = Math.min(4, Math.max(0.25, Math.round((this.voiceSettings.rate + delta) * 100) / 100));
-    this.updateVoiceSetting('rate', next);
+    const next = Math.min(4, Math.max(0.25, Math.round((this.speechSettings.rate + delta) * 100) / 100));
+    this.updateSpeechSetting('rate', next);
   }
 
   private toggleTheme(): void {
@@ -961,7 +961,7 @@ export class AnyaApp extends LitElement {
     window.removeEventListener('keydown', this.onGlobalKey);
     this.renderRoot.removeEventListener('click', this.onRootClick);
     chrome.runtime.onMessage.removeListener(this.onPageBridgeMessage);
-    chrome.runtime.onMessage.removeListener(this.onVoiceTranscript);
+    chrome.runtime.onMessage.removeListener(this.onSpeechTranscript);
     if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
     for (const timer of this.deltaFlushTimerByChat.values()) clearTimeout(timer);
     this.deltaFlushTimerByChat.clear();
@@ -2119,7 +2119,7 @@ export class AnyaApp extends LitElement {
         messages: c.messages.map((m) => m.id === sid ? { ...m, pending: false } : m),
       }));
       // Auto-speak: flush any remaining buffered speech (streaming already spoke most of it)
-      if (this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak && chatId === this.currentChatId) {
+      if (this.speechSettings.outputEnabled && this.speechSettings.autoSpeak && chatId === this.currentChatId) {
         this.flushStreamingSpeech(chatId);
       }
       // Forward final response to voice sidebar for TTS there too.
@@ -2194,8 +2194,8 @@ export class AnyaApp extends LitElement {
     // voice buffer so a trailing transcript can't refill the cleared composer.
     if (this.isListening) {
       this.isListening = false;
-      this._voiceCommitted = '';
-      try { this.voiceInput.stop(); } catch { /* already stopped */ }
+      this._speechCommitted = '';
+      try { this.speechInput.stop(); } catch { /* already stopped */ }
     }
 
     // Slash commands are intercepted before any bridge dispatch.
@@ -2393,7 +2393,7 @@ export class AnyaApp extends LitElement {
   }
 
   /** Handle voice transcripts coming from the voice sidebar. */
-  private onVoiceTranscript = (msg: { type: string; text?: string }): void => {
+  private onSpeechTranscript = (msg: { type: string; text?: string }): void => {
     if (msg.type !== 'anya-voice-transcript' || !msg.text) return;
     const ta = this.textarea;
     if (ta) {
@@ -2402,7 +2402,7 @@ export class AnyaApp extends LitElement {
       ta.value = current + prefix + msg.text;
       this.syncDraft(ta.value);
     }
-    if (this.voiceSettings.autoSubmit) {
+    if (this.speechSettings.autoSubmit) {
       this.send();
     }
   };
@@ -2576,8 +2576,8 @@ export class AnyaApp extends LitElement {
     }
 
     // When voice output is active, hint the model to produce voice-friendly text.
-    if (this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak) {
-      const streaming = this.voiceSettings.streamSpeak;
+    if (this.speechSettings.outputEnabled && this.speechSettings.autoSpeak) {
+      const streaming = this.speechSettings.streamSpeak;
       prompt += '\n\n[System: Your text response is being converted to speech and ' +
         (streaming ? 'streamed to the user in real-time as you generate it.' : 'spoken to the user after you finish responding.') +
         ' Keep your response concise and high-value — the user is listening, not reading. ' +
@@ -3145,7 +3145,7 @@ export class AnyaApp extends LitElement {
                   if (typeof opts?.assistantIndex === 'number') this.copyAssistantTurnFromIndex(opts.assistantIndex);
                   else this.copyMessage(m);
                 }} title="Copy whole turn">📋</button>
-                ${this.voiceOutput.supported && this.voiceSettings.outputEnabled ? html`
+                ${this.speechOutput.supported && this.speechSettings.outputEnabled ? html`
                   <button class="bubble-action-btn" @click=${() => this.speakMessage(m.text)} title=${this.isSpeaking ? 'Stop' : 'Speak'}>${this.isSpeaking ? '⏹' : '🔊'}</button>
                 ` : nothing}
                 ${this.focusedField ? html`
@@ -3488,28 +3488,28 @@ export class AnyaApp extends LitElement {
                   </button>
                   <hr class="header-menu-sep" />
                   <span class="header-menu-label">Voice</span>
-                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('inputEnabled', !this.voiceSettings.inputEnabled); }}>
-                    <span class="header-menu-icon">🎤</span> Input${this.voiceSettings.inputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  <button class="header-menu-item" @click=${() => { this.updateSpeechSetting('inputEnabled', !this.speechSettings.inputEnabled); }}>
+                    <span class="header-menu-icon">🎤</span> Input${this.speechSettings.inputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
                   </button>
-                  ${this.voiceSettings.inputEnabled ? html`
-                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSubmit', !this.voiceSettings.autoSubmit); }}>
-                      <span class="header-menu-icon"></span> Auto-submit${this.voiceSettings.autoSubmit ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  ${this.speechSettings.inputEnabled ? html`
+                    <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('autoSubmit', !this.speechSettings.autoSubmit); }}>
+                      <span class="header-menu-icon"></span> Auto-submit${this.speechSettings.autoSubmit ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
                   ` : nothing}
-                  <button class="header-menu-item" @click=${() => { this.updateVoiceSetting('outputEnabled', !this.voiceSettings.outputEnabled); }}>
-                    <span class="header-menu-icon">🔊</span> Output${this.voiceSettings.outputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  <button class="header-menu-item" @click=${() => { this.updateSpeechSetting('outputEnabled', !this.speechSettings.outputEnabled); }}>
+                    <span class="header-menu-icon">🔊</span> Output${this.speechSettings.outputEnabled ? html` <span class="header-menu-check">✓</span>` : nothing}
                   </button>
-                  ${this.voiceSettings.outputEnabled ? html`
-                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('autoSpeak', !this.voiceSettings.autoSpeak); }}>
-                      <span class="header-menu-icon"></span> Auto-speak${this.voiceSettings.autoSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
+                  ${this.speechSettings.outputEnabled ? html`
+                    <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('autoSpeak', !this.speechSettings.autoSpeak); }}>
+                      <span class="header-menu-icon"></span> Auto-speak${this.speechSettings.autoSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
-                    <button class="header-menu-item sub" @click=${() => { this.updateVoiceSetting('streamSpeak', !this.voiceSettings.streamSpeak); }}>
-                      <span class="header-menu-icon"></span> Stream${this.voiceSettings.streamSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('streamSpeak', !this.speechSettings.streamSpeak); }}>
+                      <span class="header-menu-icon"></span> Stream${this.speechSettings.streamSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
                     <span class="header-menu-item sub">
                       <span class="header-menu-icon"></span> Speed
                       <button class="speed-btn" @click=${() => this.adjustTtsSpeed(-0.25)}>−</button>
-                      <span class="speed-value">${this.voiceSettings.rate.toFixed(2)}×</span>
+                      <span class="speed-value">${this.speechSettings.rate.toFixed(2)}×</span>
                       <button class="speed-btn" @click=${() => this.adjustTtsSpeed(0.25)}>+</button>
                     </span>
                   ` : nothing}
@@ -3562,7 +3562,7 @@ export class AnyaApp extends LitElement {
                       ${this.msgMenuId === x.m.id ? html`
                         <span class="msg-menu">
                           <button @click=${() => this.copyMessage(x.m)} title="Copy">copy</button>
-                          ${this.voiceOutput.supported && this.voiceSettings.outputEnabled ? html`
+                          ${this.speechOutput.supported && this.speechSettings.outputEnabled ? html`
                             <button @click=${() => this.speakMessage(x.m.text)} title=${this.isSpeaking ? 'Stop' : 'Speak'}>${this.isSpeaking ? '⏹' : '🔊'}</button>
                           ` : nothing}
                           ${x.m.role === 'user' ? html`
@@ -3586,10 +3586,10 @@ export class AnyaApp extends LitElement {
           </button>
         ` : nothing}
         ${this.renderApprovalBanners()}
-        ${this.voiceNotice ? html`
-          <div class="voice-notice">
-            <span>🎤 ${this.voiceNotice}</span>
-            <button class="voice-notice-x" @click=${() => { this.voiceNotice = ''; }} title="Dismiss">✕</button>
+        ${this.speechNotice ? html`
+          <div class="speech-notice">
+            <span>🎤 ${this.speechNotice}</span>
+            <button class="speech-notice-x" @click=${() => { this.speechNotice = ''; }} title="Dismiss">✕</button>
           </div>
         ` : nothing}
         ${this.autocomplete ? this.renderAutocomplete() : nothing}
@@ -3689,27 +3689,27 @@ export class AnyaApp extends LitElement {
             </button>
             <span class="composer-spacer"></span>
             ${this.toolsPanelOpen ? this.renderToolsPanel() : nothing}
-            ${this.voiceOutput.supported ? html`
+            ${this.speechOutput.supported ? html`
               <button
-                class="tts-bar-toggle ${this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak ? 'on' : ''}"
+                class="tts-bar-toggle ${this.speechSettings.outputEnabled && this.speechSettings.autoSpeak ? 'on' : ''}"
                 @click=${() => {
-                  const enabling = !(this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak);
-                  this.updateVoiceSetting('outputEnabled', enabling);
-                  this.updateVoiceSetting('autoSpeak', enabling);
+                  const enabling = !(this.speechSettings.outputEnabled && this.speechSettings.autoSpeak);
+                  this.updateSpeechSetting('outputEnabled', enabling);
+                  this.updateSpeechSetting('autoSpeak', enabling);
                   if (!enabling && this.isSpeaking) {
-                    this.voiceOutput.stop();
+                    this.speechOutput.stop();
                     this.isSpeaking = false;
                     this._speechBuffer = '';
                     this._speechStreamingFor = null;
                   }
                 }}
-                title=${this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak ? 'Speaker on — click to stop & mute' : 'Speaker off — click to enable'}
-              >${this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak ? '🔊' : '🔇'}</button>
+                title=${this.speechSettings.outputEnabled && this.speechSettings.autoSpeak ? 'Speaker on — click to stop & mute' : 'Speaker off — click to enable'}
+              >${this.speechSettings.outputEnabled && this.speechSettings.autoSpeak ? '🔊' : '🔇'}</button>
             ` : nothing}
-            ${this.voiceInput.supported && this.voiceSettings.inputEnabled ? html`
+            ${this.speechInput.supported && this.speechSettings.inputEnabled ? html`
               <button
                 class="mic-btn ${this.isListening ? 'listening' : ''}"
-                @click=${() => this.toggleVoiceInput()}
+                @click=${() => this.toggleSpeechInput()}
                 title=${this.isListening ? 'Stop listening' : 'Voice input'}
                 aria-label=${this.isListening ? 'Stop listening' : 'Start voice input'}
               >${this.isListening ? '⏹' : '🎤'}</button>

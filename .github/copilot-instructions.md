@@ -67,7 +67,7 @@ done.
   separate CSS files.
 - `types.ts` — shared interfaces (`ContextAttachment`, `ChatMessage`, `Chat`,
   `DebugEntry`, …).
-- `voice/` — Web Speech STT/TTS + the `mic-permission.html` helper window. Runs
+- `speech/` — Web Speech STT/TTS + the `mic-permission.html` helper window. Runs
   entirely in the panel; no bridge frames involved.
 
 **Bridge** (`bridge/src/`):

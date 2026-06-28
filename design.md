@@ -306,7 +306,7 @@ several streams have completed.
 ### Voice I/O
 
 Speech-to-text and text-to-speech both run **entirely in the side panel** via
-the browser's Web Speech API (`extension/src/voice/`) — no bridge involvement.
+the browser's Web Speech API (`extension/src/speech/`) — no bridge involvement.
 TTS (`speechSynthesis`) is local; STT (`webkitSpeechRecognition`) streams audio
 to the browser's speech service. Two non-obvious constraints shaped this, and
 both were learned the hard way:
