@@ -506,13 +506,13 @@ export class AnyaApp extends LitElement {
     };
   }
 
-  private toggleVoiceInput(): void {
+  private async toggleVoiceInput(): Promise<void> {
     if (this.isListening) {
       this.voiceInput.stop();
       this.isListening = false;
     } else {
       this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
-      this.voiceInput.start();
+      await this.voiceInput.start();
       this.isListening = this.voiceInput.listening;
     }
   }
