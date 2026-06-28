@@ -268,7 +268,7 @@ export class AnyaApp extends LitElement {
   @state() private isPopupMode = false;
   @state() private debugOpen = false;
   @state() private debugEntries: DebugEntry[] = [];
-  @state() private toolExpanded: Set<string> = new Set();
+  @state() private toolCollapsed: Set<string> = new Set();
 
   // Multi-chat state. Active chat's messages/toolCalls live inside the chat
   // record; we expose the current ones via getters so render code stays
@@ -512,7 +512,11 @@ export class AnyaApp extends LitElement {
       this.isListening = false;
     } else {
       this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
-      await this.voiceInput.start();
+      try {
+        await this.voiceInput.start();
+      } catch {
+        // Permission denied or other start failure — onError already fired
+      }
       this.isListening = this.voiceInput.listening;
     }
   }
@@ -1853,9 +1857,9 @@ export class AnyaApp extends LitElement {
   }
 
   private toggleToolExpanded(id: string): void {
-    const next = new Set(this.toolExpanded);
+    const next = new Set(this.toolCollapsed);
     if (next.has(id)) next.delete(id); else next.add(id);
-    this.toolExpanded = next;
+    this.toolCollapsed = next;
   }
 
   private ensureThinkingBubble(chatId: string): void {
@@ -2811,7 +2815,7 @@ export class AnyaApp extends LitElement {
       const text = typeof intent === 'string' && intent.trim() ? intent : '…';
       return html`<div class="intent-line" title="agent intent (report_intent)">› ${text}</div>`;
     }
-    const expanded = this.toolExpanded.has(tc.toolCallId);
+    const expanded = !this.toolCollapsed.has(tc.toolCallId);
     const icon =
       tc.status === 'running' ? '⟳' : tc.status === 'success' ? '✓' : '✕';
     const elapsed = tc.finishedAt
@@ -2902,7 +2906,7 @@ export class AnyaApp extends LitElement {
     const ids = m.toolCallIds ?? [];
     const cards = ids
       .map((id) => this.toolCalls.get(id))
-      .filter((tc): tc is ToolCall => !!tc && tc.toolName !== 'report_intent');
+      .filter((tc): tc is ToolCall => !!tc);
     const text = m.text || '';
     const hasVisibleText = text.trim().length > 0;
     const html_ = marked.parse(text) as string;
@@ -2910,17 +2914,7 @@ export class AnyaApp extends LitElement {
     // (turn started, but no tokens or tool calls yet). Show an animated
     // thinking line so the UI doesn't appear frozen.
     const isThinking = m.pending && !m.text && cards.length === 0;
-    // Show intent as a status line above tool cards (persists after completion)
-    const showIntentAboveTools = !!m.intent && cards.length > 0;
     return html`
-      ${showIntentAboveTools
-        ? html`<div class="thinking" title="${m.pending ? 'agent is working' : 'intent'}">
-            ${m.pending
-              ? html`<span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>`
-              : nothing}
-            <span class="thinking-text">${m.intent}</span>
-          </div>`
-        : nothing}
       ${cards.length > 0
         ? html`<div class="toolcalls">${cards.map((tc) => this.renderToolCard(tc))}</div>`
         : nothing}

@@ -63,6 +63,11 @@ export class OffscreenSpeechInput implements VoiceInput {
   async start(): Promise<void> {
     if (!this.supported || this._listening) return;
 
+    // Ensure mic permission is granted at the extension origin level.
+    // Offscreen documents can't show permission prompts, but the side panel can.
+    // Once granted here, the offscreen doc inherits it (same origin).
+    await this._ensureMicPermission();
+
     await this._ensureOffscreen();
 
     chrome.runtime.sendMessage({
@@ -73,6 +78,17 @@ export class OffscreenSpeechInput implements VoiceInput {
     });
     // Optimistically set listening — corrected by offscreen messages
     this._listening = true;
+  }
+
+  private async _ensureMicPermission(): Promise<void> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Immediately release the mic — we just needed the permission grant
+      stream.getTracks().forEach((t) => t.stop());
+    } catch {
+      this.onError?.('not-allowed');
+      throw new Error('Microphone permission denied');
+    }
   }
 
   stop(): void {
