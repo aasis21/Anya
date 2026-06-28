@@ -328,6 +328,9 @@ export class AnyaApp extends LitElement {
   @state() private isSpeaking = false;
   private voiceInput: VoiceInput = new OffscreenSpeechInput();
   private voiceOutput: VoiceOutput = new WebSpeechOutput();
+  /** Buffer for streaming TTS — accumulates delta text until a sentence boundary. */
+  private _speechBuffer = '';
+  private _speechStreamingFor: string | null = null;
   // Approval mode: true = auto-approve all, false = ask user for write tools
   @state() private autoApprove = true;
   /** Pending permission requests from the bridge, keyed by requestId. */
@@ -518,12 +521,58 @@ export class AnyaApp extends LitElement {
     if (this.isSpeaking) {
       this.voiceOutput.stop();
       this.isSpeaking = false;
+      this._speechBuffer = '';
+      this._speechStreamingFor = null;
       return;
     }
     this.voiceOutput.onEnd = () => { this.isSpeaking = false; };
     this.voiceOutput.onError = () => { this.isSpeaking = false; };
     this.isSpeaking = true;
     this.voiceOutput.speak(text);
+  }
+
+  /** Feed a delta chunk into streaming TTS. Speaks at sentence boundaries. */
+  private feedStreamingSpeech(chatId: string, chunk: string): void {
+    if (!this.voiceSettings.outputEnabled || !this.voiceSettings.autoSpeak) return;
+    if (chatId !== this.currentChatId) return;
+
+    // Start streaming for this chat
+    if (this._speechStreamingFor !== chatId) {
+      this._speechStreamingFor = chatId;
+      this._speechBuffer = '';
+      this.isSpeaking = true;
+      this.voiceOutput.onEnd = () => {
+        // Only mark not-speaking if buffer is empty and stream is done
+        if (!this._speechBuffer && !this.streamingIds.has(chatId)) {
+          this.isSpeaking = false;
+        }
+      };
+      this.voiceOutput.onError = () => { this.isSpeaking = false; };
+    }
+
+    this._speechBuffer += chunk;
+
+    // Speak complete sentences (split on sentence-ending punctuation or newlines)
+    const sentenceEnd = /[.!?]\s|\n/;
+    let match: RegExpExecArray | null;
+    while ((match = sentenceEnd.exec(this._speechBuffer)) !== null) {
+      const sentence = this._speechBuffer.slice(0, match.index + match[0].length).trim();
+      this._speechBuffer = this._speechBuffer.slice(match.index + match[0].length);
+      if (sentence) {
+        this.voiceOutput.speak(sentence);
+      }
+    }
+  }
+
+  /** Flush any remaining speech buffer (called when stream ends). */
+  private flushStreamingSpeech(chatId: string): void {
+    if (this._speechStreamingFor !== chatId) return;
+    const remaining = this._speechBuffer.trim();
+    if (remaining) {
+      this.voiceOutput.speak(remaining);
+    }
+    this._speechBuffer = '';
+    this._speechStreamingFor = null;
   }
 
   private updateVoiceSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]): void {
@@ -1872,6 +1921,8 @@ export class AnyaApp extends LitElement {
     const prev = this.pendingDeltaByChat.get(chatId) ?? '';
     this.pendingDeltaByChat.set(chatId, prev + chunk);
     this.scheduleDeltaFlush(chatId);
+    // Stream TTS as text arrives
+    this.feedStreamingSpeech(chatId, chunk);
   }
 
   private finishStream(chatId: string): void {
@@ -1882,13 +1933,9 @@ export class AnyaApp extends LitElement {
         ...c,
         messages: c.messages.map((m) => m.id === sid ? { ...m, pending: false } : m),
       }));
-      // Auto-speak the completed assistant message
+      // Auto-speak: flush any remaining buffered speech (streaming already spoke most of it)
       if (this.voiceSettings.outputEnabled && this.voiceSettings.autoSpeak && chatId === this.currentChatId) {
-        const chat = this.chats.find((c) => c.id === chatId);
-        const msg = chat?.messages.find((m) => m.id === sid);
-        if (msg?.role === 'assistant' && msg.text) {
-          this.speakMessage(msg.text);
-        }
+        this.flushStreamingSpeech(chatId);
       }
       this.streamingIds.delete(chatId);
     }
