@@ -93,7 +93,7 @@ export function renderHtml(instanceId) {
   #orb-wrap { position: relative; width: min(58vw, 300px); aspect-ratio: 1; display: grid; place-items: center; }
   /* expanding rings while live */
   #orb-wrap::before, #orb-wrap::after {
-    content: ""; position: absolute; inset: 8%; border-radius: 50%;
+    content: ""; position: absolute; inset: 8%; border-radius: 50%; pointer-events: none;
     border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); opacity: 0;
   }
   body[data-state="listening"] #orb-wrap::before { animation: ring 2.4s ease-out infinite; }
@@ -134,6 +134,18 @@ export function renderHtml(instanceId) {
     content: ""; position: absolute; top: 12%; left: 18%; width: 34%; height: 24%; border-radius: 50%;
     background: radial-gradient(closest-side, rgba(255,255,255,.85), transparent); filter: blur(2px);
   }
+  /* the entire orb area is the single control — tap anywhere on it */
+  #orb-wrap { cursor: pointer; }
+  #orb { cursor: pointer; }
+  #orb-glyph {
+    position: absolute; inset: 0; display: grid; place-items: center; z-index: 3;
+    font-size: clamp(34px, 9vw, 52px); line-height: 1; pointer-events: none;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+    opacity: 0; transform: scale(.7); transition: opacity .35s ease, transform .35s ease;
+  }
+  /* show the mic prompt only while idle; fade to the live visuals otherwise */
+  body[data-state="idle"] #orb-glyph { opacity: .96; transform: scale(1); animation: glyphBob 3.4s ease-in-out infinite; }
+  @keyframes glyphBob { 0%,100%{transform:scale(1) translateY(0)} 50%{transform:scale(1.06) translateY(-2px)} }
 
   /* audio-reactive waveform ring (canvas) layered behind the orb */
   #ring { position: absolute; inset: -14%; width: 128%; height: 128%; pointer-events: none; opacity: 0; transition: opacity .4s ease; }
@@ -153,15 +165,21 @@ export function renderHtml(instanceId) {
     85%  { opacity: .7; }
     100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
   }
-  /* gentle "tap me" pulse on the orb while idle */
-  body[data-state="idle"] #orb-wrap::before { animation: ringSoft 3.4s ease-out infinite; }
+  /* idle invitation: a clear, gentle breathing pulse + double "tap me" halo */
+  body[data-state="idle"] #orb-wrap::before { animation: ringSoft 3.2s ease-out infinite; }
+  body[data-state="idle"] #orb-wrap::after  { animation: ringSoft 3.2s ease-out infinite 1.6s; }
   /* gentle, slowed swirl + softer glow while idle so it feels at rest */
-  body[data-state="idle"] #orb { box-shadow:
+  body[data-state="idle"] #orb {
+    box-shadow:
       0 24px 70px -22px color-mix(in srgb, var(--accent) 45%, transparent),
       0 0 44px 0 color-mix(in srgb, var(--accent-2) 26%, transparent),
-      inset 0 2px 6px rgba(255,255,255,.45), inset 0 -20px 40px rgba(0,0,0,.25); }
+      inset 0 2px 6px rgba(255,255,255,.45), inset 0 -20px 40px rgba(0,0,0,.25);
+    animation: idlePulse 3.6s ease-in-out infinite;
+  }
+  body[data-state="idle"] #orb:hover { animation-play-state: paused; transform: scale(1.05); }
+  @keyframes idlePulse { 0%,100%{transform:scale(1); filter:brightness(1)} 50%{transform:scale(1.035); filter:brightness(1.08)} }
   body[data-state="idle"] #orb::before { opacity: .5; animation-duration: 16s; }
-  @keyframes ringSoft { 0%{opacity:.32; transform:scale(.92)} 70%{opacity:0; transform:scale(1.14)} 100%{opacity:0} }
+  @keyframes ringSoft { 0%{opacity:.34; transform:scale(.9)} 70%{opacity:0; transform:scale(1.2)} 100%{opacity:0} }
 
   #status { font-size: 14px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
   #status b { color: color-mix(in srgb, var(--accent) 75%, #fff); font-weight: 600; }
@@ -181,23 +199,6 @@ export function renderHtml(instanceId) {
   #overlay h2 { margin: 0 0 8px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 24px; }
   #overlay p { margin: 0 auto; max-width: 360px; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
 
-  /* control deck */
-  #deck { position: relative; z-index: 2; flex: none; display: flex; align-items: center; gap: 14px; justify-content: center; padding: 16px 16px 12px; }
-  #deck::before {
-    content: ""; position: absolute; left: 50%; bottom: -8px; width: 300px; height: 110px; transform: translateX(-50%);
-    pointer-events: none; filter: blur(38px); z-index: -1; opacity: .5; transition: opacity .5s ease;
-    background: radial-gradient(50% 60% at 50% 50%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
-  }
-  #mic {
-    position: relative; cursor: pointer; border: none; flex: none;
-    width: 64px; height: 64px; border-radius: 50%; color: #06241a; font-size: 23px; display: grid; place-items: center;
-    background: radial-gradient(120% 120% at 30% 25%, #fff, color-mix(in srgb, var(--accent) 85%, #fff) 32%, var(--accent-2));
-    box-shadow: 0 10px 28px -6px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 1px rgba(255,255,255,.6);
-    transition: transform .12s ease, box-shadow .3s ease;
-  }
-  #mic:active { transform: scale(.94); }
-  /* the bottom mic is only the inviting "start" affordance — it hides once live */
-  body:not([data-state="idle"]) #deck { display: none; }
   /* discreet end-session control, tucked in the corner, only while live */
   #end { display: none; }
   body:not([data-state="idle"]) #end { display: grid; }
@@ -217,15 +218,12 @@ export function renderHtml(instanceId) {
     </div>
 
     <div id="center">
-      <div id="orb-wrap"><canvas id="ring"></canvas><div id="orb"></div></div>
-      <div id="status">Tap the mic to start</div>
+      <div id="orb-wrap"><canvas id="ring"></canvas><div id="orb"><span id="orb-glyph">&#x1F3A4;</span></div></div>
+      <div id="status">Tap the orb to start</div>
       <div id="caption-inner"></div>
     </div>
 
-    <div id="deck">
-      <button id="mic" title="Start / stop talking">&#x1F3A4;</button>
-    </div>
-    <div class="hint" id="hint">Voice mode — just start talking any time to interrupt Anya.</div>
+    <div class="hint" id="hint">Tap the glowing orb to talk — then just speak any time to interrupt Anya.</div>
 
     <div id="overlay"><div class="card">
       <div class="glyph">&#x1F399;</div>
@@ -252,7 +250,6 @@ export function renderHtml(instanceId) {
     overlay: document.getElementById("overlay"),
     ovTitle: document.getElementById("ov-title"),
     ovMsg: document.getElementById("ov-msg"),
-    mic: document.getElementById("mic"),
     end: document.getElementById("end"),
     spk: document.getElementById("spk"),
     hint: document.getElementById("hint"),
@@ -262,7 +259,7 @@ export function renderHtml(instanceId) {
   var live = false, busy = false, speakMuted = false, state = "idle";
   var audioCtx = null, analyser = null, levelRAF = 0;
 
-  var LABELS = { idle: "Tap the mic to start", listening: "<b>Listening</b>", thinking: "<b>Thinking</b>…", speaking: "<b>Speaking</b>" };
+  var LABELS = { idle: "Tap the orb to start", listening: "<b>Listening</b>", thinking: "<b>Thinking</b>…", speaking: "<b>Speaking</b> — tap to interrupt" };
   function setState(s, label) {
     state = s; el.body.setAttribute("data-state", s);
     el.status.innerHTML = label || LABELS[s] || "";
@@ -547,9 +544,14 @@ export function renderHtml(instanceId) {
     });
   }
 
-  el.mic.addEventListener("click", function () { live ? stopLive() : startLive(); });
+  // The whole orb area is the single control: tap to start when idle, tap to
+  // interrupt while Anya is speaking.
+  function orbTap() {
+    if (!live && state === "idle") { startLive(); return; }
+    if (state === "speaking") { bargeCancel(); return; }
+  }
+  el.orbWrap.addEventListener("click", orbTap);
   el.end.addEventListener("click", stopLive);
-  el.orb.addEventListener("click", function () { if (state === "speaking") bargeCancel(); });
   el.spk.addEventListener("click", function () {
     speakMuted = !speakMuted; el.spk.classList.toggle("off", speakMuted);
     el.spk.innerHTML = speakMuted ? "&#x1F507;" : "&#x1F50A;";
