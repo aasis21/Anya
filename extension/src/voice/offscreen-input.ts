@@ -80,15 +80,53 @@ export class OffscreenSpeechInput implements VoiceInput {
     this._listening = true;
   }
 
+  private _micPermissionGranted = false;
+
   private async _ensureMicPermission(): Promise<void> {
+    // If we've already successfully obtained permission this session, skip.
+    if (this._micPermissionGranted) return;
+
+    // Side panels can't show the mic permission prompt directly.
+    // Check if we already have permission via Permissions API.
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Immediately release the mic — we just needed the permission grant
-      stream.getTracks().forEach((t) => t.stop());
-    } catch {
-      this.onError?.('not-allowed');
-      throw new Error('Microphone permission denied');
-    }
+      const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      if (result.state === 'granted') {
+        this._micPermissionGranted = true;
+        return;
+      }
+    } catch { /* Permissions API not available — fall through */ }
+
+    // Open a popup window that CAN show the permission prompt.
+    // The grant applies to the whole extension origin, so the offscreen doc inherits it.
+    return new Promise<void>((resolve, reject) => {
+      const handler = (msg: any) => {
+        if (msg.type !== 'anya-mic-permission') return;
+        chrome.runtime.onMessage.removeListener(handler);
+        if (msg.granted) {
+          this._micPermissionGranted = true;
+          resolve();
+        } else {
+          this.onError?.('not-allowed');
+          reject(new Error('Microphone permission denied'));
+        }
+      };
+      chrome.runtime.onMessage.addListener(handler);
+
+      chrome.windows.create({
+        url: chrome.runtime.getURL('mic-permission.html'),
+        type: 'popup',
+        width: 360,
+        height: 200,
+        focused: true,
+      });
+
+      // Timeout if user ignores the popup
+      setTimeout(() => {
+        chrome.runtime.onMessage.removeListener(handler);
+        this.onError?.('not-allowed');
+        reject(new Error('Microphone permission request timed out'));
+      }, 30_000);
+    });
   }
 
   stop(): void {

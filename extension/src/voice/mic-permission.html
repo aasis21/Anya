@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Anya — Microphone Permission</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.8; }
+    .granted { color: #4caf50; }
+    .denied { color: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>🎤 Requesting microphone access…</p>
+    <p class="status" id="status"></p>
+  </div>
+  <script src="mic-permission.js" type="module"></script>
+</body>
+</html>

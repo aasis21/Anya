@@ -1221,6 +1221,42 @@ export const sidebarStyles = css`
       0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.3); }
       50% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0); }
     }
+
+    /* ---------- TTS PLAYBACK BAR ---------- */
+    .tts-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-top: 1px solid var(--bg-rule);
+      background: var(--bg-soft);
+      border-radius: 0 0 12px 12px;
+    }
+    .tts-bar-btn {
+      background: transparent;
+      border: 1px solid var(--bg-rule);
+      color: var(--fg-dim);
+      width: 24px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: color 150ms, background 150ms;
+    }
+    .tts-bar-btn:hover { color: var(--fg); background: var(--bg-bubble); }
+    .tts-bar-btn.stop { color: var(--error); border-color: var(--error); }
+    .tts-bar-btn.stop:hover { background: rgba(248, 81, 73, 0.12); }
+    .tts-bar-speed {
+      font-size: 11px;
+      color: var(--fg-dim);
+      min-width: 36px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
     .header-menu-item.sub {
       padding-left: 28px;
       font-size: 11px;

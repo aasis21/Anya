@@ -12,9 +12,20 @@ let recognition: any = null;
 let stoppedManually = false;
 let continuous = true;
 
-function startRecognition(opts: { lang: string; interimResults: boolean; continuous: boolean }) {
+async function startRecognition(opts: { lang: string; interimResults: boolean; continuous: boolean }) {
   if (!SpeechRecognitionCtor) {
     chrome.runtime.sendMessage({ type: 'anya-voice-error', error: 'not-supported' });
+    return;
+  }
+
+  // Activate mic permission in this context — the popup window granted it at
+  // the extension origin, but the offscreen doc must still call getUserMedia
+  // once so the browser associates the grant with this context.
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+  } catch {
+    chrome.runtime.sendMessage({ type: 'anya-voice-error', error: 'not-allowed' });
     return;
   }
 

@@ -268,7 +268,7 @@ export class AnyaApp extends LitElement {
   @state() private isPopupMode = false;
   @state() private debugOpen = false;
   @state() private debugEntries: DebugEntry[] = [];
-  @state() private toolCollapsed: Set<string> = new Set();
+  @state() private toolExpanded: Set<string> = new Set();
 
   // Multi-chat state. Active chat's messages/toolCalls live inside the chat
   // record; we expose the current ones via getters so render code stays
@@ -596,6 +596,12 @@ export class AnyaApp extends LitElement {
     if (key === 'pitch') this.voiceOutput.pitch = value as number;
     if (key === 'voiceId') this.voiceOutput.setVoice(value as string);
     this.persistVoiceSettings();
+  }
+
+  /** Adjust TTS speed by delta, clamp to [0.25, 4], persist. */
+  private adjustTtsSpeed(delta: number): void {
+    const next = Math.min(4, Math.max(0.25, Math.round((this.voiceSettings.rate + delta) * 100) / 100));
+    this.updateVoiceSetting('rate', next);
   }
 
   private toggleTheme(): void {
@@ -1857,9 +1863,9 @@ export class AnyaApp extends LitElement {
   }
 
   private toggleToolExpanded(id: string): void {
-    const next = new Set(this.toolCollapsed);
+    const next = new Set(this.toolExpanded);
     if (next.has(id)) next.delete(id); else next.add(id);
-    this.toolCollapsed = next;
+    this.toolExpanded = next;
   }
 
   private ensureThinkingBubble(chatId: string): void {
@@ -2815,7 +2821,7 @@ export class AnyaApp extends LitElement {
       const text = typeof intent === 'string' && intent.trim() ? intent : '…';
       return html`<div class="intent-line" title="agent intent (report_intent)">› ${text}</div>`;
     }
-    const expanded = !this.toolCollapsed.has(tc.toolCallId);
+    const expanded = this.toolExpanded.has(tc.toolCallId);
     const icon =
       tc.status === 'running' ? '⟳' : tc.status === 'success' ? '✓' : '✕';
     const elapsed = tc.finishedAt
@@ -3514,6 +3520,14 @@ export class AnyaApp extends LitElement {
                   title="Send (Enter)"
                 >↑</button>`}
           </div>
+          ${this.isSpeaking ? html`
+            <div class="tts-bar">
+              <button class="tts-bar-btn stop" @click=${() => { this.voiceOutput.stop(); this.isSpeaking = false; }} title="Stop speech">⏹</button>
+              <button class="tts-bar-btn" @click=${() => this.adjustTtsSpeed(-0.25)} title="Slower">−</button>
+              <span class="tts-bar-speed">${this.voiceSettings.rate.toFixed(2)}×</span>
+              <button class="tts-bar-btn" @click=${() => this.adjustTtsSpeed(0.25)} title="Faster">+</button>
+            </div>
+          ` : nothing}
         </div>
       </footer>
 
