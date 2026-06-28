@@ -276,6 +276,11 @@ export class AnyaApp extends LitElement {
   /** Client-side queue for prompts sent while streaming. Drained in finishStream. */
   private pendingQueue: Array<{ chatId: string; text: string; ctx: ContextAttachment[] }> = [];
 
+  // Input history: cycle through previous user inputs with Up/Down arrows.
+  private inputHistory: string[] = [];
+  private historyIdx = -1;        // -1 = not browsing history
+  private historyDraft = '';      // stash current draft when entering history mode
+
   // Inline autocomplete for `/` and `@` triggers.
   @state() private autocomplete: {
     kind: 'slash' | 'at';
@@ -351,6 +356,7 @@ export class AnyaApp extends LitElement {
     void this.loadAutoApprove();
     void this.loadChats();
     void this.loadQuickPrompts();
+    void this.loadInputHistory();
     window.addEventListener('keydown', this.onGlobalKey);
     this.renderRoot.addEventListener('click', this.onRootClick);
     // Listen for page-bridge messages (context attachments, field tracking).
@@ -378,6 +384,15 @@ export class AnyaApp extends LitElement {
     const t = await this.readStorage<string>('anya-theme');
     if (t === 'light' || t === 'dark') this.theme = t;
     this.setAttribute('theme', this.theme);
+  }
+
+  private async loadInputHistory(): Promise<void> {
+    const h = await this.readStorage<string[]>('anya-input-history');
+    if (Array.isArray(h)) this.inputHistory = h.slice(-100); // cap at 100 entries
+  }
+
+  private persistInputHistory(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-input-history': this.inputHistory.slice(-100) }); } catch { /* ignore */ }
   }
 
   private toggleTheme(): void {
@@ -1797,6 +1812,15 @@ export class AnyaApp extends LitElement {
       contextLabels: contextLabels.length ? contextLabels : undefined,
     });
     if (text) this.autoTitleIfNeeded(chatId, text);
+
+    // Record in input history (deduplicate consecutive duplicates).
+    if (text && this.inputHistory[this.inputHistory.length - 1] !== text) {
+      this.inputHistory.push(text);
+      this.persistInputHistory();
+    }
+    this.historyIdx = -1;
+    this.historyDraft = '';
+
     ta.value = '';
     this.syncDraft('');
     this.contextAttachments = [];
@@ -2161,6 +2185,39 @@ export class AnyaApp extends LitElement {
         e.preventDefault();
         this.autocomplete = null;
         return;
+      }
+    }
+    // Input history navigation: Up/Down when autocomplete is closed and
+    // cursor is at the very start (Up) or very end (Down) of the textarea,
+    // or textarea is single-line.
+    if (!this.autocomplete && this.inputHistory.length > 0) {
+      const ta = e.target as HTMLTextAreaElement;
+      const singleLine = !ta.value.includes('\n');
+      if (e.key === 'ArrowUp' && (singleLine || ta.selectionStart === 0)) {
+        e.preventDefault();
+        if (this.historyIdx === -1) {
+          this.historyDraft = ta.value;
+          this.historyIdx = this.inputHistory.length - 1;
+        } else if (this.historyIdx > 0) {
+          this.historyIdx--;
+        }
+        ta.value = this.inputHistory[this.historyIdx];
+        this.syncDraft(ta.value);
+        return;
+      }
+      if (e.key === 'ArrowDown' && (singleLine || ta.selectionStart === ta.value.length)) {
+        if (this.historyIdx !== -1) {
+          e.preventDefault();
+          if (this.historyIdx < this.inputHistory.length - 1) {
+            this.historyIdx++;
+            ta.value = this.inputHistory[this.historyIdx];
+          } else {
+            this.historyIdx = -1;
+            ta.value = this.historyDraft;
+          }
+          this.syncDraft(ta.value);
+          return;
+        }
       }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
