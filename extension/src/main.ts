@@ -506,7 +506,7 @@ export class AnyaApp extends LitElement {
     } else {
       this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
       this.voiceInput.start();
-      this.isListening = true;
+      this.isListening = this.voiceInput.listening;
     }
   }
 
@@ -764,9 +764,13 @@ export class AnyaApp extends LitElement {
         }));
         this.currentChatId = typeof cur === 'string' && this.chats.some((c) => c.id === cur)
           ? cur : this.chats[0].id;
+        this.followTranscript = true;
       } else {
         this.startNewChat();
       }
+      // After render, scroll to the bottom so the user sees the latest messages.
+      await this.updateComplete;
+      this.scrollToBottom(true);
     } catch (err) {
       console.warn('[Anya] loadChats failed', err);
       this.startNewChat();
@@ -1907,7 +1911,8 @@ export class AnyaApp extends LitElement {
         this.hasNewBelow = true;
         return;
       }
-      this.transcript.scrollTop = this.transcript.scrollHeight;
+      // Use instant scroll to avoid smooth-scroll delay on restore
+      this.transcript.scrollTo({ top: this.transcript.scrollHeight, behavior: 'instant' });
       this.hasNewBelow = false;
     });
   }
@@ -2841,6 +2846,9 @@ export class AnyaApp extends LitElement {
                   if (typeof opts?.assistantIndex === 'number') this.copyAssistantTurnFromIndex(opts.assistantIndex);
                   else this.copyMessage(m);
                 }} title="Copy whole turn">📋</button>
+                ${this.voiceOutput.supported && this.voiceSettings.outputEnabled ? html`
+                  <button class="bubble-action-btn" @click=${() => this.speakMessage(m.text)} title=${this.isSpeaking ? 'Stop' : 'Speak'}>${this.isSpeaking ? '⏹' : '🔊'}</button>
+                ` : nothing}
                 ${this.focusedField ? html`
                   <button class="bubble-action-btn" @click=${() => this.fillField(m.text)} title="Insert into field">↗</button>
                   <button class="bubble-action-btn" @click=${() => this.fillField(m.text, 'append')} title="Append to field">＋</button>
