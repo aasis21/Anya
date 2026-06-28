@@ -32,7 +32,7 @@ export function renderHtml(instanceId) {
     font-family: var(--sans); background: var(--bg); color: var(--ink);
     overflow: hidden; -webkit-font-smoothing: antialiased;
   }
-  body[data-state="idle"]      { --accent:#8aa0b6; --accent-2:#566273; }
+  body[data-state="idle"]      { --accent:#9b8cff; --accent-2:#3ad6c5; }
   body[data-state="listening"] { --accent:#5ce6a3; --accent-2:#22b685; }
   body[data-state="thinking"]  { --accent:#ffcf6b; --accent-2:#f0a93a; }
   body[data-state="speaking"]  { --accent:#7db5ff; --accent-2:#4f8cff; }
@@ -41,14 +41,27 @@ export function renderHtml(instanceId) {
 
   /* ambient aurora */
   #aurora {
-    position: absolute; inset: -30%; z-index: 0; pointer-events: none; filter: blur(70px); opacity: .5;
+    position: absolute; inset: -30%; z-index: 0; pointer-events: none; filter: blur(70px); opacity: .62;
     background:
-      radial-gradient(36% 42% at 22% 26%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 70%),
-      radial-gradient(40% 46% at 80% 22%, color-mix(in srgb, var(--accent-2) 40%, transparent), transparent 72%),
-      radial-gradient(60% 60% at 50% 112%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+      radial-gradient(32% 38% at 20% 24%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%),
+      radial-gradient(36% 42% at 82% 20%, color-mix(in srgb, var(--accent-2) 52%, transparent), transparent 72%),
+      radial-gradient(30% 36% at 68% 78%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 70%),
+      radial-gradient(60% 64% at 50% 114%, color-mix(in srgb, var(--accent-2) 55%, transparent), transparent 70%);
     animation: drift 20s ease-in-out infinite alternate; transition: opacity .6s ease;
   }
-  @keyframes drift { 0%{transform:translate3d(0,0,0) scale(1)} 100%{transform:translate3d(2%,-2%,0) scale(1.08)} }
+  /* second slow-rotating aurora layer for depth */
+  #aurora2 {
+    position: absolute; inset: -40%; z-index: 0; pointer-events: none; filter: blur(90px); opacity: .4;
+    background:
+      conic-gradient(from 0deg at 50% 50%,
+        color-mix(in srgb, var(--accent) 38%, transparent),
+        transparent 25%,
+        color-mix(in srgb, var(--accent-2) 40%, transparent) 50%,
+        transparent 75%,
+        color-mix(in srgb, var(--accent) 38%, transparent));
+    animation: spin 60s linear infinite; transition: opacity .6s ease;
+  }
+  @keyframes drift { 0%{transform:translate3d(0,0,0) scale(1)} 100%{transform:translate3d(3%,-3%,0) scale(1.1)} }
   #grain {
     position: absolute; inset: 0; z-index: 9; pointer-events: none; opacity: .045; mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -92,17 +105,24 @@ export function renderHtml(instanceId) {
     background:
       radial-gradient(60% 60% at 32% 28%, #ffffff 0%, color-mix(in srgb, var(--accent) 70%, #fff) 22%, var(--accent) 52%, var(--accent-2) 100%);
     box-shadow:
-      0 30px 80px -20px color-mix(in srgb, var(--accent) 60%, transparent),
-      0 0 60px 0 color-mix(in srgb, var(--accent) 40%, transparent),
+      0 30px 90px -18px color-mix(in srgb, var(--accent) 70%, transparent),
+      0 0 70px 4px color-mix(in srgb, var(--accent-2) 45%, transparent),
       inset 0 2px 6px rgba(255,255,255,.55), inset 0 -20px 40px rgba(0,0,0,.25);
     animation: breathe 5s ease-in-out infinite;
   }
-  @keyframes breathe { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.08)} }
+  @keyframes breathe { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.1)} }
+  /* iridescent inner swirl — always rotating, so even idle feels alive */
   #orb::before {
-    content: ""; position: absolute; inset: 6%; border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent, color-mix(in srgb,#fff 55%,transparent), transparent 38%, color-mix(in srgb,var(--accent) 60%,transparent) 60%, transparent 78%);
-    mix-blend-mode: screen; opacity: .8; filter: blur(6px);
-    animation: spin 8s linear infinite;
+    content: ""; position: absolute; inset: 4%; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      color-mix(in srgb, var(--accent) 70%, transparent),
+      color-mix(in srgb, #ffffff 60%, transparent) 18%,
+      color-mix(in srgb, var(--accent-2) 75%, transparent) 40%,
+      transparent 58%,
+      color-mix(in srgb, var(--accent) 65%, transparent) 78%,
+      color-mix(in srgb, var(--accent-2) 70%, transparent));
+    mix-blend-mode: screen; opacity: .85; filter: blur(8px);
+    animation: spin 9s linear infinite;
   }
   body[data-state="thinking"] #orb::before { animation-duration: 2.4s; }
   body[data-state="speaking"] #orb { cursor: pointer; }
@@ -111,6 +131,28 @@ export function renderHtml(instanceId) {
     content: ""; position: absolute; top: 12%; left: 18%; width: 34%; height: 24%; border-radius: 50%;
     background: radial-gradient(closest-side, rgba(255,255,255,.85), transparent); filter: blur(2px);
   }
+
+  /* audio-reactive waveform ring (canvas) layered behind the orb */
+  #ring { position: absolute; inset: -14%; width: 128%; height: 128%; pointer-events: none; opacity: 0; transition: opacity .4s ease; }
+  body[data-state="listening"] #ring,
+  body[data-state="speaking"]  #ring { opacity: 1; }
+
+  /* floating particles drifting around the orb */
+  .particle {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 80%, #fff);
+    box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent) 60%, transparent);
+    opacity: 0; animation: float linear infinite;
+  }
+  @keyframes float {
+    0%   { opacity: 0; transform: translate(0,0) scale(.6); }
+    15%  { opacity: .7; }
+    85%  { opacity: .7; }
+    100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
+  }
+  /* gentle "tap me" pulse on the orb while idle */
+  body[data-state="idle"] #orb-wrap::before { animation: ringSoft 3.4s ease-out infinite; }
+  @keyframes ringSoft { 0%{opacity:.5; transform:scale(.9)} 70%{opacity:0; transform:scale(1.18)} 100%{opacity:0} }
 
   #status { font-size: 14px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
   #status b { color: color-mix(in srgb, var(--accent) 75%, #fff); font-weight: 600; }
@@ -152,6 +194,7 @@ export function renderHtml(instanceId) {
 <body data-state="idle">
   <div id="stage">
     <div id="aurora"></div>
+    <div id="aurora2"></div>
 
     <div id="topbar">
       <div class="wordmark"><b>Anya</b><span>voice</span></div>
@@ -160,7 +203,7 @@ export function renderHtml(instanceId) {
     </div>
 
     <div id="center">
-      <div id="orb-wrap"><div id="orb"></div></div>
+      <div id="orb-wrap"><canvas id="ring"></canvas><div id="orb"></div></div>
       <div id="status">Tap the mic to start</div>
       <div id="caption-inner"></div>
     </div>
@@ -188,6 +231,8 @@ export function renderHtml(instanceId) {
   var el = {
     body: document.body,
     orb: document.getElementById("orb"),
+    ring: document.getElementById("ring"),
+    orbWrap: document.getElementById("orb-wrap"),
     status: document.getElementById("status"),
     cap: document.getElementById("caption-inner"),
     overlay: document.getElementById("overlay"),
@@ -214,6 +259,68 @@ export function renderHtml(instanceId) {
   }
   function caption(html) { el.cap.innerHTML = html || ""; }
 
+  // ---- audio-reactive waveform ring around the orb ----
+  var ringCtx = null, ringDpr = 1;
+  function sizeRing() {
+    if (!el.ring) return;
+    var r = el.ring.getBoundingClientRect();
+    ringDpr = Math.min(2, window.devicePixelRatio || 1);
+    el.ring.width = Math.max(1, Math.round(r.width * ringDpr));
+    el.ring.height = Math.max(1, Math.round(r.height * ringDpr));
+    ringCtx = el.ring.getContext("2d");
+  }
+  function drawRing(freq) {
+    if (!el.ring) return;
+    if (!ringCtx) sizeRing();
+    var ctx = ringCtx; if (!ctx) return;
+    var W = el.ring.width, H = el.ring.height;
+    ctx.clearRect(0, 0, W, H);
+    if (state !== "listening" && state !== "speaking") return;
+    var cx = W / 2, cy = H / 2;
+    var radius = Math.min(W, H) * 0.40;
+    var bars = 72;
+    var accent = getComputedStyle(el.body).getPropertyValue("--accent").trim() || "#9b8cff";
+    var accent2 = getComputedStyle(el.body).getPropertyValue("--accent-2").trim() || "#3ad6c5";
+    var bins = freq ? freq.length : 0;
+    for (var i = 0; i < bars; i++) {
+      var t = i / bars;
+      var idx = Math.floor(t * Math.min(bins, 160));
+      var amp = freq ? freq[idx] / 255 : 0;
+      amp = Math.pow(amp, 1.4);
+      var len = radius * (0.10 + amp * 0.42);
+      var ang = t * Math.PI * 2 - Math.PI / 2;
+      var ca = Math.cos(ang), sa = Math.sin(ang);
+      var x1 = cx + ca * radius, y1 = cy + sa * radius;
+      var x2 = cx + ca * (radius + len), y2 = cy + sa * (radius + len);
+      ctx.strokeStyle = i % 2 ? accent2 : accent;
+      ctx.globalAlpha = 0.35 + amp * 0.6;
+      ctx.lineWidth = Math.max(1, ringDpr * 2);
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  window.addEventListener("resize", function () { ringCtx = null; });
+
+  // ---- drifting particles around the orb (ambient life, always on) ----
+  function spawnParticle() {
+    if (!el.orbWrap) return;
+    var p = document.createElement("div");
+    p.className = "particle";
+    var size = 2 + Math.random() * 4;
+    p.style.width = size + "px"; p.style.height = size + "px";
+    var startX = 10 + Math.random() * 80, startY = 10 + Math.random() * 80;
+    p.style.left = startX + "%"; p.style.top = startY + "%";
+    var dx = (Math.random() * 2 - 1) * 80, dy = -40 - Math.random() * 90;
+    p.style.setProperty("--dx", dx.toFixed(0) + "px");
+    p.style.setProperty("--dy", dy.toFixed(0) + "px");
+    var dur = 4 + Math.random() * 4;
+    p.style.animationDuration = dur + "s";
+    el.orbWrap.appendChild(p);
+    setTimeout(function () { p.remove(); }, dur * 1000 + 200);
+  }
+  setInterval(spawnParticle, 900);
+
   // ---- mic + audio-reactive level ----
   async function startMic() {
     stopMic();
@@ -228,14 +335,17 @@ export function renderHtml(instanceId) {
       analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8;
       src.connect(analyser);
       var buf = new Uint8Array(analyser.frequencyBinCount);
+      var freq = new Uint8Array(analyser.frequencyBinCount);
       var bargeFrames = 0;
       var loop = function () {
         if (!analyser) return;
         analyser.getByteTimeDomainData(buf);
+        analyser.getByteFrequencyData(freq);
         var sum = 0;
         for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
         var rms = Math.sqrt(sum / buf.length);
         el.body.style.setProperty("--level", state === "listening" ? Math.min(1, rms * 3.2).toFixed(3) : "0");
+        drawRing(freq);
         // Barge-in: if the user starts talking while Anya is speaking, cut the
         // reply short and hand the floor back. echoCancellation keeps Anya's own
         // TTS from tripping this; we require sustained energy to avoid blips.
