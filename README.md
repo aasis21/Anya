@@ -37,6 +37,10 @@ anything on a page to attach it as context.
 - **Field fill.** Focus a text field, ask Anya what to write. One click
   inserts the response — dispatches `input` + `change` events so React /
   Angular / Vue forms pick it up.
+- **Voice in & out.** 🎤 to dictate — interim words stream live into the
+  composer; 🔊 to hear replies, streamed sentence-by-sentence or read at end of
+  turn. TTS is local; speech-to-text uses the browser's Web Speech API. First
+  use grants mic access once via a small permission window.
 - **Playwright automation.** `drive_tab`, `drive_browser`, `drive_context`,
   `drive_devtools` — Anya drives your real, logged-in browser. Same cookies,
   same session.
@@ -78,6 +82,7 @@ Anya/
 │       ├── types.ts              # ContextAttachment, ChatMessage, Chat, etc.
 │       ├── native-bridge.ts      # chrome.runtime.connectNative wrapper
 │       ├── background.ts         # side panel + "Add to Anya" context menu
+│       ├── voice/                # Web Speech STT/TTS + mic-permission helper window
 │       └── page-bridge.ts        # content script: element capture, field tracking, fill
 └── bridge/                       # Node Native Messaging host
     ├── manifest.template.json

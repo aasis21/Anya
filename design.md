@@ -303,6 +303,23 @@ map. The currently-streaming assistant message tracks its tool call ids in
 `toolCallIds`, so each card stays attached to the right turn even after
 several streams have completed.
 
+### Voice I/O
+
+Speech-to-text and text-to-speech both run **entirely in the side panel** via
+the browser's Web Speech API (`extension/src/voice/`) — no bridge involvement.
+TTS (`speechSynthesis`) is local; STT (`webkitSpeechRecognition`) streams audio
+to the browser's speech service. Two non-obvious constraints shaped this, and
+both were learned the hard way:
+
+- **STT must run in the panel, not an offscreen document.** Running
+  `webkitSpeechRecognition` from an offscreen doc was tried and abandoned — it
+  returns `service-not-allowed` because offscreen is a background context. The
+  panel is a visible renderer, where it works.
+- **The panel can't surface the mic permission prompt** (no top-level frame to
+  anchor it). First use opens `mic-permission.html` in a small popup window — a
+  real page that _can_ prompt — and the grant then applies to the whole
+  extension origin. Sending a message stops the mic.
+
 ---
 
 ## 9. Security model

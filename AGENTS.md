@@ -65,6 +65,8 @@ cd bridge;    npx tsc --noEmit
   `defineTool(...)` from `@github/copilot-sdk`. Browser-context tools defer
   to the extension over the tool-rpc channel; Playwright driving is the
   CDP session in `bridge/src/sessions.ts`.
+- **Voice I/O** lives in `extension/src/voice/` (Web Speech API). STT and TTS
+  both run in the side panel — there is no bridge involvement.
 
 ## Runtime layout (per OS)
 
@@ -95,6 +97,10 @@ Inside that dir:
 - Don't introduce telemetry, analytics, or cloud sync.
 - Don't reintroduce extension mode in `sessions.ts` — CDP is the only
   Playwright mode. The prior extension and multi-bind designs both failed.
+- Don't move speech-to-text into an offscreen document —
+  `webkitSpeechRecognition` returns `service-not-allowed` there. It must run in
+  the side panel; the mic prompt comes from the `mic-permission.html` helper
+  window because the panel can't show it directly.
 - Don't commit `extension/.extension-key.pem` (already gitignored).
 
 ## Related docs

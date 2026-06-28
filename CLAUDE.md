@@ -41,6 +41,7 @@ extension/  ←──── NM frames ────→  bridge/
 - `native-bridge.ts` — `chrome.runtime.connectNative` wrapper with auto-reconnect.
 - `styles.ts` — all CSS in one tagged template. Keep it sectioned, no separate CSS files.
 - `types.ts` — shared interfaces (`ContextAttachment`, `ChatMessage`, `Chat`, `DebugEntry`, etc.).
+- `voice/` — speech-to-text + text-to-speech via the Web Speech API, plus the `mic-permission.html` helper window. Runs entirely in the panel; no bridge frames.
 
 **Bridge** (`bridge/src/`):
 - `host.ts` — NM stdio loop and frame router. Add new frame types here.
@@ -82,6 +83,7 @@ The debug panel in the sidebar mirrors every NM frame and log line — this is t
 
 - Don't hardcode OS-specific paths — use `bridge/src/paths.ts`.
 - Don't reintroduce extension mode or multi-tab binding in `sessions.ts` — CDP only.
+- Don't move STT into an offscreen document — `webkitSpeechRecognition` fails with `service-not-allowed` there; it must run in the side panel (see `design.md` §8).
 - Don't commit `extension/.extension-key.pem` (gitignored).
 - Don't add telemetry, analytics, or cloud sync.
 - Don't put unrelated files in `bridge/` — pin `cwd` so output lands in the Anya data dir.
