@@ -2902,7 +2902,7 @@ export class AnyaApp extends LitElement {
     const ids = m.toolCallIds ?? [];
     const cards = ids
       .map((id) => this.toolCalls.get(id))
-      .filter((tc): tc is ToolCall => !!tc);
+      .filter((tc): tc is ToolCall => !!tc && tc.toolName !== 'report_intent');
     const text = m.text || '';
     const hasVisibleText = text.trim().length > 0;
     const html_ = marked.parse(text) as string;
@@ -2910,7 +2910,15 @@ export class AnyaApp extends LitElement {
     // (turn started, but no tokens or tool calls yet). Show an animated
     // thinking line so the UI doesn't appear frozen.
     const isThinking = m.pending && !m.text && cards.length === 0;
+    // Show intent as a live status line while the message is still pending
+    const showIntentAboveTools = m.pending && m.intent && cards.length > 0;
     return html`
+      ${showIntentAboveTools
+        ? html`<div class="thinking" title="agent is working">
+            <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="thinking-text">${m.intent}</span>
+          </div>`
+        : nothing}
       ${cards.length > 0
         ? html`<div class="toolcalls">${cards.map((tc) => this.renderToolCard(tc))}</div>`
         : nothing}
