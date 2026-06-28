@@ -24,7 +24,7 @@ import { marked } from 'marked';
 import { nativeBridge, type Frame } from './native-bridge.js';
 import { sidebarStyles } from './styles.js';
 import {
-  OffscreenSpeechInput,
+  WebSpeechInput,
   WebSpeechOutput,
   DEFAULT_VOICE_SETTINGS,
   type VoiceInput,
@@ -326,7 +326,9 @@ export class AnyaApp extends LitElement {
   @state() private voiceMenuOpen = false;
   @state() private isListening = false;
   @state() private isSpeaking = false;
-  private voiceInput: VoiceInput = new OffscreenSpeechInput();
+  @state() private voiceNotice = '';
+  private voiceNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  private voiceInput: VoiceInput = new WebSpeechInput();
   private voiceOutput: VoiceOutput = new WebSpeechOutput();
   /** Buffer for streaming TTS — accumulates delta text until a sentence boundary. */
   private _speechBuffer = '';
@@ -478,29 +480,39 @@ export class AnyaApp extends LitElement {
     try { chrome.storage?.local?.set?.({ 'anya-voice-settings': this.voiceSettings }); } catch { /* ignore */ }
   }
 
+  /** Text committed so far (before current interim). Used to show streaming voice in input. */
+  private _voiceCommitted = '';
+
   private setupVoiceHandlers(): void {
     this.voiceInput.onResult = (text, isFinal) => {
       const ta = this.textarea;
       if (!ta) return;
       if (isFinal) {
-        // Append final text with a space
-        const current = ta.value;
-        const prefix = current && !current.endsWith(' ') ? ' ' : '';
-        ta.value = current + prefix + text;
+        // Commit final text
+        const prefix = this._voiceCommitted && !this._voiceCommitted.endsWith(' ') ? ' ' : '';
+        this._voiceCommitted += prefix + text;
+        ta.value = this._voiceCommitted;
         this.syncDraft(ta.value);
         if (this.voiceSettings.autoSubmit) {
           this.voiceInput.stop();
           this.send();
         }
       } else {
-        // Show interim in a non-destructive way — update a visual indicator only
-        // We don't modify textarea for interim results to avoid cursor jumps
+        // Stream interim text into the input box
+        const prefix = this._voiceCommitted && !this._voiceCommitted.endsWith(' ') ? ' ' : '';
+        ta.value = this._voiceCommitted + prefix + text;
+        this.syncDraft(ta.value);
       }
     };
     this.voiceInput.onError = (error) => {
       this.isListening = false;
-      if (error === 'not-allowed') {
-        this.recordDebug({ kind: 'log', level: 'warn', summary: 'Microphone access denied' });
+      this.recordDebug({ kind: 'log', level: 'warn', summary: `voice error: ${error}` });
+      if (error === 'not-allowed' || error === 'service-not-allowed') {
+        this.showVoiceNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
+      } else if (error === 'no-speech') {
+        this.showVoiceNotice('No speech detected.');
+      } else if (error !== 'aborted') {
+        this.showVoiceNotice(`Voice error: ${error}`);
       }
     };
     this.voiceInput.onEnd = () => {
@@ -508,15 +520,26 @@ export class AnyaApp extends LitElement {
     };
   }
 
+  /** Show a transient voice status/error notice above the composer. */
+  private showVoiceNotice(msg: string): void {
+    this.voiceNotice = msg;
+    if (this.voiceNoticeTimer) clearTimeout(this.voiceNoticeTimer);
+    this.voiceNoticeTimer = setTimeout(() => { this.voiceNotice = ''; }, 5000);
+  }
+
   private async toggleVoiceInput(): Promise<void> {
     if (this.isListening) {
       this.voiceInput.stop();
-      chrome.runtime.sendMessage({ type: 'anya-voice-stop' }).catch(() => {});
       this.isListening = false;
     } else {
-      // Open the voice sidebar for hands-free interaction.
-      chrome.runtime.sendMessage({ type: 'anya-open-voice-sidebar' }).catch(() => {});
-      this.isListening = true;
+      this._voiceCommitted = this.textarea?.value ?? '';
+      this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
+      try {
+        await this.voiceInput.start();
+      } catch (err) {
+        this.recordDebug({ kind: 'log', level: 'warn', summary: `Voice start failed: ${err}` });
+      }
+      this.isListening = this.voiceInput.listening;
     }
   }
 
@@ -3415,6 +3438,12 @@ export class AnyaApp extends LitElement {
           </button>
         ` : nothing}
         ${this.renderApprovalBanners()}
+        ${this.voiceNotice ? html`
+          <div class="voice-notice">
+            <span>🎤 ${this.voiceNotice}</span>
+            <button class="voice-notice-x" @click=${() => { this.voiceNotice = ''; }} title="Dismiss">✕</button>
+          </div>
+        ` : nothing}
         ${this.autocomplete ? this.renderAutocomplete() : nothing}
         ${this.contextAttachments.length > 0 ? html`
           <div class="ctx-strip">

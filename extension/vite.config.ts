@@ -16,17 +16,6 @@ function copyStaticAssets() {
         copyFileSync(manifestSrc, resolve(distDir, 'manifest.json'));
       }
 
-      // Copy offscreen.html
-      const offscreenSrc = resolve(root, 'src/voice/offscreen.html');
-      if (existsSync(offscreenSrc)) {
-        copyFileSync(offscreenSrc, resolve(distDir, 'offscreen.html'));
-      }
-
-      // Copy mic-permission.html
-      const micPermSrc = resolve(root, 'src/voice/mic-permission.html');
-      if (existsSync(micPermSrc)) {
-        copyFileSync(micPermSrc, resolve(distDir, 'mic-permission.html'));
-      }
       const iconsSrc = resolve(root, 'public', 'icons');
       const iconsDest = resolve(distDir, 'icons');
       if (existsSync(iconsSrc)) {
@@ -49,20 +38,14 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        popup: resolve(root, 'popup.html'),
-        'voice-sidebar': resolve(root, 'voice-sidebar.html'),
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
         'page-bridge': resolve(root, 'src/page-bridge.ts'),
-        offscreen: resolve(root, 'src/voice/offscreen.ts'),
-        'mic-permission': resolve(root, 'src/voice/mic-permission.ts'),
       },
       output: {
         entryFileNames: (chunk) => {
           if (chunk.name === 'background') return 'background.js';
           if (chunk.name === 'page-bridge') return 'page-bridge.js';
-          if (chunk.name === 'offscreen') return 'offscreen.js';
-          if (chunk.name === 'mic-permission') return 'mic-permission.js';
           return 'assets/[name].js';
         },
         chunkFileNames: 'assets/[name]-[hash].js',

@@ -1,54 +1,10 @@
 // MV3 service worker for Anya.
-// Handles: popup window, voice sidebar, "Add to Anya" context menu, message relay.
+// Handles: side panel, "Add to Anya" context menu, message relay.
 
-// Sidebar is NOT opened on action click — we open a popup window instead.
+// Open the side panel when the extension icon is clicked.
 chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: false })
+  .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((err) => console.error('[Anya] setPanelBehavior failed:', err));
-
-// ---------------------------------------------------------------------------
-// Popup window: opens on extension icon click.
-// ---------------------------------------------------------------------------
-
-const POPUP_URL = chrome.runtime.getURL('popup.html');
-const POPUP_WIDTH = 420;
-const POPUP_HEIGHT = 700;
-
-/** Track the popup window ID so we don't open duplicates. */
-let popupWindowId: number | undefined;
-
-async function openPopupWindow(): Promise<void> {
-  // If popup window already exists, focus it.
-  if (popupWindowId !== undefined) {
-    try {
-      const win = await chrome.windows.get(popupWindowId);
-      if (win) {
-        await chrome.windows.update(popupWindowId, { focused: true });
-        return;
-      }
-    } catch {
-      popupWindowId = undefined;
-    }
-  }
-
-  const win = await chrome.windows.create({
-    url: POPUP_URL,
-    type: 'popup',
-    width: POPUP_WIDTH,
-    height: POPUP_HEIGHT,
-  });
-  popupWindowId = win.id;
-}
-
-// Clean up tracked ID when the popup window closes.
-chrome.windows.onRemoved.addListener((windowId) => {
-  if (windowId === popupWindowId) popupWindowId = undefined;
-});
-
-// Extension icon click → open popup window.
-chrome.action.onClicked.addListener(() => {
-  openPopupWindow();
-});
 
 // ---------------------------------------------------------------------------
 // Context menu: single "Add to Anya" item — visible everywhere.
@@ -68,46 +24,28 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // Tell the content script to capture context at the right-click point.
   chrome.tabs.sendMessage(tab.id, { type: 'anya-capture-context' }).catch(() => {});
 
-  // Open the popup window (main UI).
-  await openPopupWindow();
+  // Open the side panel.
+  try { await chrome.sidePanel.open({ tabId: tab.id }); } catch {}
 });
 
 // ---------------------------------------------------------------------------
-// Relay: content script messages pass through to the popup (same origin).
-// Open popup window for attach and Alt+A messages.
-// Open sidebar for voice activation.
+// Relay: content script messages pass through to the sidebar (same origin).
+// Open side panel for attach and Alt+A messages.
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === 'anya-attach' && sender.tab?.id) {
     msg.attachment.tabId = sender.tab.id;
-    // Buffer in session storage so a not-yet-open popup picks it up on load.
+    // Buffer in session storage so a not-yet-open sidebar picks it up on load.
     chrome.storage.session.get('anya-pending-attach').then((result) => {
       const pending: unknown[] = Array.isArray(result?.['anya-pending-attach'])
         ? result['anya-pending-attach'] : [];
       pending.push(msg.attachment);
       chrome.storage.session.set({ 'anya-pending-attach': pending });
     }).catch(() => {});
-    openPopupWindow();
+    chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});
   }
   if (msg.type === 'anya-field-activate' && sender.tab?.id) {
-    openPopupWindow();
-  }
-  // Voice sidebar: popup requests to open the sidebar for voice mode.
-  if (msg.type === 'anya-open-voice-sidebar') {
-    const tabId = msg.tabId as number | undefined;
-    if (tabId) {
-      chrome.sidePanel.open({ tabId }).catch(() => {});
-    } else {
-      // Try opening for the currently active tab.
-      chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-        if (tabs[0]?.id) chrome.sidePanel.open({ tabId: tabs[0].id }).catch(() => {});
-      }).catch(() => {});
-    }
-  }
-  // Voice transcript from sidebar → forward to popup.
-  if (msg.type === 'anya-voice-transcript') {
-    // The popup listens for this via chrome.runtime.onMessage too.
-    // Just re-broadcast (the popup will pick it up since it's in extension context).
+    chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});
   }
 });
