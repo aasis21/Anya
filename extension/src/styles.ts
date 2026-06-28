@@ -1222,37 +1222,41 @@ export const sidebarStyles = css`
       50% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0); }
     }
 
-    /* ---------- TTS PLAYBACK BAR ---------- */
-    .tts-bar {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-top: 1px solid var(--bg-rule);
-      background: var(--bg-soft);
-      border-radius: 0 0 12px 12px;
+    /* ---------- TTS PLAYBACK (inline toggle) ---------- */
+    .tts-bar-toggle {
+      background: transparent;
+      border: 1px solid var(--bg-rule);
+      color: var(--fg-faint);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: color 150ms, background 150ms, border-color 150ms;
     }
-    .tts-bar-btn {
+    .tts-bar-toggle:hover { color: var(--fg-dim); background: var(--bg-bubble); }
+    .tts-bar-toggle.on {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    /* Speed +/- in menu */
+    .speed-btn {
       background: transparent;
       border: 1px solid var(--bg-rule);
       color: var(--fg-dim);
-      width: 24px;
-      height: 22px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 5px;
-      font-size: 13px;
+      width: 20px; height: 18px;
+      border-radius: 4px;
+      font-size: 12px;
       cursor: pointer;
-      transition: color 150ms, background 150ms;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin: 0 2px;
     }
-    .tts-bar-btn:hover { color: var(--fg); background: var(--bg-bubble); }
-    .tts-bar-btn.stop { color: var(--error); border-color: var(--error); }
-    .tts-bar-btn.stop:hover { background: rgba(248, 81, 73, 0.12); }
-    .tts-bar-speed {
+    .speed-btn:hover { color: var(--fg); background: var(--bg-bubble); }
+    .speed-value {
       font-size: 11px;
       color: var(--fg-dim);
-      min-width: 36px;
+      min-width: 34px;
       text-align: center;
       font-variant-numeric: tabular-nums;
     }

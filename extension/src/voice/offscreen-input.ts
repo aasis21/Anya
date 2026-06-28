@@ -96,6 +96,17 @@ export class OffscreenSpeechInput implements VoiceInput {
       }
     } catch { /* Permissions API not available — fall through */ }
 
+    // B: Try requesting audioCapture at the extension level first.
+    // In contexts where chrome.permissions.request works (user gesture),
+    // this avoids needing the popup entirely.
+    try {
+      const granted = await chrome.permissions.request({ permissions: ['audioCapture'] });
+      if (granted) {
+        this._micPermissionGranted = true;
+        return;
+      }
+    } catch { /* Not available in this context — fall through to popup */ }
+
     // Open a popup window that CAN show the permission prompt.
     // The grant applies to the whole extension origin, so the offscreen doc inherits it.
     return new Promise<void>((resolve, reject) => {
@@ -115,8 +126,8 @@ export class OffscreenSpeechInput implements VoiceInput {
       chrome.windows.create({
         url: chrome.runtime.getURL('mic-permission.html'),
         type: 'popup',
-        width: 360,
-        height: 200,
+        width: 400,
+        height: 320,
         focused: true,
       });
 

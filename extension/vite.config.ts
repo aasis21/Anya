@@ -27,7 +27,6 @@ function copyStaticAssets() {
       if (existsSync(micPermSrc)) {
         copyFileSync(micPermSrc, resolve(distDir, 'mic-permission.html'));
       }
-
       const iconsSrc = resolve(root, 'public', 'icons');
       const iconsDest = resolve(distDir, 'icons');
       if (existsSync(iconsSrc)) {
@@ -50,6 +49,8 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
+        popup: resolve(root, 'popup.html'),
+        'voice-sidebar': resolve(root, 'voice-sidebar.html'),
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
         'page-bridge': resolve(root, 'src/page-bridge.ts'),
