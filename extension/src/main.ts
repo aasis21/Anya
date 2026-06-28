@@ -108,6 +108,10 @@ function friendlyArgs(toolName: string, args: unknown): string {
   if (!args || typeof args !== 'object') return '';
   const a = args as Record<string, unknown>;
   switch (toolName) {
+    case 'powershell':
+      if (typeof a.description === 'string' && a.description) return a.description;
+      if (typeof a.command === 'string' && a.command) return a.command.length > 60 ? a.command.slice(0, 57) + '…' : a.command;
+      return '';
     case 'open_tab':
       return typeof a.url === 'string' ? shortenUrl(a.url) : '';
     case 'close_tab':
