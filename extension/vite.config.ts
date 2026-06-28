@@ -16,6 +16,12 @@ function copyStaticAssets() {
         copyFileSync(manifestSrc, resolve(distDir, 'manifest.json'));
       }
 
+      // Copy offscreen.html
+      const offscreenSrc = resolve(root, 'src/voice/offscreen.html');
+      if (existsSync(offscreenSrc)) {
+        copyFileSync(offscreenSrc, resolve(distDir, 'offscreen.html'));
+      }
+
       const iconsSrc = resolve(root, 'public', 'icons');
       const iconsDest = resolve(distDir, 'icons');
       if (existsSync(iconsSrc)) {
@@ -41,11 +47,13 @@ export default defineConfig({
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
         'page-bridge': resolve(root, 'src/page-bridge.ts'),
+        offscreen: resolve(root, 'src/voice/offscreen.ts'),
       },
       output: {
         entryFileNames: (chunk) => {
           if (chunk.name === 'background') return 'background.js';
           if (chunk.name === 'page-bridge') return 'page-bridge.js';
+          if (chunk.name === 'offscreen') return 'offscreen.js';
           return 'assets/[name].js';
         },
         chunkFileNames: 'assets/[name]-[hash].js',

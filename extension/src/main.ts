@@ -24,7 +24,7 @@ import { marked } from 'marked';
 import { nativeBridge, type Frame } from './native-bridge.js';
 import { sidebarStyles } from './styles.js';
 import {
-  WebSpeechInput,
+  OffscreenSpeechInput,
   WebSpeechOutput,
   DEFAULT_VOICE_SETTINGS,
   type VoiceInput,
@@ -265,6 +265,7 @@ export class AnyaApp extends LitElement {
    *  the textarea via `syncDraft()` (called from `onInput`, `send()`,
    *  `applyAutocomplete()`, quick-prompt insert, etc.). */
   @state() private composerText = '';
+  @state() private isPopupMode = false;
   @state() private debugOpen = false;
   @state() private debugEntries: DebugEntry[] = [];
   @state() private toolExpanded: Set<string> = new Set();
@@ -325,7 +326,7 @@ export class AnyaApp extends LitElement {
   @state() private voiceMenuOpen = false;
   @state() private isListening = false;
   @state() private isSpeaking = false;
-  private voiceInput: VoiceInput = new WebSpeechInput();
+  private voiceInput: VoiceInput = new OffscreenSpeechInput();
   private voiceOutput: VoiceOutput = new WebSpeechOutput();
   // Approval mode: true = auto-approve all, false = ask user for write tools
   @state() private autoApprove = true;
@@ -400,6 +401,9 @@ export class AnyaApp extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    // Detect if running in a popup window (expanded mode)
+    const params = new URLSearchParams(window.location.search);
+    this.isPopupMode = params.get('popup') === '1';
     this.unsubMessage = nativeBridge.onMessage((f) => this.handleFrame(f));
     this.unsubDisconnect = nativeBridge.onDisconnect(() => {
       this.connected = false;
@@ -792,6 +796,27 @@ export class AnyaApp extends LitElement {
       } catch { /* storage may be unavailable */ }
     }, 250);
   }
+
+  /** Open sidebar content in a popup window (75% screen) or close if already in popup. */
+  private toggleExpand = (): void => {
+    if (this.isPopupMode) {
+      // Close this popup window — user will go back to the side panel
+      window.close();
+    } else {
+      // Open in a popup window at 75% screen width
+      const w = Math.round(screen.availWidth * 0.75);
+      const h = screen.availHeight;
+      const left = screen.availWidth - w;
+      chrome.windows.create({
+        url: chrome.runtime.getURL('sidebar.html?popup=1'),
+        type: 'popup',
+        width: w,
+        height: h,
+        left,
+        top: 0,
+      });
+    }
+  };
 
   private startNewChat = (): string => {
     const id = `c${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1430,11 +1455,11 @@ export class AnyaApp extends LitElement {
         };
         if (typeof args.startTime === 'string' && args.startTime) {
           const t = Date.parse(args.startTime);
-          if (!isNaN(t)) searchOpts.startedAfter = new Date(t);
+          if (!isNaN(t)) searchOpts.startedAfter = new Date(t).toISOString();
         }
         if (typeof args.endTime === 'string' && args.endTime) {
           const t = Date.parse(args.endTime);
-          if (!isNaN(t)) searchOpts.startedBefore = new Date(t);
+          if (!isNaN(t)) searchOpts.startedBefore = new Date(t).toISOString();
         }
 
         const items = await chrome.downloads.search(searchOpts);
@@ -2883,7 +2908,7 @@ export class AnyaApp extends LitElement {
       case 'errors':
         return entry.level === 'error'
           || entry.level === 'warn'
-          || entry.kind === 'error'
+          || (entry.kind as string) === 'error'
           || /\berror\b|\bdenied\b|\bfailed\b/i.test(entry.summary);
       case 'stream':
         return frameType === 'turn-start'
@@ -3158,6 +3183,12 @@ export class AnyaApp extends LitElement {
               title="New chat (Ctrl+N)"
               aria-label="New chat"
             >＋</button>
+            <button
+              class="icon-btn"
+              @click=${this.toggleExpand}
+              title=${this.isPopupMode ? 'Collapse back to sidebar' : 'Expand panel'}
+              aria-label=${this.isPopupMode ? 'Collapse' : 'Expand'}
+            >${this.isPopupMode ? '⤓' : '⤢'}</button>
             <span class="header-more-wrap">
               <button
                 class="icon-btn ${this.headerMenuOpen ? 'active' : ''}"

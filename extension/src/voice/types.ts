@@ -23,7 +23,7 @@ export interface VoiceInput {
   /** Whether the engine is actively listening right now. */
   readonly listening: boolean;
   /** Start listening. No-op if already listening or unsupported. */
-  start(): void;
+  start(): void | Promise<void>;
   /** Stop listening. No-op if not listening. */
   stop(): void;
   /** Language hint (BCP-47). Default: navigator.language. */
