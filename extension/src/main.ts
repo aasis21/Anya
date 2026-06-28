@@ -141,6 +141,44 @@ function friendlyArgs(toolName: string, args: unknown): string {
     case 'drive_devtools':
       if (Array.isArray(a.argv) && a.argv.length > 0) return friendlyArgv(a.argv as string[]);
       return '';
+    case 'view': {
+      if (typeof a.path !== 'string') return '';
+      const short = a.path.replace(/^.*[\\/]/, '');
+      if (Array.isArray(a.view_range)) return `${short} [${(a.view_range as number[]).join('–')}]`;
+      return short;
+    }
+    case 'edit': {
+      if (typeof a.path !== 'string') return '';
+      return a.path.replace(/^.*[\\/]/, '');
+    }
+    case 'create': {
+      if (typeof a.path !== 'string') return '';
+      return a.path.replace(/^.*[\\/]/, '');
+    }
+    case 'grep': {
+      if (typeof a.pattern !== 'string') return '';
+      const pat = a.pattern.length > 40 ? a.pattern.slice(0, 37) + '…' : a.pattern;
+      const scope = typeof a.glob === 'string' ? ` in ${a.glob}` : '';
+      return `/${pat}/${scope}`;
+    }
+    case 'glob':
+      return typeof a.pattern === 'string' ? a.pattern : '';
+    case 'web_fetch':
+      return typeof a.url === 'string' ? shortenUrl(a.url) : '';
+    case 'task': {
+      if (typeof a.description === 'string' && a.description) return a.description;
+      if (typeof a.name === 'string' && a.name) return a.name;
+      return typeof a.agent_type === 'string' ? a.agent_type : '';
+    }
+    case 'sql':
+      if (typeof a.description === 'string' && a.description) return a.description;
+      return '';
+    case 'read_agent':
+    case 'write_agent':
+      return typeof a.agent_id === 'string' ? a.agent_id : '';
+    case 'session_store_sql':
+      if (typeof a.description === 'string' && a.description) return a.description;
+      return '';
     default:
       return '';
   }
