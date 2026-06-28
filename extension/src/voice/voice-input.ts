@@ -46,6 +46,14 @@ interface SpeechRecognitionConstructor {
 const SpeechRecognitionCtor: SpeechRecognitionConstructor | undefined =
   (globalThis as any).SpeechRecognition ?? (globalThis as any).webkitSpeechRecognition;
 
+/**
+ * Errors after which recognition must NOT auto-restart. Restarting on these
+ * would silently re-open the mic while the UI shows "stopped". `no-speech` is
+ * deliberately excluded: in continuous dictation a pause fires it and we want
+ * the session to resume.
+ */
+const FATAL_SPEECH_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
+
 export class WebSpeechInput implements VoiceInput {
   readonly supported: boolean;
   private _listening = false;
@@ -86,6 +94,11 @@ export class WebSpeechInput implements VoiceInput {
 
     recognition.onerror = (event) => {
       if (event.error === 'aborted') return;
+      // Fatal errors must stop for good: mark a manual stop so onend tears the
+      // session down (and fires onEnd) instead of auto-restarting the mic.
+      if (FATAL_SPEECH_ERRORS.has(event.error)) {
+        this._stoppedManually = true;
+      }
       this.onError?.(event.error);
     };
 

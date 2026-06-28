@@ -482,6 +482,7 @@ export class AnyaApp extends LitElement {
 
   /** Text committed so far (before current interim). Used to show streaming voice in input. */
   private _voiceCommitted = '';
+  private _micPermissionPromise: Promise<boolean> | null = null;
 
   private setupVoiceHandlers(): void {
     this.voiceInput.onResult = (text, isFinal) => {
@@ -509,14 +510,29 @@ export class AnyaApp extends LitElement {
       }
     };
     this.voiceInput.onError = (error) => {
-      this.isListening = false;
       this.recordDebug({ kind: 'log', level: 'warn', summary: `voice error: ${error}` });
-      if (error === 'not-allowed' || error === 'service-not-allowed') {
-        this.showVoiceNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
-      } else if (error === 'no-speech') {
+      // Fatal errors stop recognition for good (the engine won't auto-restart),
+      // so reflect "stopped" immediately. Recoverable errors (no-speech) DO
+      // auto-restart in continuous mode, so we must not flip isListening here —
+      // otherwise the onResult guard would start dropping live transcripts.
+      const fatal =
+        error === 'not-allowed' ||
+        error === 'service-not-allowed' ||
+        error === 'audio-capture' ||
+        error === 'network';
+      if (fatal) {
+        this.isListening = false;
+        if (error === 'not-allowed' || error === 'service-not-allowed') {
+          this.showVoiceNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
+        } else {
+          this.showVoiceNotice(`Voice error: ${error}`);
+        }
+        return;
+      }
+      // Only surface "no speech" in single-shot (autoSubmit) mode; in continuous
+      // dictation a pause legitimately fires no-speech and we keep listening.
+      if (error === 'no-speech' && this.voiceSettings.autoSubmit) {
         this.showVoiceNotice('No speech detected.');
-      } else if (error !== 'aborted') {
-        this.showVoiceNotice(`Voice error: ${error}`);
       }
     };
     this.voiceInput.onEnd = () => {
@@ -537,7 +553,18 @@ export class AnyaApp extends LitElement {
    * so when access isn't already granted we open a small helper window (a real
    * top-level page) that can. Returns true once the origin is allowed to record.
    */
-  private async ensureMicPermission(): Promise<boolean> {
+  private ensureMicPermission(): Promise<boolean> {
+    // Single-flight: rapid mic clicks must not open multiple helper windows or
+    // attach multiple runtime listeners. Re-use the in-flight request instead.
+    if (this._micPermissionPromise) return this._micPermissionPromise;
+    const p = this.requestMicPermission().finally(() => {
+      if (this._micPermissionPromise === p) this._micPermissionPromise = null;
+    });
+    this._micPermissionPromise = p;
+    return p;
+  }
+
+  private async requestMicPermission(): Promise<boolean> {
     // 1. Fast path: already granted for this origin.
     try {
       const st = await navigator.permissions.query({ name: 'microphone' as PermissionName });
@@ -561,35 +588,75 @@ export class AnyaApp extends LitElement {
     return this.openMicPermissionHelper();
   }
 
-  /** Open the mic-permission helper window and resolve when it reports back. */
+  /**
+   * Open the mic-permission helper window and resolve when access is granted.
+   *
+   * The helper only signals *success*; failure is inferred from the window
+   * closing or the safety timeout. That lets the user retry inside the same
+   * window (deny → allow) without the side panel having already given up.
+   */
   private openMicPermissionHelper(): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
+      let helperWindowId: number | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const cleanup = () => {
+        chrome.runtime.onMessage.removeListener(onMessage);
+        chrome.windows.onRemoved.removeListener(onRemoved);
+        if (timer !== undefined) clearTimeout(timer);
+      };
       const finish = (granted: boolean) => {
         if (settled) return;
         settled = true;
-        chrome.runtime.onMessage.removeListener(listener);
+        cleanup();
+        // Close a still-open helper window when we give up (timeout/failure).
+        if (!granted && helperWindowId !== undefined) {
+          try { chrome.windows.remove(helperWindowId); } catch { /* already gone */ }
+        }
         resolve(granted);
       };
-      const listener = (msg: { type?: string; granted?: boolean }) => {
+      const onMessage = (msg: { type?: string; granted?: boolean }) => {
         if (msg?.type !== 'anya-mic-permission') return;
-        finish(!!msg.granted);
+        if (msg.granted) finish(true);
       };
-      chrome.runtime.onMessage.addListener(listener);
+      const onRemoved = (winId: number) => {
+        if (winId === helperWindowId) finish(false);
+      };
+
+      chrome.runtime.onMessage.addListener(onMessage);
+      chrome.windows.onRemoved.addListener(onRemoved);
+
       try {
-        chrome.windows.create({
-          url: chrome.runtime.getURL('mic-permission.html'),
-          type: 'popup',
-          width: 460,
-          height: 480,
-        });
+        chrome.windows.create(
+          {
+            url: chrome.runtime.getURL('mic-permission.html'),
+            type: 'popup',
+            width: 460,
+            height: 480,
+          },
+          (win) => {
+            // Async failure surfaces here via lastError, not a thrown error.
+            if (chrome.runtime.lastError || !win) {
+              this.recordDebug({
+                kind: 'log',
+                level: 'warn',
+                summary: `mic helper open failed: ${chrome.runtime.lastError?.message ?? 'no window'}`,
+              });
+              finish(false);
+              return;
+            }
+            helperWindowId = win.id ?? undefined;
+          },
+        );
       } catch (err) {
         this.recordDebug({ kind: 'log', level: 'warn', summary: `mic helper open failed: ${err}` });
         finish(false);
         return;
       }
-      // Safety timeout so the mic button never hangs if the window is dismissed.
-      setTimeout(() => finish(false), 90000);
+
+      // Safety timeout so the mic button never hangs if the window is left open.
+      timer = setTimeout(() => finish(false), 90000);
     });
   }
 
