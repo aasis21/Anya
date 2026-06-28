@@ -16,6 +16,13 @@ function copyStaticAssets() {
         copyFileSync(manifestSrc, resolve(distDir, 'manifest.json'));
       }
 
+      // Copy the mic-permission helper page (opened in a popup window to
+      // surface the browser's microphone prompt for the extension origin).
+      const micPermSrc = resolve(root, 'src/voice/mic-permission.html');
+      if (existsSync(micPermSrc)) {
+        copyFileSync(micPermSrc, resolve(distDir, 'mic-permission.html'));
+      }
+
       const iconsSrc = resolve(root, 'public', 'icons');
       const iconsDest = resolve(distDir, 'icons');
       if (existsSync(iconsSrc)) {
@@ -41,11 +48,13 @@ export default defineConfig({
         sidebar: resolve(root, 'sidebar.html'),
         background: resolve(root, 'src/background.ts'),
         'page-bridge': resolve(root, 'src/page-bridge.ts'),
+        'mic-permission': resolve(root, 'src/voice/mic-permission.ts'),
       },
       output: {
         entryFileNames: (chunk) => {
           if (chunk.name === 'background') return 'background.js';
           if (chunk.name === 'page-bridge') return 'page-bridge.js';
+          if (chunk.name === 'mic-permission') return 'mic-permission.js';
           return 'assets/[name].js';
         },
         chunkFileNames: 'assets/[name]-[hash].js',

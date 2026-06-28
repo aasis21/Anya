@@ -485,6 +485,10 @@ export class AnyaApp extends LitElement {
 
   private setupVoiceHandlers(): void {
     this.voiceInput.onResult = (text, isFinal) => {
+      // Ignore any trailing transcript that lands after we've stopped (e.g. the
+      // final result fired by recognition.stop() when the user hits Send) so it
+      // can't refill a just-cleared composer.
+      if (!this.isListening) return;
       const ta = this.textarea;
       if (!ta) return;
       if (isFinal) {
@@ -527,20 +531,89 @@ export class AnyaApp extends LitElement {
     this.voiceNoticeTimer = setTimeout(() => { this.voiceNotice = ''; }, 5000);
   }
 
+  /**
+   * Ensure the extension origin has microphone access before starting
+   * recognition. The side panel can't surface the browser's permission prompt,
+   * so when access isn't already granted we open a small helper window (a real
+   * top-level page) that can. Returns true once the origin is allowed to record.
+   */
+  private async ensureMicPermission(): Promise<boolean> {
+    // 1. Fast path: already granted for this origin.
+    try {
+      const st = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      if (st.state === 'granted') return true;
+      if (st.state === 'denied') {
+        this.showVoiceNotice('Mic blocked in browser settings. Allow it for this extension, then retry.');
+        return false;
+      }
+    } catch {
+      /* permissions.query may not support 'microphone' here — fall through */
+    }
+    // 2. Try prompting in-panel (works in some Chromium builds); harmless if not.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      return true;
+    } catch {
+      /* panel can't prompt — open the helper window below */
+    }
+    // 3. Open the helper window that CAN show the prompt.
+    return this.openMicPermissionHelper();
+  }
+
+  /** Open the mic-permission helper window and resolve when it reports back. */
+  private openMicPermissionHelper(): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (granted: boolean) => {
+        if (settled) return;
+        settled = true;
+        chrome.runtime.onMessage.removeListener(listener);
+        resolve(granted);
+      };
+      const listener = (msg: { type?: string; granted?: boolean }) => {
+        if (msg?.type !== 'anya-mic-permission') return;
+        finish(!!msg.granted);
+      };
+      chrome.runtime.onMessage.addListener(listener);
+      try {
+        chrome.windows.create({
+          url: chrome.runtime.getURL('mic-permission.html'),
+          type: 'popup',
+          width: 460,
+          height: 480,
+        });
+      } catch (err) {
+        this.recordDebug({ kind: 'log', level: 'warn', summary: `mic helper open failed: ${err}` });
+        finish(false);
+        return;
+      }
+      // Safety timeout so the mic button never hangs if the window is dismissed.
+      setTimeout(() => finish(false), 90000);
+    });
+  }
+
   private async toggleVoiceInput(): Promise<void> {
     if (this.isListening) {
       this.voiceInput.stop();
       this.isListening = false;
-    } else {
-      this._voiceCommitted = this.textarea?.value ?? '';
-      this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
-      try {
-        await this.voiceInput.start();
-      } catch (err) {
-        this.recordDebug({ kind: 'log', level: 'warn', summary: `Voice start failed: ${err}` });
-      }
-      this.isListening = this.voiceInput.listening;
+      return;
     }
+    const granted = await this.ensureMicPermission();
+    if (!granted) {
+      if (!this.voiceNotice) {
+        this.showVoiceNotice('Microphone access is needed for voice input.');
+      }
+      return;
+    }
+    this._voiceCommitted = this.textarea?.value ?? '';
+    this.voiceInput.continuous = !this.voiceSettings.autoSubmit;
+    try {
+      await this.voiceInput.start();
+    } catch (err) {
+      this.recordDebug({ kind: 'log', level: 'warn', summary: `Voice start failed: ${err}` });
+    }
+    this.isListening = this.voiceInput.listening;
   }
 
   private speakMessage(text: string): void {
@@ -2049,6 +2122,14 @@ export class AnyaApp extends LitElement {
     const text = ta.value.trim();
     const hasContext = this.contextAttachments.length > 0;
     if (!text && !hasContext) return;
+
+    // Sending ends the active dictation: stop the mic and drop any committed
+    // voice buffer so a trailing transcript can't refill the cleared composer.
+    if (this.isListening) {
+      this.isListening = false;
+      this._voiceCommitted = '';
+      try { this.voiceInput.stop(); } catch { /* already stopped */ }
+    }
 
     // Slash commands are intercepted before any bridge dispatch.
     if (text.startsWith('/')) {

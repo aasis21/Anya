@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anya — Microphone access</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: Canvas;
+      color: CanvasText;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 16px;
+    }
+    .badge {
+      width: 68px; height: 68px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+      background: color-mix(in srgb, #6c5ce7 16%, transparent);
+      border: 1px solid color-mix(in srgb, #6c5ce7 35%, transparent);
+    }
+    h1 { font-size: 19px; margin: 0; font-weight: 650; }
+    p { font-size: 13.5px; line-height: 1.55; margin: 0; opacity: 0.8; }
+    button {
+      width: 100%;
+      font-size: 15px; font-weight: 600;
+      padding: 12px 18px; border-radius: 10px;
+      border: none; cursor: pointer;
+      background: #6c5ce7; color: #fff;
+      transition: filter 0.15s ease, transform 0.05s ease;
+    }
+    button:hover:not(:disabled) { filter: brightness(1.08); }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    #status { font-size: 12.5px; min-height: 18px; margin-top: -4px; }
+    #status.ok { color: #2e9e5b; opacity: 1; }
+    #status.err { color: #d14343; opacity: 1; }
+    .hint { font-size: 11.5px; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">🎤</div>
+    <h1>Enable microphone for Anya</h1>
+    <p>
+      Voice input needs one-time microphone access. Click below, then choose
+      <strong>Allow</strong> in your browser's prompt.
+    </p>
+    <button id="grant">Enable microphone</button>
+    <p id="status"></p>
+    <p class="hint">
+      This grants the Anya extension — not any website. Revoke it anytime in your
+      browser's site-permission settings.
+    </p>
+  </div>
+  <script type="module" src="mic-permission.js"></script>
+</body>
+</html>
