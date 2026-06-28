@@ -32,7 +32,7 @@ export function renderHtml(instanceId) {
     font-family: var(--sans); background: var(--bg); color: var(--ink);
     overflow: hidden; -webkit-font-smoothing: antialiased;
   }
-  body[data-state="idle"]      { --accent:#9b8cff; --accent-2:#3ad6c5; }
+  body[data-state="idle"]      { --accent:#7f93c9; --accent-2:#9fb2d8; }
   body[data-state="listening"] { --accent:#5ce6a3; --accent-2:#22b685; }
   body[data-state="thinking"]  { --accent:#ffcf6b; --accent-2:#f0a93a; }
   body[data-state="speaking"]  { --accent:#7db5ff; --accent-2:#4f8cff; }
@@ -62,6 +62,9 @@ export function renderHtml(instanceId) {
     animation: spin 60s linear infinite; transition: opacity .6s ease;
   }
   @keyframes drift { 0%{transform:translate3d(0,0,0) scale(1)} 100%{transform:translate3d(3%,-3%,0) scale(1.1)} }
+  /* keep idle serene — dim the ambient layers until a conversation starts */
+  body[data-state="idle"] #aurora  { opacity: .32; }
+  body[data-state="idle"] #aurora2 { opacity: .16; }
   #grain {
     position: absolute; inset: 0; z-index: 9; pointer-events: none; opacity: .045; mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -152,7 +155,13 @@ export function renderHtml(instanceId) {
   }
   /* gentle "tap me" pulse on the orb while idle */
   body[data-state="idle"] #orb-wrap::before { animation: ringSoft 3.4s ease-out infinite; }
-  @keyframes ringSoft { 0%{opacity:.5; transform:scale(.9)} 70%{opacity:0; transform:scale(1.18)} 100%{opacity:0} }
+  /* gentle, slowed swirl + softer glow while idle so it feels at rest */
+  body[data-state="idle"] #orb { box-shadow:
+      0 24px 70px -22px color-mix(in srgb, var(--accent) 45%, transparent),
+      0 0 44px 0 color-mix(in srgb, var(--accent-2) 26%, transparent),
+      inset 0 2px 6px rgba(255,255,255,.45), inset 0 -20px 40px rgba(0,0,0,.25); }
+  body[data-state="idle"] #orb::before { opacity: .5; animation-duration: 16s; }
+  @keyframes ringSoft { 0%{opacity:.32; transform:scale(.92)} 70%{opacity:0; transform:scale(1.14)} 100%{opacity:0} }
 
   #status { font-size: 14px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
   #status b { color: color-mix(in srgb, var(--accent) 75%, #fff); font-weight: 600; }
@@ -187,7 +196,11 @@ export function renderHtml(instanceId) {
     transition: transform .12s ease, box-shadow .3s ease;
   }
   #mic:active { transform: scale(.94); }
-  #mic.live { color: #fff; background: radial-gradient(120% 120% at 30% 25%, #ff9b95, #f0534f 45%, #c1322f); box-shadow: 0 10px 28px -6px rgba(220,70,66,.6), inset 0 1px 1px rgba(255,255,255,.4); }
+  /* the bottom mic is only the inviting "start" affordance — it hides once live */
+  body:not([data-state="idle"]) #deck { display: none; }
+  /* discreet end-session control, tucked in the corner, only while live */
+  #end { display: none; }
+  body:not([data-state="idle"]) #end { display: grid; }
   .hint { position: relative; z-index: 2; flex: none; font-size: 11px; color: var(--muted); text-align: center; padding: 0 16px 12px; letter-spacing: .2px; }
 </style>
 </head>
@@ -199,6 +212,7 @@ export function renderHtml(instanceId) {
     <div id="topbar">
       <div class="wordmark"><b>Anya</b><span>voice</span></div>
       <span id="spacer"></span>
+      <button id="end" class="ghost" title="End session">&#x2715;</button>
       <button id="spk" class="ghost" title="Mute voice">&#x1F50A;</button>
     </div>
 
@@ -239,6 +253,7 @@ export function renderHtml(instanceId) {
     ovTitle: document.getElementById("ov-title"),
     ovMsg: document.getElementById("ov-msg"),
     mic: document.getElementById("mic"),
+    end: document.getElementById("end"),
     spk: document.getElementById("spk"),
     hint: document.getElementById("hint"),
   };
@@ -319,7 +334,7 @@ export function renderHtml(instanceId) {
     el.orbWrap.appendChild(p);
     setTimeout(function () { p.remove(); }, dur * 1000 + 200);
   }
-  setInterval(spawnParticle, 900);
+  setInterval(function () { if (state !== "idle") spawnParticle(); }, 900);
 
   // ---- mic + audio-reactive level ----
   async function startMic() {
@@ -443,12 +458,12 @@ export function renderHtml(instanceId) {
       showOverlay("Microphone blocked",
         "Couldn't access the microphone (" + (e && e.name || "error") + "). You can still type to Anya below.");
     }
-    live = true; el.mic.classList.add("live"); el.mic.title = "Stop"; el.mic.innerHTML = "&#x23F9;";
+    live = true;
     if (SR) { recog = buildRecognition(); try { recog.start(); } catch (e) {} setState("listening"); }
     else { setState("idle", "Voice not supported"); el.hint.textContent = "Speech recognition isn't supported in this browser."; }
   }
   function stopLive() {
-    live = false; busy = false; el.mic.classList.remove("live"); el.mic.title = "Start"; el.mic.innerHTML = "&#x1F3A4;";
+    live = false; busy = false;
     if (recog) { try { recog.onend = null; recog.stop(); } catch (e) {} recog = null; }
     stopSpeaking();
     stopMic(); setState("idle"); caption("");
@@ -461,6 +476,7 @@ export function renderHtml(instanceId) {
   }
 
   el.mic.addEventListener("click", function () { live ? stopLive() : startLive(); });
+  el.end.addEventListener("click", stopLive);
   el.orb.addEventListener("click", function () { if (state === "speaking") stopSpeaking(); });
   el.spk.addEventListener("click", function () {
     speakMuted = !speakMuted; el.spk.classList.toggle("off", speakMuted);
