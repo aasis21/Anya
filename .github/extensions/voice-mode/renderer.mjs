@@ -365,7 +365,7 @@ export function renderHtml(instanceId) {
         // reply short and hand the floor back. echoCancellation keeps Anya's own
         // TTS from tripping this; we require sustained energy to avoid blips.
         if (state === "speaking" && !speakMuted && rms > 0.07) {
-          if (++bargeFrames >= 8) { bargeFrames = 0; stopSpeaking(); }
+          if (++bargeFrames >= 8) { bargeFrames = 0; bargeCancel(); }
         } else { bargeFrames = 0; }
         levelRAF = requestAnimationFrame(loop);
       };
@@ -404,47 +404,119 @@ export function renderHtml(instanceId) {
   function pauseRecog() { if (recog) { try { recog.stop(); } catch (e) {} } }
   function resumeRecog() { if (live && recog && !busy) { try { recog.start(); } catch (e) {} } }
 
-  // ---- TTS (with barge-in) ----
-  var speakResolve = null;
-  function finishSpeak() { if (speakResolve) { var r = speakResolve; speakResolve = null; r(); } }
-  function stopSpeaking() { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {} finishSpeak(); }
-  function speak(text) {
+  // ---- TTS queue (ordered, with barge-in) ----
+  // Sentences are enqueued as they stream in and spoken back-to-back, so Anya
+  // starts talking before the full reply has arrived.
+  var speakQueue = [];
+  var speaking = false;
+  var speakDoneResolve = null;
+  function settleSpeakDone() { if (speakDoneResolve && !speaking && !speakQueue.length) { var r = speakDoneResolve; speakDoneResolve = null; r(); } }
+  function enqueueSpeak(text) {
+    text = (text || "").trim();
+    if (speakMuted || !text || !window.speechSynthesis) return;
+    speakQueue.push(text);
+    if (!speaking) playNext();
+  }
+  function playNext() {
+    if (!speakQueue.length) { speaking = false; settleSpeakDone(); return; }
+    speaking = true;
+    var text = speakQueue.shift();
+    try {
+      var u = new SpeechSynthesisUtterance(text); u.rate = 1.02; u.pitch = 1.0;
+      u.onend = playNext; u.onerror = playNext;
+      window.speechSynthesis.speak(u);
+    } catch (e) { playNext(); }
+  }
+  function stopSpeaking() {
+    speakQueue.length = 0; speaking = false;
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+    settleSpeakDone();
+  }
+  function waitForSpeech() {
     return new Promise(function (resolve) {
-      speakResolve = resolve;
-      if (speakMuted || !text || !window.speechSynthesis) return finishSpeak();
-      try {
-        window.speechSynthesis.cancel();
-        var u = new SpeechSynthesisUtterance(text); u.rate = 1.02; u.pitch = 1.0;
-        u.onend = finishSpeak; u.onerror = finishSpeak; window.speechSynthesis.speak(u);
-      } catch (e) { finishSpeak(); }
+      if (!speaking && !speakQueue.length) return resolve();
+      speakDoneResolve = resolve;
     });
   }
 
-  // ---- turn round-trip ----
+  // Pull whole sentences out of a streaming buffer; return the trailing partial.
+  function findSentenceEnd(s) {
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (c === "\\n") return i;
+      if (c === "." || c === "!" || c === "?") {
+        var n = s.charAt(i + 1);
+        if (n === "" || n === " " || n === "\\n" || n === '"' || n === "'" || n === ")") return i;
+      }
+    }
+    return -1;
+  }
+  function flushSentences(buf) {
+    var idx, guard = 0;
+    while ((idx = findSentenceEnd(buf)) > -1 && guard++ < 40) {
+      var s = buf.slice(0, idx + 1).trim();
+      if (s) enqueueSpeak(s);
+      buf = buf.slice(idx + 1).replace(/^\s+/, "");
+    }
+    return buf;
+  }
+
+  // barge-in / interrupt: stop talking AND cut the in-flight turn short
+  var activeCtrl = null;
+  function bargeCancel() { if (activeCtrl) { try { activeCtrl.abort(); } catch (e) {} } stopSpeaking(); }
+
+  // ---- turn round-trip (streaming) ----
   async function sendTurn(text) {
     if (busy) return;
     busy = true; pauseRecog(); setState("thinking");
     caption('<span class="you">' + escapeHtml(text) + "</span>");
-    var reply = "";
-    var ctrl = new AbortController();
-    var to = setTimeout(function () { ctrl.abort(); }, 45000);
+
+    var ctrl = new AbortController(); activeCtrl = ctrl;
+    var to = setTimeout(function () { ctrl.abort(); }, 65000);
+    var full = "", pending = "", firstChunk = true, errored = "";
     try {
       var resp = await fetch("/turn", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text }), signal: ctrl.signal,
       });
-      var data = await resp.json();
-      reply = (data && data.reply) || (data && data.error) || "";
+      var ct = resp.headers.get("content-type") || "";
+      if (!resp.ok || ct.indexOf("text/event-stream") < 0) {
+        var data = await resp.json().catch(function () { return null; });
+        full = (data && (data.reply || data.error)) || "I couldn't reach Anya just now.";
+        caption("<span>" + escapeHtml(full) + "</span>"); setState("speaking"); enqueueSpeak(full);
+      } else {
+        var reader = resp.body.getReader(), dec = new TextDecoder(), sseBuf = "";
+        while (true) {
+          var chunk = await reader.read();
+          if (chunk.done) break;
+          sseBuf += dec.decode(chunk.value, { stream: true });
+          var frames = sseBuf.split("\\n\\n"); sseBuf = frames.pop();
+          for (var f = 0; f < frames.length; f++) {
+            var line = frames[f]; var p = line.indexOf("data:");
+            if (p < 0) continue;
+            var msg; try { msg = JSON.parse(line.slice(p + 5).trim()); } catch (e) { continue; }
+            if (msg.delta) {
+              if (firstChunk) { firstChunk = false; setState("speaking"); }
+              full += msg.delta; pending += msg.delta;
+              caption("<span>" + escapeHtml(full) + "</span>");
+              pending = flushSentences(pending);
+            }
+            if (msg.error) errored = msg.error;
+            if (msg.done) { if (pending.trim()) { enqueueSpeak(pending.trim()); pending = ""; } }
+          }
+        }
+        if (pending.trim()) { enqueueSpeak(pending.trim()); pending = ""; }
+        if (!full && errored) { full = "Sorry, something went wrong."; setState("speaking"); enqueueSpeak(full); }
+      }
+      await waitForSpeech();
     } catch (e) {
-      reply = (e && e.name === "AbortError")
-        ? "That took too long — I'm still here, try again."
-        : "I couldn't reach Anya just now.";
+      if (!(e && e.name === "AbortError")) {
+        var m = "I couldn't reach Anya just now.";
+        caption("<span>" + escapeHtml(m) + "</span>"); setState("speaking"); enqueueSpeak(m);
+        await waitForSpeech();
+      }
     } finally {
-      clearTimeout(to);
-    }
-    try {
-      if (reply) { caption("<span>" + escapeHtml(reply) + "</span>"); setState("speaking"); await speak(reply); }
-    } finally {
+      clearTimeout(to); activeCtrl = null;
       // Always release the lock and hand the mic back, even if anything above threw.
       busy = false;
       if (live) { setState("listening"); resumeRecog(); } else setState("idle");
@@ -465,7 +537,7 @@ export function renderHtml(instanceId) {
   function stopLive() {
     live = false; busy = false;
     if (recog) { try { recog.onend = null; recog.stop(); } catch (e) {} recog = null; }
-    stopSpeaking();
+    bargeCancel();
     stopMic(); setState("idle"); caption("");
   }
 
@@ -477,7 +549,7 @@ export function renderHtml(instanceId) {
 
   el.mic.addEventListener("click", function () { live ? stopLive() : startLive(); });
   el.end.addEventListener("click", stopLive);
-  el.orb.addEventListener("click", function () { if (state === "speaking") stopSpeaking(); });
+  el.orb.addEventListener("click", function () { if (state === "speaking") bargeCancel(); });
   el.spk.addEventListener("click", function () {
     speakMuted = !speakMuted; el.spk.classList.toggle("off", speakMuted);
     el.spk.innerHTML = speakMuted ? "&#x1F507;" : "&#x1F50A;";

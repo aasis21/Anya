@@ -57,11 +57,19 @@ async function handleTurn(req, res) {
     }
 
     const text = (payload?.text || "").toString().trim();
-    if (!text) {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ reply: "" }));
-        return;
-    }
+
+    // Stream the reply back as Server-Sent Events so the client can speak each
+    // sentence as soon as it lands, instead of waiting for the whole answer.
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+    });
+    const sse = (obj) => {
+        try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
+    };
+
+    if (!text) { sse({ done: true }); res.end(); return; }
 
     const prompt =
         "[Anya voice mode] You are in a real-time spoken conversation. The user " +
@@ -70,15 +78,43 @@ async function handleTurn(req, res) {
         "markdown, lists, headings, or code blocks.\n\n" +
         `User said: "${text}"`;
 
+    let unsubs = [];
+    let settled = false;
+    let started = false;
+    let gotText = false;
+    const cleanup = () => { for (const u of unsubs) { try { u(); } catch {} } unsubs = []; };
+    const finish = (extra) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        sse({ done: true, ...(extra || {}) });
+        try { res.end(); } catch {}
+    };
+    const timer = setTimeout(() => finish(gotText ? {} : { error: "timeout" }), 60000);
+
     try {
+        unsubs.push(
+            sessionRef.on("assistant.turn_start", () => { started = true; }),
+            sessionRef.on("assistant.message_start", () => { started = true; }),
+            sessionRef.on("assistant.message_delta", (ev) => {
+                const d = ev?.data?.deltaContent || "";
+                if (d) { started = true; gotText = true; sse({ delta: d }); }
+            }),
+            // Fallback for non-streaming models: speak the whole message at once.
+            sessionRef.on("assistant.message", (ev) => {
+                if (gotText) return;
+                const full = extractReply(ev);
+                if (full) { gotText = true; sse({ delta: full }); }
+            }),
+            sessionRef.on("session.error", (ev) => finish({ error: ev?.data?.message || "error" })),
+            sessionRef.on("session.idle", () => { if (started) finish(); }),
+        );
+        req.on("close", () => finish());
         sessionRef?.log?.(`voice turn: "${text}"`, { ephemeral: true });
-        const response = await sessionRef.sendAndWait({ prompt }, 40000);
-        const reply = extractReply(response) || "Sorry, I didn't catch that.";
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ reply }));
+        await sessionRef.send({ prompt });
     } catch (err) {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: `Agent error: ${err?.message || err}` }));
+        finish({ error: `Agent error: ${err?.message || err}` });
     }
 }
 
