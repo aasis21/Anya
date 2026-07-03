@@ -3503,8 +3503,8 @@ export class AnyaApp extends LitElement {
                     <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('autoSpeak', !this.speechSettings.autoSpeak); }}>
                       <span class="header-menu-icon"></span> Auto-speak${this.speechSettings.autoSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
-                    <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('streamSpeak', !this.speechSettings.streamSpeak); }}>
-                      <span class="header-menu-icon"></span> Stream${this.speechSettings.streamSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
+                    <button class="header-menu-item sub" @click=${() => { this.updateSpeechSetting('streamSpeak', !this.speechSettings.streamSpeak); }} title=${this.speechSettings.streamSpeak ? 'Speaks sentence-by-sentence as the reply is generated' : 'Speaks the full reply once it finishes generating'}>
+                      <span class="header-menu-icon"></span> Speak live${this.speechSettings.streamSpeak ? html` <span class="header-menu-check">✓</span>` : nothing}
                     </button>
                     <span class="header-menu-item sub">
                       <span class="header-menu-icon"></span> Speed
