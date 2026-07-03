@@ -2,12 +2,26 @@
 
 > github copilot for your browser. powered by the copilot sdk.
 
+**[Site](https://aasis21.github.io/Anya/) · [Install](#install) · MIT**
+
 Anya is an MV3 sidebar extension for any Chromium-based browser — Edge, Chrome,
 Chromium, Brave, Vivaldi, Arc — that talks to a local Node bridge wrapping
 [`@github/copilot-sdk`]. On top of Copilot's standard tools (files, shell,
 sub-agents, MCP), Anya adds browser-native powers: it reads your tabs, searches
 bookmarks, checks history, drives pages via Playwright, and lets you right-click
 anything on a page to attach it as context.
+
+<p align="center">
+  <img src="docs/assets/hero.webp" width="820" alt="Anya's sidebar open on its own site, answering a question about how Anya works." />
+</p>
+
+<table>
+<tr>
+<td width="33%"><img src="docs/assets/summarize.webp" width="260" alt="Anya summarizing a GitHub pull request." /><br/><sub><b>Summarize a PR.</b> Reads the diff tab, drafts the review.</sub></td>
+<td width="33%"><img src="docs/assets/review.webp" width="260" alt="Anya drafting a code review comment." /><br/><sub><b>Draft a review comment.</b> You approve before it posts.</sub></td>
+<td width="33%"><img src="docs/assets/bookmark.webp" width="260" alt="Anya filing a pull request into a new bookmarks folder." /><br/><sub><b>Organize bookmarks.</b> "File this under Code Reviews" — done.</sub></td>
+</tr>
+</table>
 
 ```
 ┌────────────────────┐    JSON frames    ┌────────────────────┐

@@ -952,3 +952,61 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
     transition-duration: 0.01ms !important;
   }
 }
+
+    /* ---------- real product screenshots ---------- */
+    .gallery-section {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: clamp(60px, 10vw, 100px) var(--pad-x) clamp(80px, 12vw, 140px);
+    }
+    .shot {
+      position: relative;
+      border-radius: 16px;
+      border: 1px solid var(--rule);
+      overflow: hidden;
+      background: var(--ink);
+      box-shadow: 0 40px 110px -40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+    }
+    .shot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      pointer-events: none;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .shot img { display: block; width: 100%; height: auto; }
+    .shot-glow {
+      position: absolute;
+      inset: -2px;
+      border-radius: 18px;
+      pointer-events: none;
+      z-index: -1;
+      filter: blur(30px);
+      opacity: 0.45;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    }
+
+    .hero-shot { margin-top: 56px; animation: fade-up 1s ease-out 0.7s both; }
+    .hero-shot .shot { box-shadow: 0 55px 140px -36px rgba(0, 0, 0, 0.65), 0 0 90px -30px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 26px;
+    }
+    .gallery figure { margin: 0; }
+    .gallery figcaption {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--bone-dim);
+      margin-top: 16px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .gallery figcaption b { color: var(--bone); font-weight: 600; font-size: 14px; }
+
+    @media (max-width: 760px) {
+      .gallery { grid-template-columns: 1fr; }
+    }
