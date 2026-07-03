@@ -91,13 +91,16 @@ copilot.onEvent((event) => {
       });
       break;
     case 'permission-request':
-      log('→ permission-request', event.requestId, event.kind);
+      log('→ permission-request', event.requestId, event.kind, event.tier);
       transport.send({
         type: 'permission-request',
         requestId: event.requestId,
         chatId: event.chatId,
         toolName: event.toolName,
         kind: event.kind,
+        tier: event.tier,
+        preview: event.preview,
+        detail: event.detail,
         arguments: event.arguments,
       });
       break;

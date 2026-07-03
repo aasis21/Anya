@@ -808,15 +808,20 @@ export const sidebarStyles = css`
     /* ── Approval banner ────────────────────────────────── */
     .approval-banner {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       padding: 8px 12px;
-      background: var(--bg-soft);
-      border: 1px solid #d4a017;
+      background: color-mix(in srgb, var(--warning) 9%, var(--bg-soft));
+      border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
       border-radius: 8px;
       margin: 0 8px 6px;
       animation: attachMenuIn 0.15s ease-out;
     }
+    .approval-banner.high-risk {
+      background: color-mix(in srgb, var(--error) 10%, var(--bg-soft));
+      border-color: color-mix(in srgb, var(--error) 50%, transparent);
+    }
+    .approval-head { display: flex; align-items: center; gap: 8px; }
     .approval-icon { font-size: 16px; flex-shrink: 0; }
     .approval-info {
       flex: 1;
@@ -839,10 +844,54 @@ export const sidebarStyles = css`
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
+    .approval-banner.high-risk .approval-kind { color: var(--error); font-weight: 600; }
+    /* the command/args/diff being approved — the user must see what they allow */
+    .approval-preview {
+      display: block;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 6px 9px;
+      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--bg-rule);
+      color: var(--fg);
+    }
+    .approval-detail { margin: 0; }
+    .approval-detail > summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 10.5px;
+      color: var(--fg-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .approval-detail > summary::-webkit-details-marker { display: none; }
+    .approval-detail[open] > summary { color: var(--accent); }
+    .approval-detail pre {
+      margin: 6px 0 0;
+      padding: 8px 9px;
+      max-height: 160px;
+      overflow: auto;
+      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--bg-rule);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--fg-dim);
+    }
+    .approval-actions { display: flex; gap: 7px; }
     .approval-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       font-size: 11px;
       font-family: inherit;
-      padding: 3px 10px;
+      padding: 4px 11px;
       border-radius: 6px;
       cursor: pointer;
       border: 1px solid var(--bg-rule);
@@ -853,21 +902,26 @@ export const sidebarStyles = css`
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
+      font-weight: 600;
     }
     .approval-btn.approve:hover { filter: brightness(1.15); }
+    .approval-btn.approve.high-risk { background: var(--error); border-color: var(--error); }
     .approval-btn.deny {
-      background: var(--bg);
-      color: var(--fg-dim);
+      background: transparent;
+      color: var(--error);
+      border-color: color-mix(in srgb, var(--error) 45%, transparent);
+      font-weight: 600;
     }
-    .approval-btn.deny:hover { background: var(--bg-bubble); color: var(--fg); }
+    .approval-btn.deny:hover { background: color-mix(in srgb, var(--error) 14%, transparent); }
 
-    /* ── Approval toggle in tools panel ─────────────────── */
-    .tools-approval-row {
-      padding: 4px 8px 2px;
-      border-bottom: 1px solid var(--bg-rule);
+    /* ── Autopilot pill (composer bar) ──────────────────── */
+    .autopilot-pill.on {
+      color: var(--warning);
+      border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+      background: color-mix(in srgb, var(--warning) 12%, transparent);
     }
-    .approval-toggle .tool-desc {
-      font-style: italic;
+    .autopilot-pill:not(.on) {
+      color: var(--fg-dim);
     }
     .attach-menu-item.selected { color: var(--accent); font-weight: 500; }
     .ac-popup {

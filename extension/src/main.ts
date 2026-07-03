@@ -354,7 +354,10 @@ export class AnyaApp extends LitElement {
   // Approval mode: true = auto-approve all, false = ask user for write tools
   @state() private autoApprove = true;
   /** Pending permission requests from the bridge, keyed by requestId. */
-  private pendingApprovals = new Map<string, { chatId: string; toolName: string; kind: string; args?: unknown }>();
+  private pendingApprovals = new Map<string, {
+    chatId: string; toolName: string; kind: string; tier: 'write' | 'high-risk';
+    preview?: string; detail?: string; args?: unknown;
+  }>();
   /** Client-side queue for prompts sent while streaming. Drained in finishStream. */
   private pendingQueue: Array<{ chatId: string; text: string; ctx: ContextAttachment[] }> = [];
 
@@ -1650,11 +1653,17 @@ export class AnyaApp extends LitElement {
         }
         break;
       case 'permission-request': {
-        const req = f as unknown as { requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
+        const req = f as unknown as {
+          requestId: string; chatId: string; toolName: string; kind: string;
+          tier?: 'write' | 'high-risk'; preview?: string; detail?: string; arguments?: unknown;
+        };
         this.pendingApprovals.set(req.requestId, {
           chatId: req.chatId,
           toolName: req.toolName,
           kind: req.kind,
+          tier: req.tier ?? 'write',
+          preview: req.preview,
+          detail: req.detail,
           args: req.arguments,
         });
         this.requestUpdate();
@@ -3179,17 +3188,34 @@ export class AnyaApp extends LitElement {
       ([, v]) => v.chatId === this.currentChatId,
     );
     if (entries.length === 0) return nothing;
-    return entries.map(([id, req]) => html`
-      <div class="approval-banner">
-        <span class="approval-icon">⚠️</span>
-        <span class="approval-info">
-          <span class="approval-tool">${formatToolDisplayName(req.toolName)}</span>
-          <span class="approval-kind">${req.kind}</span>
-        </span>
-        <button class="approval-btn approve" @click=${() => this.respondToApproval(id, true)}>Allow</button>
-        <button class="approval-btn deny" @click=${() => this.respondToApproval(id, false)}>Deny</button>
+    return entries.map(([id, req]) => {
+      const highRisk = req.tier === 'high-risk';
+      const detail = req.detail && req.detail !== req.preview ? req.detail : undefined;
+      return html`
+      <div class="approval-banner ${highRisk ? 'high-risk' : ''}">
+        <div class="approval-head">
+          <span class="approval-icon">${highRisk ? '⛔' : '⚠️'}</span>
+          <span class="approval-info">
+            <span class="approval-tool">${formatToolDisplayName(req.toolName)}</span>
+            <span class="approval-kind">${highRisk ? 'high-risk · ' : ''}${req.kind}</span>
+          </span>
+        </div>
+        ${req.preview ? html`
+          <code class="approval-preview">${req.preview}</code>
+        ` : nothing}
+        ${detail ? html`
+          <details class="approval-detail">
+            <summary>Show details</summary>
+            <pre>${detail}</pre>
+          </details>
+        ` : nothing}
+        <div class="approval-actions">
+          <button class="approval-btn approve ${highRisk ? 'high-risk' : ''}" @click=${() => this.respondToApproval(id, true)}>✓ Allow</button>
+          <button class="approval-btn deny" @click=${() => this.respondToApproval(id, false)}>✕ Deny</button>
+        </div>
       </div>
-    `);
+    `;
+    });
   }
 
   // ----- render ----------------------------------------------------------
@@ -3555,22 +3581,7 @@ export class AnyaApp extends LitElement {
         </div>
         <div class="tools-hint">These are Anya's built-in browser tools — on top of any MCP servers loaded from your workspace.</div>
         <div class="tools-hint">Tool changes apply to new chats. Existing chats keep the tool set they started with.</div>
-        <div class="tools-approval-row">
-          <label class="tool-item approval-toggle">
-            <span class="tool-switch">
-              <input
-                type="checkbox"
-                .checked=${!this.autoApprove}
-                @change=${() => { this.autoApprove = !this.autoApprove; this.persistAutoApprove(); }}
-              />
-              <span class="tool-slider"></span>
-            </span>
-            <span class="tool-info">
-              <span class="tool-name">Require approval for write tools</span>
-              <span class="tool-desc">${this.autoApprove ? 'Auto-approving all tools' : 'Will ask before write/shell/MCP tools run'}</span>
-            </span>
-          </label>
-        </div>
+        <div class="tools-hint">Auto-approve is now the ⚡/🛡 pill next to this button in the composer bar.</div>
         <div class="tools-groups">
           ${TOOL_GROUPS.map((group) => {
             const collapsed = this.toolGroupCollapsed.has(group.id);
@@ -3921,6 +3932,13 @@ export class AnyaApp extends LitElement {
             <button class="composer-pill-btn" @click=${() => this.toggleToolsPanel()} title="Configure tools">
               🔧 ${TOOL_GROUPS.reduce((n, g) => n + g.tools.filter((t) => !this.disabledTools.has(t.name)).length, 0)}/${TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0)}
             </button>
+            <button
+              class="composer-pill-btn autopilot-pill ${this.autoApprove ? 'on' : ''}"
+              @click=${() => { this.autoApprove = !this.autoApprove; this.persistAutoApprove(); }}
+              title=${this.autoApprove
+                ? 'Auto-approve is ON — write/shell/MCP tools run without asking (high-risk actions still always ask). Click to require approval.'
+                : 'Ask first is ON — write/shell/MCP tools wait for your approval. Click to auto-approve.'}
+            >${this.autoApprove ? '⚡ Auto-approve' : '🛡 Ask first'}</button>
             <span class="composer-spacer"></span>
             ${this.toolsPanelOpen ? this.renderToolsPanel() : nothing}
             ${this.speechOutput.supported ? html`

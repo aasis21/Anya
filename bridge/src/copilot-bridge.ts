@@ -37,6 +37,15 @@ function stripFrontmatter(raw: string): string {
   return m ? raw.slice(m[0].length).replace(/^\s+/, '') : raw;
 }
 
+/** JSON.stringify that never throws (circular refs, BigInt, etc.) on approval-preview args. */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function loadAgentPrompt(): string {
   try {
     return stripFrontmatter(readFileSync(AGENT_PROFILE_PATH, 'utf8'));
@@ -57,8 +66,18 @@ export type BridgeEvent =
   | { type: 'tool-start'; chatId: string; toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string }
   | { type: 'tool-progress'; chatId: string; toolCallId: string; message: string }
   | { type: 'tool-partial-result'; chatId: string; toolCallId: string; partialOutput: string }
-  | { type: 'tool-complete'; chatId: string; toolCallId: string; success: boolean; resultPreview?: string; error?: string }
-  | { type: 'permission-request'; requestId: string; chatId: string; toolName: string; kind: string; arguments?: unknown };
+  | { type: 'tool-complete'; chatId: string; toolCallId: string; success: boolean; resultPreview?: string; resultFull?: string; resultPreviewTruncated?: boolean; error?: string }
+  | {
+      type: 'permission-request';
+      requestId: string;
+      chatId: string;
+      toolName: string;
+      kind: string;
+      tier: 'write' | 'high-risk';
+      preview?: string;
+      detail?: string;
+      arguments?: unknown;
+    };
 
 export type BridgeEventHandler = (event: BridgeEvent) => void;
 
@@ -136,22 +155,94 @@ export class CopilotBridge {
     }
   }
 
-  /** Permission handler: auto-approves reads, asks user for write/shell/mcp. */
+  /**
+   * Classify an SDK permission request into a risk tier and derive a
+   * human-readable name + preview for the approval banner. Tiering is keyed
+   * off `request.kind` (the SDK's own discriminant) so it covers file edits,
+   * shell commands, MCP tool calls, and Anya's own browser tools uniformly —
+   * a new MCP tool or a new Anya tool is tiered correctly with no code
+   * change here, because it arrives as one of the SDK's existing kinds.
+   */
+  private classifyPermission(request: PermissionRequest): {
+    tier: 'read' | 'write' | 'high-risk';
+    toolName: string;
+    preview?: string;
+    detail?: string;
+  } {
+    // The SDK's PermissionRequest only strongly types `kind`/`toolCallId`;
+    // every other field is `[key: string]: unknown` and varies by kind.
+    const req = request as PermissionRequest & Record<string, unknown>;
+    const toolCallId = String(req.toolCallId ?? '');
+    const toolName = String(req['toolTitle'] ?? req['toolName'] ?? (toolCallId || req.kind));
+
+    if (req.kind === 'read') {
+      return { tier: 'read', toolName };
+    }
+
+    let preview: string | undefined;
+    let detail: string | undefined;
+    if (req.kind === 'shell') {
+      preview = typeof req['fullCommandText'] === 'string' ? (req['fullCommandText'] as string) : undefined;
+    } else if (req.kind === 'write') {
+      preview = typeof req['fileName'] === 'string' ? (req['fileName'] as string) : undefined;
+      detail = typeof req['diff'] === 'string' ? (req['diff'] as string) : undefined;
+    } else if (req.kind === 'mcp') {
+      const server = req['serverName'];
+      const tool = req['toolName'];
+      preview = [server, tool].filter(Boolean).join(' · ') || undefined;
+      detail = req['args'] !== undefined ? safeStringify(req['args']) : undefined;
+    } else if (req.kind === 'url') {
+      preview = typeof req['url'] === 'string' ? (req['url'] as string) : undefined;
+    } else if (req.kind === 'custom-tool') {
+      preview = toolName;
+      detail = req['args'] !== undefined ? safeStringify(req['args']) : undefined;
+    }
+    if (!detail && typeof req['intention'] === 'string') {
+      detail = req['intention'] as string;
+    }
+
+    // Escalation rules: a small allowlist of destructive shapes that always
+    // ask, regardless of autoApprove. `args` shapes are best-effort — Anya's
+    // own tools (manage_bookmarks, drive_context) pass structured args;
+    // MCP tools are judged by name + the request's own readOnly flag.
+    const args = req['args'] as Record<string, unknown> | undefined;
+    const argv = Array.isArray(req['argv']) ? (req['argv'] as unknown[]).map(String) : undefined;
+    const isDestructiveBookmarkRemove =
+      toolCallId.includes('manage_bookmarks') && args?.op === 'remove' && args?.recursive === true;
+    const isContextMutation =
+      toolCallId.includes('drive_context') && !!argv?.some((a) => /^(set|clear|remove|delete)/i.test(a));
+    const isDestructiveMcp =
+      req.kind === 'mcp' && req['readOnly'] !== true && /delete|remove|drop|purge/i.test(toolName);
+    const highRisk = isDestructiveBookmarkRemove || isContextMutation || isDestructiveMcp;
+
+    return { tier: highRisk ? 'high-risk' : 'write', toolName, preview, detail };
+  }
+
+  /**
+   * Permission handler: read tier auto-approves always; write tier
+   * auto-approves when the user's Auto-approve toggle is on; high-risk tier
+   * ALWAYS asks, ignoring Auto-approve — the one hard floor in the system.
+   */
   private makePermissionHandler(chatId: string) {
     return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
-      // Always auto-approve read-only requests.
-      if (request.kind === 'read' || this.autoApprove) {
+      const classified = this.classifyPermission(request);
+      if (classified.tier === 'read') {
         return { kind: 'approved' };
       }
-      // Write/shell/mcp/custom-tool: ask the user.
+      if (classified.tier === 'write' && this.autoApprove) {
+        return { kind: 'approved' };
+      }
       const requestId = `perm-${++this.permissionSeq}`;
-      log('permission request:', requestId, request.kind, request.toolCallId);
+      log('permission request:', requestId, request.kind, classified.tier, classified.toolName);
       this.emit({
         type: 'permission-request',
         requestId,
         chatId,
-        toolName: String(request.toolCallId ?? request.kind),
+        toolName: classified.toolName,
         kind: request.kind,
+        tier: classified.tier,
+        preview: classified.preview,
+        detail: classified.detail,
         arguments: request,
       });
       return new Promise<PermissionRequestResult>((resolve) => {
