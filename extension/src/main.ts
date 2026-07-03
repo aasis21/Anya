@@ -250,6 +250,20 @@ function trunc(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
+type ModelLoadState = 'idle' | 'loading' | 'ready' | 'error';
+type ComposerNoticeLevel = 'info' | 'error';
+
+interface ComposerNotice {
+  message: string;
+  level: ComposerNoticeLevel;
+}
+
+interface MicPermissionResult {
+  granted: boolean;
+  reason?: string;
+  message?: string;
+}
+
 @customElement('anya-app')
 export class AnyaApp extends LitElement {
   static styles = sidebarStyles;
@@ -301,11 +315,11 @@ export class AnyaApp extends LitElement {
   // Field-assist: tracks the text field the user last focused on a page.
   // `focusedField` is set silently on focus (powers Insert/Append buttons).
   @state() private focusedField: FocusedField | null = null;
-  private fieldBlurTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Context attachments: collected via "Add to Anya" right-click, @mentions, 📎 menu, paste.
   // Stacked as chips above the composer, injected into prompts on send.
   @state() private contextAttachments: ContextAttachment[] = [];
+  @state() private composerNotice: ComposerNotice | null = null;
 
   // 📎 attach menu popup
   @state() private attachMenuOpen = false;
@@ -318,8 +332,11 @@ export class AnyaApp extends LitElement {
   @state() private availableModels: Array<{ id: string; name: string; contextWindow?: number; billingMultiplier?: number }> = [];
   @state() private selectedModel = '';   // empty = SDK default ("Auto")
   @state() private modelMenuOpen = false;
+  @state() private modelLoadState: ModelLoadState = 'idle';
+  @state() private modelLoadError = '';
   // Workspace selector
   @state() private workspaceMenuOpen = false;
+  @state() private toolOutputModal: { title: string; content: string } | null = null;
 
   // Voice I/O
   @state() private speechSettings: SpeechSettings = { ...DEFAULT_SPEECH_SETTINGS };
@@ -333,6 +350,7 @@ export class AnyaApp extends LitElement {
   /** Buffer for streaming TTS — accumulates delta text until a sentence boundary. */
   private _speechBuffer = '';
   private _speechStreamingFor: string | null = null;
+  private _activeSpeechText = '';
   // Approval mode: true = auto-approve all, false = ask user for write tools
   @state() private autoApprove = true;
   /** Pending permission requests from the bridge, keyed by requestId. */
@@ -519,11 +537,17 @@ export class AnyaApp extends LitElement {
         error === 'not-allowed' ||
         error === 'service-not-allowed' ||
         error === 'audio-capture' ||
-        error === 'network';
+        error === 'network' ||
+        error.startsWith('start-failed');
       if (fatal) {
         this.isListening = false;
         if (error === 'not-allowed' || error === 'service-not-allowed') {
           this.showSpeechNotice(`Mic blocked (${error}). Allow mic for this extension, then retry.`);
+        } else if (error === 'audio-capture') {
+          this.showSpeechNotice('No microphone is available. Connect or enable one, then retry.');
+        } else if (error.startsWith('start-failed')) {
+          const detail = error.slice('start-failed'.length).replace(/^:\s*/, '');
+          this.showSpeechNotice(detail ? `Voice input could not start: ${detail}` : 'Voice input could not start.');
         } else {
           this.showSpeechNotice(`Voice error: ${error}`);
         }
@@ -547,6 +571,23 @@ export class AnyaApp extends LitElement {
     this.speechNoticeTimer = setTimeout(() => { this.speechNotice = ''; }, 5000);
   }
 
+  private showComposerNotice(message: string, level: ComposerNoticeLevel = 'error'): void {
+    this.composerNotice = { message, level };
+  }
+
+  private clearComposerNotice(): void {
+    this.composerNotice = null;
+  }
+
+  private requestAvailableModels(): void {
+    this.modelLoadState = 'loading';
+    this.modelLoadError = '';
+    if (!this.bridgeSend({ type: 'list-models' })) {
+      this.modelLoadState = 'error';
+      this.modelLoadError = 'Bridge offline — reconnect, then retry.';
+    }
+  }
+
   /**
    * Ensure the extension origin has microphone access before starting
    * recognition. The side panel can't surface the browser's permission prompt,
@@ -564,13 +605,40 @@ export class AnyaApp extends LitElement {
     return p;
   }
 
+  private micPermissionNotice(reason?: string, message?: string): string {
+    if (message) return message;
+    switch (reason) {
+      case 'denied':
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return 'Mic blocked in browser settings. Allow it for this extension, then retry.';
+      case 'not-found':
+      case 'audio-capture':
+        return 'No microphone is available. Connect or enable a mic, then retry.';
+      case 'not-readable':
+        return 'The microphone is busy or unavailable right now. Close other apps using it, then retry.';
+      case 'network':
+        return 'Speech recognition hit a network error. Check your connection and retry.';
+      case 'unsupported':
+        return 'This browser build does not support microphone capture for Anya.';
+      case 'helper-open-failed':
+        return 'Could not open the microphone permission helper window. Allow popups for the extension and retry.';
+      case 'helper-closed':
+        return 'Microphone setup was closed before access was granted.';
+      case 'helper-timeout':
+        return 'Timed out waiting for microphone permission. Retry when you are ready to grant access.';
+      default:
+        return 'Microphone access is needed for voice input.';
+    }
+  }
+
   private async requestMicPermission(): Promise<boolean> {
     // 1. Fast path: already granted for this origin.
     try {
       const st = await navigator.permissions.query({ name: 'microphone' as PermissionName });
       if (st.state === 'granted') return true;
       if (st.state === 'denied') {
-        this.showSpeechNotice('Mic blocked in browser settings. Allow it for this extension, then retry.');
+        this.showSpeechNotice(this.micPermissionNotice('denied'));
         return false;
       }
     } catch {
@@ -581,47 +649,67 @@ export class AnyaApp extends LitElement {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
       return true;
-    } catch {
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      if (name === 'NotFoundError') {
+        this.showSpeechNotice(this.micPermissionNotice('not-found'));
+        return false;
+      } else if (name === 'NotReadableError' || name === 'AbortError') {
+        this.showSpeechNotice(this.micPermissionNotice('not-readable'));
+        return false;
+      }
       /* panel can't prompt — open the helper window below */
     }
     // 3. Open the helper window that CAN show the prompt.
-    return this.openMicPermissionHelper();
+    const result = await this.openMicPermissionHelper();
+    if (!result.granted) {
+      this.showSpeechNotice(this.micPermissionNotice(result.reason, result.message));
+    }
+    return result.granted;
   }
 
   /**
    * Open the mic-permission helper window and resolve when access is granted.
    *
-   * The helper only signals *success*; failure is inferred from the window
-   * closing or the safety timeout. That lets the user retry inside the same
-   * window (deny → allow) without the side panel having already given up.
+   * The helper reports success immediately and can also stream failure reasons
+   * while staying open for a retry; if the user gives up, we fall back to the
+   * last reported reason (or close/timeout/open-failed).
    */
-  private openMicPermissionHelper(): Promise<boolean> {
+  private openMicPermissionHelper(): Promise<MicPermissionResult> {
     return new Promise((resolve) => {
       let settled = false;
       let helperWindowId: number | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let lastFailure: MicPermissionResult | null = null;
 
       const cleanup = () => {
         chrome.runtime.onMessage.removeListener(onMessage);
         chrome.windows.onRemoved.removeListener(onRemoved);
         if (timer !== undefined) clearTimeout(timer);
       };
-      const finish = (granted: boolean) => {
+      const finish = (result: MicPermissionResult) => {
         if (settled) return;
         settled = true;
         cleanup();
         // Close a still-open helper window when we give up (timeout/failure).
-        if (!granted && helperWindowId !== undefined) {
+        if (!result.granted && helperWindowId !== undefined) {
           try { chrome.windows.remove(helperWindowId); } catch { /* already gone */ }
         }
-        resolve(granted);
+        resolve(result);
       };
-      const onMessage = (msg: { type?: string; granted?: boolean }) => {
+      const onMessage = (msg: { type?: string; granted?: boolean; reason?: string; message?: string }) => {
         if (msg?.type !== 'anya-mic-permission') return;
-        if (msg.granted) finish(true);
+        if (msg.granted) finish({ granted: true });
+        else if (msg.reason || msg.message) {
+          lastFailure = {
+            granted: false,
+            reason: typeof msg.reason === 'string' ? msg.reason : undefined,
+            message: typeof msg.message === 'string' ? msg.message : undefined,
+          };
+        }
       };
       const onRemoved = (winId: number) => {
-        if (winId === helperWindowId) finish(false);
+        if (winId === helperWindowId) finish(lastFailure ?? { granted: false, reason: 'helper-closed' });
       };
 
       chrome.runtime.onMessage.addListener(onMessage);
@@ -643,7 +731,11 @@ export class AnyaApp extends LitElement {
                 level: 'warn',
                 summary: `mic helper open failed: ${chrome.runtime.lastError?.message ?? 'no window'}`,
               });
-              finish(false);
+              finish({
+                granted: false,
+                reason: 'helper-open-failed',
+                message: chrome.runtime.lastError?.message ?? 'Could not open the microphone helper window.',
+              });
               return;
             }
             helperWindowId = win.id ?? undefined;
@@ -651,12 +743,16 @@ export class AnyaApp extends LitElement {
         );
       } catch (err) {
         this.recordDebug({ kind: 'log', level: 'warn', summary: `mic helper open failed: ${err}` });
-        finish(false);
+        finish({
+          granted: false,
+          reason: 'helper-open-failed',
+          message: err instanceof Error ? err.message : String(err),
+        });
         return;
       }
 
       // Safety timeout so the mic button never hangs if the window is left open.
-      timer = setTimeout(() => finish(false), 90000);
+      timer = setTimeout(() => finish(lastFailure ?? { granted: false, reason: 'helper-timeout' }), 90000);
     });
   }
 
@@ -667,12 +763,7 @@ export class AnyaApp extends LitElement {
       return;
     }
     const granted = await this.ensureMicPermission();
-    if (!granted) {
-      if (!this.speechNotice) {
-        this.showSpeechNotice('Microphone access is needed for voice input.');
-      }
-      return;
-    }
+    if (!granted) return;
     this._speechCommitted = this.textarea?.value ?? '';
     this.speechInput.continuous = !this.speechSettings.autoSubmit;
     try {
@@ -685,16 +776,29 @@ export class AnyaApp extends LitElement {
 
   private speakMessage(text: string): void {
     if (this.isSpeaking) {
+      if (this._activeSpeechText === text) {
+        this.speechOutput.stop();
+        this.isSpeaking = false;
+        this._activeSpeechText = '';
+        this._speechBuffer = '';
+        this._speechStreamingFor = null;
+        return;
+      }
       this.speechOutput.stop();
-      this.isSpeaking = false;
-      this._speechBuffer = '';
-      this._speechStreamingFor = null;
-      return;
     }
-    this.speechOutput.onEnd = () => { this.isSpeaking = false; };
-    this.speechOutput.onError = () => { this.isSpeaking = false; };
+    this._speechBuffer = '';
+    this._speechStreamingFor = null;
+    this._activeSpeechText = text;
+    this.speechOutput.onEnd = () => {
+      this.isSpeaking = false;
+      this._activeSpeechText = '';
+    };
+    this.speechOutput.onError = () => {
+      this.isSpeaking = false;
+      this._activeSpeechText = '';
+    };
     this.isSpeaking = true;
-    this.speechOutput.speak(text);
+    this.speechOutput.speak(text, { replace: true });
   }
 
   /** Feed a delta chunk into streaming TTS. Speaks at sentence boundaries. */
@@ -705,17 +809,24 @@ export class AnyaApp extends LitElement {
 
     // Start streaming for this chat
     if (this._speechStreamingFor !== chatId) {
+      this.speechOutput.stop();
       this._speechStreamingFor = chatId;
       this._speechBuffer = '';
+      this._activeSpeechText = '';
       this.isSpeaking = true;
       this.speechOutput.onEnd = () => {
         // Only mark not-speaking if buffer is empty, stream is done, and synth queue is drained
         if (!this._speechBuffer && !this.streamingIds.has(chatId) && !this.speechOutput.speaking) {
           this.isSpeaking = false;
           this._speechStreamingFor = null;
+          this._activeSpeechText = '';
         }
       };
-      this.speechOutput.onError = () => { this.isSpeaking = false; };
+      this.speechOutput.onError = () => {
+        this.isSpeaking = false;
+        this._speechStreamingFor = null;
+        this._activeSpeechText = '';
+      };
     }
 
     this._speechBuffer += chunk;
@@ -861,6 +972,12 @@ export class AnyaApp extends LitElement {
     this.toolsPanelOpen = !this.toolsPanelOpen;
   }
 
+  private selectModel(model: string): void {
+    this.selectedModel = model;
+    this.bridgeSend({ type: 'set-model', model });
+    this.modelMenuOpen = false;
+  }
+
   private openRemoteDebugSettings(): void {
     const ua = navigator.userAgent;
     const brave = (navigator as unknown as { brave?: { isBrave?: () => unknown } }).brave;
@@ -962,7 +1079,6 @@ export class AnyaApp extends LitElement {
     this.renderRoot.removeEventListener('click', this.onRootClick);
     chrome.runtime.onMessage.removeListener(this.onPageBridgeMessage);
     chrome.runtime.onMessage.removeListener(this.onSpeechTranscript);
-    if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
     for (const timer of this.deltaFlushTimerByChat.values()) clearTimeout(timer);
     this.deltaFlushTimerByChat.clear();
     this.pendingDeltaByChat.clear();
@@ -1204,7 +1320,7 @@ export class AnyaApp extends LitElement {
     const m = c?.messages.find((x) => x.id === msgId);
     if (!c || !m || m.role !== 'user') return;
     this.msgMenuId = null;
-    void this.dispatchPrompt(chatId, m.text);
+    void this.dispatchPrompt(chatId, m.text, 'enqueue', m.contextAttachments ?? []);
   };
 
   private mutateChat(chatId: string, fn: (c: Chat) => Chat): void {
@@ -1290,6 +1406,16 @@ export class AnyaApp extends LitElement {
       if (this.searchOpen) { this.searchOpen = false; e.preventDefault(); return; }
       if (this.chatDrawerOpen) { this.chatDrawerOpen = false; e.preventDefault(); return; }
       if (this.renamingChatId) { this.renamingChatId = null; e.preventDefault(); return; }
+      if (this.sendMenuOpen) { this.sendMenuOpen = false; e.preventDefault(); return; }
+      if (this.attachMenuOpen) { this.attachMenuOpen = false; e.preventDefault(); return; }
+      if (this.modelMenuOpen) { this.modelMenuOpen = false; e.preventDefault(); return; }
+      if (this.workspaceMenuOpen) { this.workspaceMenuOpen = false; e.preventDefault(); return; }
+      if (this.toolsPanelOpen) { this.toolsPanelOpen = false; e.preventDefault(); return; }
+      if (this.currentChatId && this.streamingIds.has(this.currentChatId)) {
+        this.cancelStream(this.currentChatId);
+        e.preventDefault();
+        return;
+      }
     }
     if (e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (e.key.toLowerCase() === 'n') { e.preventDefault(); this.startNewChat(); return; }
@@ -1352,7 +1478,7 @@ export class AnyaApp extends LitElement {
           this.bridgeSend({ type: 'tool-config', disabledTools: [...this.disabledTools] });
         }
         // Request available models from the SDK.
-        this.bridgeSend({ type: 'list-models' });
+        this.requestAvailableModels();
         break;
       case 'models': {
         const models = Array.isArray(data.models) ? data.models : [];
@@ -1362,6 +1488,13 @@ export class AnyaApp extends LitElement {
           contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : undefined,
           billingMultiplier: typeof m.billingMultiplier === 'number' ? m.billingMultiplier : undefined,
         }));
+        const error = typeof data.error === 'string' ? data.error.trim() : '';
+        this.modelLoadError = error;
+        this.modelLoadState = error
+          ? 'error'
+          : this.availableModels.length > 0
+            ? 'ready'
+            : 'idle';
         // Keep selectedModel empty = "Auto" (SDK picks the best model).
         break;
       }
@@ -1462,12 +1595,19 @@ export class AnyaApp extends LitElement {
         if (!existing) break;
         const chunk = typeof data.partialOutput === 'string' ? data.partialOutput : '';
         if (!chunk) break;
-        const next = (existing.partialOutput ?? '') + chunk;
-        // Cap to avoid unbounded growth on chatty tools; tool-complete carries the canonical result.
-        const capped = next.length > 16000 ? next.slice(next.length - 16000) : next;
+        const nextFull = (existing.fullOutput ?? existing.partialOutput ?? '') + chunk;
+        const capped = nextFull.length > 16000 ? nextFull.slice(nextFull.length - 16000) : nextFull;
         this.mutateChat(chatId, (c) => ({
           ...c,
-          toolCalls: { ...c.toolCalls, [tcid]: { ...existing, partialOutput: capped } },
+          toolCalls: {
+            ...c.toolCalls,
+            [tcid]: {
+              ...existing,
+              fullOutput: nextFull,
+              partialOutput: capped,
+              partialOutputTruncated: nextFull.length > capped.length,
+            },
+          },
         }));
         break;
       }
@@ -1486,6 +1626,8 @@ export class AnyaApp extends LitElement {
               status: data.success ? 'success' : 'error',
               finishedAt: Date.now(),
               resultPreview: typeof data.resultPreview === 'string' ? data.resultPreview : undefined,
+              resultFull: typeof data.resultFull === 'string' ? data.resultFull : existing.fullOutput,
+              resultPreviewTruncated: data.resultPreviewTruncated === true,
               error: typeof data.error === 'string' ? data.error : undefined,
             },
           },
@@ -1497,7 +1639,14 @@ export class AnyaApp extends LitElement {
         break;
       case 'folder-pick-result':
         if (f.ok && typeof f.path === 'string' && f.path) {
+          this.clearComposerNotice();
           this.handleFolderPickResult(f.path);
+        } else if (this.pendingWorkspacePick) {
+          this.pendingWorkspacePick = false;
+        } else {
+          this.showComposerNotice(typeof f.error === 'string' && f.error
+            ? `Folder attach failed: ${f.error}`
+            : 'No folder was attached.');
         }
         break;
       case 'permission-request': {
@@ -2210,6 +2359,7 @@ export class AnyaApp extends LitElement {
     // Ensure we have a current chat (could happen on cold start race).
     if (!this.currentChatId) this.startNewChat();
     const chatId = this.currentChatId;
+    const priorTitle = this.chats.find((c) => c.id === chatId)?.title;
     // Clear any leftover cancel marker so deltas for THIS new turn aren't
     // filtered out by a still-pending `done` from a previously cancelled turn.
     this.cancelledChats.delete(chatId);
@@ -2224,13 +2374,15 @@ export class AnyaApp extends LitElement {
       label: a.label,
       ...(a.kind === 'image' && a.imageData ? { dataUrl: a.imageData.dataUrl } : {}),
     }));
+    const userMessageId = `u${Date.now()}`;
 
     this.appendMessage(chatId, {
-      id: `u${Date.now()}`,
+      id: userMessageId,
       role: 'user',
       text,
       ts: Date.now(),
       contextLabels: contextLabels.length ? contextLabels : undefined,
+      contextAttachments: ctxSnapshot.length ? ctxSnapshot : undefined,
     });
     if (text) this.autoTitleIfNeeded(chatId, text);
 
@@ -2255,7 +2407,22 @@ export class AnyaApp extends LitElement {
       this.pendingQueue.push({ chatId, text, ctx: ctxSnapshot });
       return;
     }
-    void this.dispatchPrompt(chatId, text, mode, ctxSnapshot);
+    void this.dispatchPrompt(chatId, text, mode, ctxSnapshot).then((ok) => {
+      if (ok) return;
+      this.deleteMessage(chatId, userMessageId);
+      if (priorTitle) {
+        this.mutateChat(chatId, (c) => (
+          c.messages.length === 0 || (c.messages.length === 1 && c.messages[0]?.id === userMessageId)
+            ? { ...c, title: priorTitle }
+            : c
+        ));
+      }
+      ta.value = text;
+      this.syncDraft(text);
+      this.contextAttachments = ctxSnapshot;
+      this.attachMenuOpen = false;
+      queueMicrotask(() => ta.focus());
+    });
   };
 
   /**
@@ -2365,11 +2532,9 @@ export class AnyaApp extends LitElement {
   ): void => {
     // Silent field tracking — powers Insert/Append buttons on bubbles.
     if (msg.type === 'anya-field-focus' && msg.field && sender.tab?.id != null) {
-      if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
       this.focusedField = { ...msg.field, tabId: sender.tab.id };
     } else if (msg.type === 'anya-field-blur') {
-      if (this.fieldBlurTimer) { clearTimeout(this.fieldBlurTimer); this.fieldBlurTimer = null; }
-      this.fieldBlurTimer = setTimeout(() => { this.focusedField = null; }, 2000);
+      this.focusedField = null;
     }
     // Context attachment — "Add to Anya" right-click or Alt+A.
     if (msg.type === 'anya-attach' && msg.attachment) {
@@ -2511,7 +2676,7 @@ export class AnyaApp extends LitElement {
     text: string,
     mode: 'enqueue' | 'immediate' = 'enqueue',
     contextChips: ContextAttachment[] = [],
-  ): Promise<void> {
+  ): Promise<boolean> {
     let prompt = text;
     try {
       // @ tokens in the text are references to attachments — they stay as-is.
@@ -2600,6 +2765,7 @@ export class AnyaApp extends LitElement {
     }
     const ok = this.bridgeSend(frame);
     if (!ok) this.pushSystem(chatId, 'bridge disconnected — waiting to reconnect…', 'error');
+    return ok;
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -2669,9 +2835,10 @@ export class AnyaApp extends LitElement {
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // Ctrl+Enter while streaming = steer (immediate); plain Enter = enqueue.
+      // Ctrl+Enter / Alt+Enter while streaming = steer (immediate); plain Enter = enqueue.
       const isStreaming = this.currentChatId && this.streamingIds.has(this.currentChatId);
-      this.send(isStreaming && e.ctrlKey ? 'immediate' : 'enqueue');
+      const immediate = isStreaming && (e.ctrlKey || e.altKey);
+      this.send(immediate ? 'immediate' : 'enqueue');
     }
   };
 
@@ -2801,7 +2968,9 @@ export class AnyaApp extends LitElement {
   private async attach(chipKind: string): Promise<void> {
     // Folder is special — opens a native OS dialog via the bridge.
     if (chipKind === 'folder') {
-      this.bridgeSend({ type: 'folder-pick' });
+      if (!this.bridgeSend({ type: 'folder-pick' })) {
+        this.showComposerNotice('Folder attach failed: bridge disconnected.');
+      }
       return;
     }
 
@@ -2813,33 +2982,43 @@ export class AnyaApp extends LitElement {
 
       if (chipKind === 'tab') {
         const tab = await this.getActiveTab().catch(() => null);
-        if (tab) {
-          const result = await this.executeTool('get_tab_content', { tabId: tab.id });
-          const text = typeof result === 'string' ? result : JSON.stringify(result);
-          const title = tab.title || tab.url || 'Page';
-          att = { kind: 'tab', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full tab · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
-        }
+        if (!tab?.id) throw new Error('No active tab found.');
+        const result = await this.executeTool('get_tab_content', { tabId: tab.id });
+        const text = typeof result === 'string' ? result : JSON.stringify(result);
+        const title = tab.title || tab.url || 'Page';
+        att = { kind: 'tab', icon: '🌐', label: title.length > 50 ? title.slice(0, 47) + '…' : title, preview: `Full tab · ${tab.url ? new URL(tab.url).hostname : ''}`, content: trunc(text), fullLength: text.length, ref: { tabId: tab.id }, pageUrl: tab.url ?? '' };
       } else if (chipKind === 'selection') {
         const result = await this.executeTool('get_selection', {});
         const text = typeof result === 'string' ? result : '';
-        if (text) {
-          att = { kind: 'selection', icon: '✂️', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
-        }
+        if (!text.trim()) throw new Error('No selection found on the active page.');
+        att = { kind: 'selection', icon: '✂️', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
       } else if (chipKind === 'url') {
         const tab = await this.getActiveTab().catch(() => null);
-        if (tab?.url) {
-          att = { kind: 'url', icon: '🔗', label: tab.url.length > 60 ? tab.url.slice(0, 57) + '…' : tab.url, preview: tab.url, content: tab.url, pageUrl: tab.url };
-        }
+        if (!tab?.url) throw new Error('No active tab URL is available.');
+        att = { kind: 'url', icon: '🔗', label: tab.url.length > 60 ? tab.url.slice(0, 57) + '…' : tab.url, preview: tab.url, content: tab.url, pageUrl: tab.url };
       } else if (chipKind === 'title') {
         const tab = await this.getActiveTab().catch(() => null);
-        if (tab?.title) {
-          att = { kind: 'title', icon: '📌', label: tab.title, preview: tab.title, content: tab.title, pageUrl: tab.url ?? '' };
-        }
+        if (!tab?.title) throw new Error('No active tab title is available.');
+        att = { kind: 'title', icon: '📌', label: tab.title, preview: tab.title, content: tab.title, pageUrl: tab.url ?? '' };
       } else if (chipKind === 'clipboard') {
-        const text = await navigator.clipboard.readText().catch(() => '');
-        if (text) {
-          att = { kind: 'clipboard', icon: '📋', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
+        if (!navigator.clipboard?.readText) {
+          throw new Error('Clipboard read is not supported in this browser context.');
         }
+        let text = '';
+        try {
+          text = await navigator.clipboard.readText();
+        } catch (err) {
+          const name = err instanceof DOMException ? err.name : '';
+          if (name === 'NotAllowedError' || name === 'SecurityError') {
+            throw new Error('Clipboard access was blocked. Allow clipboard reads for the extension, then retry.');
+          }
+          throw new Error(err instanceof Error ? err.message : 'Clipboard read failed.');
+        }
+        if (!text.trim()) {
+          this.showComposerNotice('Clipboard is empty.');
+          return;
+        }
+        att = { kind: 'clipboard', icon: '📋', label: `"${text.length > 47 ? text.slice(0, 44) + '…' : text}"`, preview: text.length > 80 ? text.slice(0, 77) + '…' : text, content: trunc(text), fullLength: text.length, pageUrl: '' };
       } else if (chipKind === 'tabs') {
         const result = await this.executeTool('list_tabs', {});
         const tabs = Array.isArray(result) ? result : [];
@@ -2861,10 +3040,12 @@ export class AnyaApp extends LitElement {
       }
 
       if (att) {
+        this.clearComposerNotice();
         this.commitAttachment(att);
       }
     } catch (err) {
       console.warn(`[Anya] failed to resolve @${chipKind}:`, err);
+      this.showComposerNotice(err instanceof Error ? err.message : `Could not attach ${chipKind}.`);
     }
   }
 
@@ -2940,6 +3121,7 @@ export class AnyaApp extends LitElement {
       this.setWorkspaceFolder(path);
       return;
     }
+    this.clearComposerNotice();
     const folderName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
     this.commitAttachment({
       kind: 'folder',
@@ -2950,17 +3132,15 @@ export class AnyaApp extends LitElement {
       ref: { folderPath: path },
       pageUrl: '',
     });
-    // Set the cwd on the current chat so the bridge uses it as workingDirectory.
-    if (this.currentChatId) {
-      this.chats = this.chats.map((c) => c.id === this.currentChatId ? { ...c, cwd: path } : c);
-      this.persistChats();
-    }
   }
 
   // ----- Workspace selector ------------------------------------------------
   private pickWorkspaceFolder(): void {
     this.pendingWorkspacePick = true;
-    this.bridgeSend({ type: 'folder-pick' });
+    if (!this.bridgeSend({ type: 'folder-pick' })) {
+      this.pendingWorkspacePick = false;
+      this.showComposerNotice('Workspace picker unavailable: bridge disconnected.');
+    }
   }
 
   private setWorkspaceFolder(path: string): void {
@@ -3018,6 +3198,26 @@ export class AnyaApp extends LitElement {
     return d.toTimeString().slice(0, 5);
   }
 
+  private toolFullOutput(tc: ToolCall): string {
+    return tc.resultFull ?? tc.fullOutput ?? tc.resultPreview ?? tc.partialOutput ?? '';
+  }
+
+  private openToolOutput(tc: ToolCall): void {
+    const content = this.toolFullOutput(tc);
+    if (!content) return;
+    this.toolOutputModal = {
+      title: formatToolDisplayName(tc.toolName, tc.mcpServerName),
+      content,
+    };
+  }
+
+  private copyToolOutput(tc: ToolCall, e?: Event): void {
+    e?.stopPropagation();
+    const content = this.toolFullOutput(tc);
+    if (!content) return;
+    navigator.clipboard?.writeText(content).catch(() => { /* ignore */ });
+  }
+
   private renderToolCard(tc: ToolCall) {
     // report_intent is the SDK's built-in narration tool — render as a slim
     // status line instead of a full tool card. The agent calls this on every
@@ -3040,6 +3240,16 @@ export class AnyaApp extends LitElement {
         ? JSON.stringify(tc.arguments)
         : '');
     const displayName = formatToolDisplayName(tc.toolName, tc.mcpServerName);
+    const fullOutput = this.toolFullOutput(tc);
+    const hasFullOutput = fullOutput.length > 0;
+    const visibleResult = tc.error
+      ? tc.error
+      : tc.resultPreview
+        ? tc.resultPreview
+        : tc.status === 'running' && tc.partialOutput
+          ? tc.partialOutput
+          : '';
+    const outputTruncated = tc.resultPreviewTruncated || tc.partialOutputTruncated;
     return html`
       <div
         class="toolcall ${tc.status}"
@@ -3057,13 +3267,21 @@ export class AnyaApp extends LitElement {
               ${tc.arguments
                 ? html`<div class="tc-section">ARGS</div>${JSON.stringify(tc.arguments, null, 2)}`
                 : nothing}
-              ${tc.error
-                ? html`<div class="tc-section">ERROR</div>${tc.error}`
-                : tc.resultPreview
-                  ? html`<div class="tc-section">RESULT</div>${tc.resultPreview}`
-                  : tc.status === 'running' && tc.partialOutput
-                    ? html`<div class="tc-section">OUTPUT</div><pre class="tc-partial">${tc.partialOutput}</pre>`
-                    : nothing}
+              ${visibleResult
+                ? html`
+                    <div class="tc-section">${tc.error ? 'ERROR' : tc.resultPreview ? 'RESULT' : 'OUTPUT'}</div>
+                    <pre class="tc-partial">${visibleResult}</pre>
+                    ${outputTruncated
+                      ? html`<div class="tc-truncation">Showing a truncated preview.</div>`
+                      : nothing}
+                    ${hasFullOutput
+                      ? html`<div class="tc-actions">
+                          <button class="tc-action-btn" @click=${(e: Event) => { e.stopPropagation(); this.openToolOutput(tc); }}>View full output</button>
+                          <button class="tc-action-btn" @click=${(e: Event) => this.copyToolOutput(tc, e)}>Copy full</button>
+                        </div>`
+                      : nothing}
+                  `
+                : nothing}
             </div>`
           : tc.status === 'running' && tc.partialOutput
             ? html`<div class="tc-detail"><pre class="tc-partial">${tc.partialOutput.length > 200 ? '…' + tc.partialOutput.slice(-200) : tc.partialOutput}</pre></div>`
@@ -3336,6 +3554,7 @@ export class AnyaApp extends LitElement {
           }} title="Disable all">all off</button>
         </div>
         <div class="tools-hint">These are Anya's built-in browser tools — on top of any MCP servers loaded from your workspace.</div>
+        <div class="tools-hint">Tool changes apply to new chats. Existing chats keep the tool set they started with.</div>
         <div class="tools-approval-row">
           <label class="tool-item approval-toggle">
             <span class="tool-switch">
@@ -3608,6 +3827,12 @@ export class AnyaApp extends LitElement {
             `)}
           </div>
         ` : nothing}
+        ${this.composerNotice ? html`
+          <div class="composer-notice ${this.composerNotice.level}">
+            <span>${this.composerNotice.level === 'error' ? '⚠️' : 'ℹ️'} ${this.composerNotice.message}</span>
+            <button class="speech-notice-x" @click=${() => this.clearComposerNotice()} title="Dismiss">✕</button>
+          </div>
+        ` : nothing}
         <div class="composer-row">
           <div class="composer-input">
             <div class="composer-mirror" aria-hidden="true">${this.renderMentionedText(this.composerText)}${this.composerText.endsWith('\n') ? ' ' : ''}</div>
@@ -3646,13 +3871,14 @@ export class AnyaApp extends LitElement {
             ${this.modelMenuOpen ? html`
               <div class="model-menu">
                 <div class="model-menu-header">Select model</div>
-                <button class="model-menu-item ${!this.selectedModel ? 'active' : ''}" @click=${() => { this.selectedModel = ''; this.bridgeSend({ type: 'set-model', model: '' }); this.modelMenuOpen = false; }}>
+                <div class="model-menu-note">Changes apply to new chats. Existing chats keep their current model.</div>
+                <button class="model-menu-item ${!this.selectedModel ? 'active' : ''}" @click=${() => this.selectModel('')}>
                   <span class="model-menu-check">${!this.selectedModel ? '✓' : ''}</span>
                   <span class="model-menu-info"><span class="model-menu-name">Auto</span><span class="model-menu-detail">SDK picks best model</span></span>
                 </button>
                 ${this.availableModels.length > 0 ? html`<hr class="model-menu-sep" />` : nothing}
                 ${this.availableModels.map((m) => html`
-                  <button class="model-menu-item ${m.id === this.selectedModel ? 'active' : ''}" @click=${() => { this.selectedModel = m.id; this.bridgeSend({ type: 'set-model', model: m.id }); this.modelMenuOpen = false; }}>
+                  <button class="model-menu-item ${m.id === this.selectedModel ? 'active' : ''}" @click=${() => this.selectModel(m.id)}>
                     <span class="model-menu-check">${m.id === this.selectedModel ? '✓' : ''}</span>
                     <span class="model-menu-info">
                       <span class="model-menu-name">${m.name}</span>
@@ -3660,8 +3886,16 @@ export class AnyaApp extends LitElement {
                     </span>
                   </button>
                 `)}
-                ${this.availableModels.length === 0 ? html`
+                ${this.modelLoadState === 'loading' ? html`
                   <div class="model-menu-empty">Loading models…</div>
+                ` : this.modelLoadState === 'error' ? html`
+                  <div class="model-menu-error">
+                    <div>Couldn’t load models.</div>
+                    <div class="model-menu-error-detail">${this.modelLoadError || 'Unknown error'}</div>
+                    <button class="model-menu-retry" @click=${() => this.requestAvailableModels()}>Retry</button>
+                  </div>
+                ` : this.availableModels.length === 0 ? html`
+                  <div class="model-menu-empty">No explicit models reported. Auto will use the SDK default.</div>
                 ` : nothing}
               </div>
             ` : nothing}
@@ -3699,6 +3933,7 @@ export class AnyaApp extends LitElement {
                   if (!enabling && this.isSpeaking) {
                     this.speechOutput.stop();
                     this.isSpeaking = false;
+                    this._activeSpeechText = '';
                     this._speechBuffer = '';
                     this._speechStreamingFor = null;
                   }
@@ -3757,6 +3992,23 @@ export class AnyaApp extends LitElement {
           </div>
         </div>
       </footer>
+      ${this.toolOutputModal ? html`
+        <div class="tool-output-modal-backdrop" @click=${() => { this.toolOutputModal = null; }}>
+          <div class="tool-output-modal" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="tool-output-modal-head">
+              <span>${this.toolOutputModal.title}</span>
+              <span class="composer-spacer"></span>
+              <button class="tc-action-btn" @click=${() => {
+                const content = this.toolOutputModal?.content;
+                if (!content) return;
+                navigator.clipboard?.writeText(content).catch(() => {});
+              }}>Copy</button>
+              <button class="speech-notice-x" @click=${() => { this.toolOutputModal = null; }} title="Close">✕</button>
+            </div>
+            <pre class="tool-output-modal-body">${this.toolOutputModal.content}</pre>
+          </div>
+        </div>
+      ` : nothing}
 
     `;
   }

@@ -205,11 +205,16 @@ transport.onFrame(async (raw) => {
             folderPath = execSync(`kdialog --getexistingdirectory ~ --title "Select a folder for Anya" 2>/dev/null`, { encoding: 'utf8', timeout: 60_000 }).trim();
           }
         }
-        transport.send({ type: 'folder-pick-result', ok: !!folderPath, path: folderPath || null });
+        transport.send({
+          type: 'folder-pick-result',
+          ok: !!folderPath,
+          path: folderPath || null,
+          ...(folderPath ? {} : { error: 'No folder was selected.' }),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log('folder-pick cancelled or failed:', msg);
-        transport.send({ type: 'folder-pick-result', ok: false, path: null });
+        transport.send({ type: 'folder-pick-result', ok: false, path: null, error: msg });
       }
       break;
     }

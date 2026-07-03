@@ -428,6 +428,29 @@ export const sidebarStyles = css`
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .toolcall .tc-truncation {
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--fg-faint);
+      font-style: italic;
+    }
+    .toolcall .tc-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .tc-action-btn {
+      border: 1px solid var(--bg-rule);
+      background: var(--bg-soft);
+      color: var(--fg);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .tc-action-btn:hover { border-color: var(--accent); color: var(--accent); }
     @keyframes tc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
     /* markdown inside bubbles */
@@ -597,6 +620,12 @@ export const sidebarStyles = css`
       color: var(--fg-faint);
       padding: 6px 10px 4px;
     }
+    .model-menu-note {
+      padding: 0 10px 8px;
+      font-size: 11px;
+      color: var(--fg-dim);
+      line-height: 1.4;
+    }
     .model-menu-sep {
       border: none;
       border-top: 1px solid var(--bg-rule);
@@ -652,6 +681,30 @@ export const sidebarStyles = css`
       color: var(--fg-faint);
       font-style: italic;
     }
+    .model-menu-error {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--fg);
+    }
+    .model-menu-error-detail {
+      color: var(--fg-faint);
+      word-break: break-word;
+    }
+    .model-menu-retry {
+      align-self: flex-start;
+      border: 1px solid var(--bg-rule);
+      background: var(--bg);
+      color: var(--fg);
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+    }
+    .model-menu-retry:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ── Workspace pill & menu ──────────────────────────── */
     .workspace-pill-btn {
@@ -1208,6 +1261,23 @@ export const sidebarStyles = css`
       border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
       border-radius: 8px;
     }
+    .composer-notice {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--fg);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+      border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    }
+    .composer-notice.error {
+      background: color-mix(in srgb, var(--error) 12%, var(--bg-soft));
+      border-color: color-mix(in srgb, var(--error) 35%, transparent);
+    }
     .speech-notice-x {
       background: transparent;
       border: none;
@@ -1218,6 +1288,48 @@ export const sidebarStyles = css`
       flex: 0 0 auto;
     }
     .speech-notice-x:hover { color: var(--fg); }
+    .tool-output-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 90;
+    }
+    .tool-output-modal {
+      width: min(860px, 100%);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-soft);
+      border: 1px solid var(--bg-rule);
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+    .tool-output-modal-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--bg-rule);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tool-output-modal-body {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--fg);
+      background: var(--bg);
+    }
     .mic-btn {
       width: 30px;
       height: 30px;
@@ -2026,4 +2138,3 @@ export const sidebarStyles = css`
       margin: 2px 6px;
     }
   `;
-

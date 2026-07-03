@@ -394,13 +394,16 @@ export class CopilotBridge {
             result?: { content?: string; detailedContent?: string };
             error?: { message?: string };
           };
-          const preview = (data.result?.detailedContent ?? data.result?.content ?? '').slice(0, 4000);
+          const fullResult = data.result?.detailedContent ?? data.result?.content ?? '';
+          const preview = fullResult.slice(0, 4000);
           this.emit({
             type: 'tool-complete',
             chatId,
             toolCallId: data.toolCallId,
             success: !!data.success,
             resultPreview: preview || undefined,
+            resultFull: fullResult || undefined,
+            resultPreviewTruncated: fullResult.length > preview.length,
             error: typeof data.error?.message === 'string' ? data.error.message : undefined,
           });
           break;

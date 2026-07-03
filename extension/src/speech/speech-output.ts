@@ -68,11 +68,14 @@ export class WebSpeechOutput implements SpeechOutput {
     return this._synth?.speaking ?? false;
   }
 
-  speak(text: string): void {
+  speak(text: string, options: { replace?: boolean } = {}): void {
     if (!this.supported || !this._synth) return;
 
     const cleaned = stripMarkdown(text);
     if (!cleaned) return;
+    if (options.replace && (this._synth.speaking || this._synth.pending)) {
+      this._synth.cancel();
+    }
 
     const utterance = new SpeechSynthesisUtterance(cleaned);
     utterance.rate = this.rate;

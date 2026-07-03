@@ -79,7 +79,6 @@ function cleanup(): void {
 
 let activeField: HTMLElement | null = null;
 let activeFieldId: string | null = null;
-let blurTimer: ReturnType<typeof setTimeout> | null = null;
 let fieldIdCounter = 0;
 let ctxIdCounter = 0;
 /** The element the user last right-clicked on (captured before menu shows). */
@@ -332,7 +331,6 @@ function captureContext(): AttachmentPayload {
 function handleFocusIn(e: FocusEvent): void {
   const target = e.target;
   if (!isTextField(target)) return;
-  if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
   activeField = target;
   const meta = buildFieldMeta(target);
   activeFieldId = meta.fieldId;
@@ -340,12 +338,9 @@ function handleFocusIn(e: FocusEvent): void {
 }
 
 function handleFocusOut(_e: FocusEvent): void {
-  if (blurTimer) clearTimeout(blurTimer);
-  blurTimer = setTimeout(() => {
-    activeField = null;
-    activeFieldId = null;
-    safeSend({ type: 'anya-field-blur' });
-  }, 600);
+  activeField = null;
+  activeFieldId = null;
+  safeSend({ type: 'anya-field-blur' });
 }
 
 // ---------------------------------------------------------------------------

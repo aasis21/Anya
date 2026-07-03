@@ -24,7 +24,12 @@ export interface ToolCall {
   progress?: string;
   /** Streaming tool output accumulated from tool.execution_partial_result events. */
   partialOutput?: string;
+  /** Full tool output retained even when the inline card shows a truncated preview. */
+  fullOutput?: string;
+  partialOutputTruncated?: boolean;
   resultPreview?: string;
+  resultFull?: string;
+  resultPreviewTruncated?: boolean;
   error?: string;
   /** UI-only: card is currently expanded to show args / result. */
   expanded?: boolean;
@@ -46,6 +51,8 @@ export interface ChatMessage {
   intent?: string;
   /** Context attachment labels shown as chips in the user bubble. */
   contextLabels?: Array<{ icon: string; label: string; dataUrl?: string }>;
+  /** Full attachment payload reused when resending a past user turn. */
+  contextAttachments?: ContextAttachment[];
 }
 
 /**

@@ -53,8 +53,8 @@ export interface SpeechOutput {
   readonly supported: boolean;
   /** Whether audio is currently being spoken. */
   readonly speaking: boolean;
-  /** Speak the given text. Queues if already speaking. */
-  speak(text: string): void;
+  /** Speak the given text. Pass { replace: true } to cancel any queued/current speech first. */
+  speak(text: string, options?: { replace?: boolean }): void;
   /** Immediately stop all speech. */
   stop(): void;
   /** List available voices. May be empty until voices load asynchronously. */
