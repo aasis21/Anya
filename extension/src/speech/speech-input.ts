@@ -118,9 +118,12 @@ export class WebSpeechInput implements SpeechInput {
 
     try {
       recognition.start();
-    } catch {
+    } catch (err) {
       this._listening = false;
       this._recognition = null;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onError?.(`start-failed: ${msg}`);
+      throw err;
     }
   }
 
