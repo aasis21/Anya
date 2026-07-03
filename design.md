@@ -337,9 +337,62 @@ both were learned the hard way:
   user explicitly invokes a mention or the agent calls a tool. There is no
   background scraping.
 
-`onPermissionRequest: approveAll` is wired up: the bridge auto-approves every
-SDK permission request because in this UI the implicit consent comes from
-enabling remote debugging. Revisit if Anya ever ships outside developer mode.
+### Permission model (tracks issues #1, #2, #3, #4, #10, #11, #12, #13, #23)
+
+Three orthogonal layers, replacing the old single `autoApprove` boolean:
+
+**1. Risk tiers** (`bridge/src/tools.ts` tags each tool; extends `ToolMeta.write`
+in `extension/src/types.ts` with a `highRisk?: boolean`):
+
+| Tier | Examples | Default |
+| --- | --- | --- |
+| `read` | `get_active_tab`, `list_tabs`, `get_selection`, `get_tab_content` | Always auto-approved |
+| `write` | `open_tab`/`close_tab`/`focus_tab`, `drive_tab`/`drive_browser`, `powershell`, file edit/create | Ask by default; user can enable auto-approve for the session |
+| `high-risk` | bookmark/history/download **deletion**, `drive_context` cookie/storage/auth mutation, data-posting form submits, calls to unfamiliar MCP servers | **Always asks — ignores the auto-approve setting.** Escape hatch is per-session only ("allow again this session"), never a permanent silent bypass. |
+
+**2. Per-site trust** — new `chrome.storage.local` map `origin → 'granted' |
+'denied' | 'ask'`. A Sites settings panel exposes: a top-level toggle for
+how to treat a site Anya has never seen ("Ask first" default, or
+"Auto-grant new sites"), plus per-site grant/revoke rows. Gate: before
+`page-bridge.ts` capture or any `drive_*`/tab tool touches a tab, check its
+origin against this map; an unseen `'ask'` origin surfaces a lightweight
+site-grant prompt (separate from the tool-approval banner) the first time
+that site is touched in a session. `manifest.json` keeps `host_permissions:
+<all_urls>` for v1 — this gates at the tool layer, not the browser
+permission layer; true `optional_host_permissions` narrowing is a stretch
+goal, not required for the tiered-trust UX.
+
+**3. Approval UX** (`extension/src/main.ts` banner + `bridge/src/copilot-bridge.ts`
+permission handler + `bridge/src/host.ts` frame relay):
+- Forward the SDK's real `toolTitle ?? toolName` and `intention` — not
+  `toolCallId` — so the label is never opaque.
+- Forward kind-specific fields already present on the SDK's
+  `PermissionRequest` (`fullCommandText`/`commands` for shell, `diff`/
+  `fileName` for write, `serverName`/`args` for mcp) and render a
+  collapsed one-line preview + "show full" expando (diff view for writes,
+  monospace command for shell) — never a blind Allow.
+- Ack-confirmed lifecycle: banner moves `pending → resolving →
+  resolved/error`; only cleared from `pendingApprovals` on an explicit
+  `permission-ack` frame from the bridge, with a timeout-to-error state if
+  no ack arrives (new frame type, additive to the `Frame` union).
+- Cross-chat inbox: a persistent header badge shows the total pending
+  count across *all* chats (not just `currentChatId`), with a dropdown
+  listing each request and a "Jump to chat" action.
+- Stale-clearing: on chat-delete, bridge disconnect, or bridge restart,
+  walk `pendingApprovals`/`permissionResolvers`, auto-reject anything
+  orphaned, and emit a `permission-expired` frame so the UI explains why a
+  banner vanished instead of silently dropping it.
+
+**Ties to prompt-injection mitigation (#4):** once page content is wrapped
+in an untrusted envelope, the approval banner shows a ⚠ "requested after
+reading page content" badge when the requesting turn ingested untrusted
+page text — the one extra signal that actually helps a user catch an
+injection-driven write before approving it.
+
+`onPermissionRequest` in the bridge is no longer the SDK's bare `approveAll`
+helper — it routes through the tiered handler above. Full auto-approve
+remains available as an explicit opt-in mode, but high-risk actions ignore
+it unconditionally.
 
 ---
 
