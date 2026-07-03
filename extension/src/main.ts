@@ -358,6 +358,24 @@ export class AnyaApp extends LitElement {
     chatId: string; toolName: string; kind: string; tier: 'write' | 'high-risk';
     preview?: string; detail?: string; args?: unknown;
   }>();
+
+  // ── Per-site trust (#1) ──────────────────────────────────────────────
+  // origin -> 'granted' | 'denied'. Sites not in this map fall back to
+  // `siteTrustDefault`. Gates page-content-capturing tools (get_selection,
+  // get_tab_content) per origin.
+  @state() private siteTrust: Record<string, 'granted' | 'denied'> = {};
+  @state() private siteTrustDefault: 'ask' | 'granted' = 'ask';
+  @state() private sitesPanelOpen = false;
+  /** Origins awaiting a first-use grant/deny decision from the user. */
+  @state() private pendingSitePrompts: string[] = [];
+  /**
+   * Chat ids whose CURRENT turn has read untrusted page content (via
+   * get_tab_content/get_selection). Cleared at turn-start, set on the
+   * matching tool-start. Powers the "requested after reading page content"
+   * badge on the approval banner — a light slice of #4 (prompt-injection
+   * provenance signal), not a full mitigation.
+   */
+  private untrustedContentTurns = new Set<string>();
   /** Client-side queue for prompts sent while streaming. Drained in finishStream. */
   private pendingQueue: Array<{ chatId: string; text: string; ctx: ContextAttachment[] }> = [];
 
@@ -442,6 +460,7 @@ export class AnyaApp extends LitElement {
     this.loadDebug();
     void this.loadDisabledTools();
     void this.loadAutoApprove();
+    void this.loadSiteTrust();
     void this.loadChats();
     void this.loadQuickPrompts();
     void this.loadInputHistory();
@@ -935,6 +954,64 @@ export class AnyaApp extends LitElement {
   private persistAutoApprove(): void {
     try { chrome.storage?.local?.set?.({ 'anya-auto-approve': this.autoApprove }); } catch { /* ignore */ }
     this.bridgeSend({ type: 'set-auto-approve', autoApprove: this.autoApprove });
+  }
+
+  // ----- per-site trust (#1) ----------------------------------------------
+  private async loadSiteTrust(): Promise<void> {
+    const map = await this.readStorage<Record<string, 'granted' | 'denied'>>('anya-site-trust');
+    if (map && typeof map === 'object') this.siteTrust = map;
+    const def = await this.readStorage<'ask' | 'granted'>('anya-site-trust-default');
+    if (def === 'ask' || def === 'granted') this.siteTrustDefault = def;
+  }
+
+  private persistSiteTrust(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-site-trust': this.siteTrust }); } catch { /* ignore */ }
+  }
+
+  private persistSiteTrustDefault(): void {
+    try { chrome.storage?.local?.set?.({ 'anya-site-trust-default': this.siteTrustDefault }); } catch { /* ignore */ }
+  }
+
+  private originOf(url: string | undefined): string | null {
+    if (!url) return null;
+    try { return new URL(url).origin; } catch { return null; }
+  }
+
+  private setSiteTrust(origin: string, value: 'granted' | 'denied'): void {
+    this.siteTrust = { ...this.siteTrust, [origin]: value };
+    this.persistSiteTrust();
+    this.pendingSitePrompts = this.pendingSitePrompts.filter((o) => o !== origin);
+  }
+
+  private revokeSiteTrust(origin: string): void {
+    const rest = { ...this.siteTrust };
+    delete rest[origin];
+    this.siteTrust = rest;
+    this.persistSiteTrust();
+  }
+
+  /**
+   * Gate for page-content-capturing tools (get_selection, get_tab_content).
+   * Grants immediately for known/default-granted origins. For an unseen
+   * origin under the "ask" default, records a first-use prompt banner and
+   * throws — the tool call fails *this once* with an actionable message;
+   * once the user grants from the banner or the Sites panel, the next call
+   * succeeds.
+   */
+  private async ensureSiteTrust(url: string | undefined): Promise<void> {
+    const origin = this.originOf(url);
+    if (!origin) return; // no origin (e.g. restricted/blank) — nothing to gate
+    const decision = this.siteTrust[origin] ?? (this.siteTrustDefault === 'granted' ? 'granted' : 'ask');
+    if (decision === 'granted') return;
+    if (decision === 'denied') {
+      throw new Error(`Anya is not trusted on ${origin}. Ask the user to grant it in the Sites panel.`);
+    }
+    // decision === 'ask' and origin has no prior entry.
+    if (!this.pendingSitePrompts.includes(origin)) {
+      this.pendingSitePrompts = [...this.pendingSitePrompts, origin];
+      this.requestUpdate();
+    }
+    throw new Error(`${origin} is not yet trusted by Anya. Ask the user to click Grant on the site prompt, then retry.`);
   }
 
   private persistDisabledTools(): void {
@@ -1523,6 +1600,7 @@ export class AnyaApp extends LitElement {
         break;
       case 'turn-start':
         if (chatId && !this.cancelledChats.has(chatId)) this.ensureThinkingBubble(chatId);
+        if (chatId) this.untrustedContentTurns.delete(chatId);
         break;
       case 'intent':
         if (chatId && !this.cancelledChats.has(chatId)) this.setIntent(chatId, String(data.text ?? ''));
@@ -1562,9 +1640,15 @@ export class AnyaApp extends LitElement {
         if (!chatId) break;
         const tcid = String(data.toolCallId ?? '');
         if (!tcid) break;
+        const toolName = String(data.toolName ?? '?');
+        // Page-content-reading tools make this turn's later write requests
+        // provenance-flagged on the approval banner (#4 tie-in).
+        if (toolName === 'get_tab_content' || toolName === 'get_selection') {
+          this.untrustedContentTurns.add(chatId);
+        }
         const call: ToolCall = {
           toolCallId: tcid,
-          toolName: String(data.toolName ?? '?'),
+          toolName,
           mcpServerName: typeof data.mcpServerName === 'string' ? data.mcpServerName : undefined,
           arguments: data.arguments,
           status: 'running',
@@ -1729,6 +1813,7 @@ export class AnyaApp extends LitElement {
         if (this.isRestrictedUrl(tab?.url)) {
           return { tabId, selection: '', restricted: true, url: tab?.url ?? '' };
         }
+        await this.ensureSiteTrust(tab?.url);
         const [{ result } = { result: '' as unknown }] =
           await chrome.scripting.executeScript({
             target: { tabId },
@@ -1748,6 +1833,7 @@ export class AnyaApp extends LitElement {
             restricted: true,
           };
         }
+        await this.ensureSiteTrust(tab?.url);
         const [{ result } = { result: { title: '', url: '', text: '' } as unknown }] =
           await chrome.scripting.executeScript({
             target: { tabId },
@@ -3191,6 +3277,7 @@ export class AnyaApp extends LitElement {
     return entries.map(([id, req]) => {
       const highRisk = req.tier === 'high-risk';
       const detail = req.detail && req.detail !== req.preview ? req.detail : undefined;
+      const afterUntrustedContent = this.untrustedContentTurns.has(req.chatId);
       return html`
       <div class="approval-banner ${highRisk ? 'high-risk' : ''}">
         <div class="approval-head">
@@ -3200,6 +3287,9 @@ export class AnyaApp extends LitElement {
             <span class="approval-kind">${highRisk ? 'high-risk · ' : ''}${req.kind}</span>
           </span>
         </div>
+        ${afterUntrustedContent ? html`
+          <div class="approval-provenance">⚠ Requested after reading page content this turn — review carefully before allowing.</div>
+        ` : nothing}
         ${req.preview ? html`
           <code class="approval-preview">${req.preview}</code>
         ` : nothing}
@@ -3216,6 +3306,26 @@ export class AnyaApp extends LitElement {
       </div>
     `;
     });
+  }
+
+  // ----- Per-site trust banners (#1) --------------------------------------
+  private renderSitePrompts() {
+    if (this.pendingSitePrompts.length === 0) return nothing;
+    return this.pendingSitePrompts.map((origin) => html`
+      <div class="approval-banner">
+        <div class="approval-head">
+          <span class="approval-icon">🌐</span>
+          <span class="approval-info">
+            <span class="approval-tool">${origin}</span>
+            <span class="approval-kind">wants to read this page's content</span>
+          </span>
+        </div>
+        <div class="approval-actions">
+          <button class="approval-btn approve" @click=${() => this.setSiteTrust(origin, 'granted')}>✓ Grant</button>
+          <button class="approval-btn deny" @click=${() => this.setSiteTrust(origin, 'denied')}>✕ Deny</button>
+        </div>
+      </div>
+    `);
   }
 
   // ----- render ----------------------------------------------------------
@@ -3629,7 +3739,54 @@ export class AnyaApp extends LitElement {
             `;
           })}
         </div>
+        ${this.renderSitesSection()}
       </section>
+    `;
+  }
+
+  // ----- Sites (per-site trust, #1) ---------------------------------------
+  private renderSitesSection() {
+    const collapsed = this.toolGroupCollapsed.has('__sites__');
+    const origins = Object.entries(this.siteTrust);
+    return html`
+      <div class="tool-group sites-group ${collapsed ? 'collapsed' : ''}">
+        <div class="tool-group-header" @click=${() => this.toggleToolGroupCollapse('__sites__')}>
+          <span class="tool-group-chevron">${collapsed ? '▸' : '▾'}</span>
+          <span class="tool-group-icon">🌐</span>
+          <span class="tool-group-label">Sites</span>
+          <span class="tool-group-count">${origins.length}</span>
+        </div>
+        ${!collapsed ? html`
+          <div class="tool-group-body">
+            <label class="tool-item">
+              <span class="tool-switch">
+                <input
+                  type="checkbox"
+                  .checked=${this.siteTrustDefault === 'granted'}
+                  @change=${() => {
+                    this.siteTrustDefault = this.siteTrustDefault === 'granted' ? 'ask' : 'granted';
+                    this.persistSiteTrustDefault();
+                  }}
+                />
+                <span class="tool-slider"></span>
+              </span>
+              <span class="tool-info">
+                <span class="tool-name">New sites</span>
+                <span class="tool-desc">${this.siteTrustDefault === 'granted' ? 'Auto-grant new sites' : 'Ask before first use of a new site'}</span>
+              </span>
+            </label>
+            ${origins.length === 0 ? html`
+              <div class="tools-hint">No sites decided yet — you'll see a prompt the first time Anya reads a page's content on a new site.</div>
+            ` : origins.map(([origin, decision]) => html`
+              <div class="site-row">
+                <span class="site-origin">${origin}</span>
+                <span class="site-decision ${decision}">${decision}</span>
+                <button class="site-revoke-btn" @click=${() => this.revokeSiteTrust(origin)} title="Forget this decision">revoke</button>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
+      </div>
     `;
   }
 
@@ -3816,6 +3973,7 @@ export class AnyaApp extends LitElement {
           </button>
         ` : nothing}
         ${this.renderApprovalBanners()}
+        ${this.renderSitePrompts()}
         ${this.speechNotice ? html`
           <div class="speech-notice">
             <span>🎤 ${this.speechNotice}</span>

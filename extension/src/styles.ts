@@ -845,6 +845,16 @@ export const sidebarStyles = css`
       letter-spacing: 0.3px;
     }
     .approval-banner.high-risk .approval-kind { color: var(--error); font-weight: 600; }
+    /* untrusted-content provenance badge — light slice of #4 */
+    .approval-provenance {
+      font-size: 11px;
+      color: var(--warning);
+      background: color-mix(in srgb, var(--warning) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+      border-radius: 6px;
+      padding: 5px 8px;
+      line-height: 1.35;
+    }
     /* the command/args/diff being approved — the user must see what they allow */
     .approval-preview {
       display: block;
@@ -1677,6 +1687,45 @@ export const sidebarStyles = css`
 
     /* group body — individual tools */
     .tool-group-body { padding: 2px 12px 6px 30px; }
+    /* ── Sites (per-site trust) ─────────────────────────── */
+    .sites-group { border-top: 1px solid var(--bg-rule); margin-top: 4px; padding-top: 4px; }
+    .site-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 11.5px;
+    }
+    .site-origin {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--mono);
+      color: var(--fg);
+    }
+    .site-decision {
+      flex: 0 0 auto;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .site-decision.granted { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+    .site-decision.denied { color: var(--error); background: color-mix(in srgb, var(--error) 14%, transparent); }
+    .site-revoke-btn {
+      flex: 0 0 auto;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--bg-rule);
+      background: transparent;
+      color: var(--fg-dim);
+      cursor: pointer;
+    }
+    .site-revoke-btn:hover { color: var(--fg); border-color: var(--accent); }
     .tool-item {
       display: flex;
       align-items: center;
