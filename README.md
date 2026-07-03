@@ -471,6 +471,11 @@ key is baked into `extension/manifest.json` so the extension ID stays stable
 across reloads — that matters because the bridge's Native Messaging manifest
 whitelists exactly that ID.
 
+**UI testing without touching your daily browser:** see "UI testing
+(Playwright, isolated from your live browser)" in [`AGENTS.md`](AGENTS.md)
+for driving the real built sidebar (live bridge, real tool calls, real
+streamed replies) from a throwaway Chromium instance.
+
 ### File-by-file
 
 **Extension (`extension/src/`):**
