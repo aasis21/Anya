@@ -1900,6 +1900,7 @@ export const sidebarStyles = css`
       padding: 8px 12px;
       max-height: 40%;
       overflow-y: auto;
+      flex-shrink: 0;
     }
     .drawer-section-title {
       font-size: 10px;
@@ -1907,6 +1908,25 @@ export const sidebarStyles = css`
       letter-spacing: 0.1em;
       color: var(--fg-dim);
       margin-bottom: 6px;
+    }
+    .qp-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .qp-header:hover { color: var(--fg); }
+    .qp-chevron { font-size: 9px; width: 10px; flex-shrink: 0; }
+    .qp-count {
+      margin-left: auto;
+      font-weight: 400;
+      color: var(--fg-faint);
+      background: var(--bg-rule);
+      border-radius: 8px;
+      padding: 0 6px;
+      font-size: 10px;
+      letter-spacing: normal;
     }
     .qp-btn {
       display: flex;

@@ -295,6 +295,9 @@ export class AnyaApp extends LitElement {
   @state() private searchQuery = '';
   @state() private searchActiveIdx = 0;
   @state() private quickPrompts: QuickPrompt[] = [...DEFAULT_QUICK_PROMPTS];
+  /** Collapsed by default so a long chat list isn't crowded out by the
+   * quick-prompts block in the drawer; persisted once the user picks. */
+  @state() private quickPromptsCollapsed = true;
 
   // Drawer tag filter — null shows all chats, otherwise filters by tag.
   @state() private drawerTagFilter: string | null = null;
@@ -1379,6 +1382,15 @@ export class AnyaApp extends LitElement {
         }));
       }
     } catch { /* ignore */ }
+    try {
+      const collapsed = await this.readStorage<boolean>('anya-quick-prompts-collapsed');
+      if (typeof collapsed === 'boolean') this.quickPromptsCollapsed = collapsed;
+    } catch { /* ignore */ }
+  }
+
+  private toggleQuickPromptsCollapsed(): void {
+    this.quickPromptsCollapsed = !this.quickPromptsCollapsed;
+    try { chrome.storage?.local?.set?.({ 'anya-quick-prompts-collapsed': this.quickPromptsCollapsed }); } catch { /* ignore */ }
   }
 
   private insertQuickPrompt = (qp: QuickPrompt): void => {
@@ -4143,13 +4155,19 @@ export class AnyaApp extends LitElement {
           ${filtered.length === 0 ? html`<div class="search-hint">no chats match #${filter}</div>` : nothing}
         </div>
         <div class="drawer-section">
-          <div class="drawer-section-title">QUICK PROMPTS</div>
-          ${repeat(this.quickPrompts, (q) => q.id, (q) => html`
-            <button class="qp-btn" @click=${() => this.insertQuickPrompt(q)} title=${q.body}>
-              <span class="qp-label">${q.label}</span>
-              <span class="qp-hint">${q.hint ?? q.body}</span>
-            </button>
-          `)}
+          <div class="drawer-section-title qp-header" @click=${() => this.toggleQuickPromptsCollapsed()}>
+            <span class="qp-chevron">${this.quickPromptsCollapsed ? '▸' : '▾'}</span>
+            QUICK PROMPTS
+            <span class="qp-count">${this.quickPrompts.length}</span>
+          </div>
+          ${!this.quickPromptsCollapsed ? html`
+            ${repeat(this.quickPrompts, (q) => q.id, (q) => html`
+              <button class="qp-btn" @click=${() => this.insertQuickPrompt(q)} title=${q.body}>
+                <span class="qp-label">${q.label}</span>
+                <span class="qp-hint">${q.hint ?? q.body}</span>
+              </button>
+            `)}
+          ` : nothing}
         </div>
       </aside>
       <div class="drawer-scrim" @click=${() => { this.chatDrawerOpen = false; }}></div>
