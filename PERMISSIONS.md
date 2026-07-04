@@ -64,13 +64,20 @@ in the approval preview (§3) so the user can judge that for themselves.
 
 ## 2. Trust surfaces
 
-Two independent trust axes remain (MCP dropped per above):
+One trust axis remains (MCP dropped per above; per-site trust attempted
+and reverted per below):
 
-1. **Per-site trust** (web origins) — `chrome.storage.local` map
-   `origin → 'granted' | 'denied' | 'ask'`. Gates `page-bridge.ts` capture
-   and any `drive_*`/tab tool touching that origin's tab. A Sites settings
-   panel exposes a top-level default ("Ask first" vs "Auto-grant new
-   sites") plus per-site rows. Addresses #1.
+1. ~~**Per-site trust**~~ — **Reverted.** An earlier pass shipped a
+   `chrome.storage.local` origin → `granted|denied|ask` map gating
+   `get_selection`/`get_tab_content`, plus a Sites settings panel. In
+   practice it only covered those two extension-side tools (not the
+   `drive_*` CDP tools, which run in the bridge's Node process without
+   `chrome.storage` access — see the scope-gap note that used to live
+   here), so it added UI complexity without meaningfully closing the gap
+   it was meant to close. Removed; #1 is open again pending a design that
+   covers the full tool surface (most likely: extend the CDP bridge with
+   an origin check before running `drive_*` subcommands, rather than a
+   browser-storage-only gate).
 2. **Per-workingDirectory scope** (already implicit, not new UI) — each
    chat's `view`/`edit`/`create`/`powershell`/`glob`/`grep` calls are
    naturally scoped to that chat's `workingDirectory` (set via the 📁
@@ -171,8 +178,12 @@ can easily change to autopilot too if needed":
    (`bridge/src/tools.ts`, `bridge/src/copilot-bridge.ts`) — #2, #3.
 2. Approval banner UX overhaul (`extension/src/main.ts`, `host.ts` new
    frame types) — #10, #11, #12, #13, #23.
-3. Per-site trust + Sites settings panel — #1.
+3. ~~Per-site trust + Sites settings panel~~ — shipped then reverted (see
+   §2). #1 remains open for a future pass with a design that covers the
+   full tool surface, not just extension-side content reads.
 4. Untrusted-content badge tie-in — partial #4.
-5. Composer-bar Autopilot toggle (replacing/relabeling the current
-   Tools-panel checkbox) to make the mode switch easy to find, per this
-   design's §4.
+5. Composer-bar approval toggle (⚡ Skip approval / 🛡 Approve each,
+   replacing the old Tools-panel checkbox) to make the mode switch easy to
+   find, per this design's §4. Deliberately avoids the word "Auto" in the
+   label — it sat directly next to the model picker's "Auto" pill and the
+   shared word confused which control did what.
