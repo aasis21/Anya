@@ -222,6 +222,15 @@ if ($IsWindows) {
     if (-not (Test-Path $LauncherSh)) { throw "launcher.sh not found at $LauncherSh" }
     # Ensure the launcher is executable. PS Core has no built-in chmod cmdlet.
     try { & /bin/chmod '+x' $LauncherSh } catch { Write-Host "[warn] could not chmod +x launcher.sh: $_" -ForegroundColor Yellow }
+    # Cache the exact `node` this install used next to launcher.sh, so it
+    # doesn't have to re-resolve PATH at Chrome-launch time — GUI apps get
+    # a minimal PATH on macOS, which breaks nvm/volta/asdf Node installs
+    # otherwise (see launcher.sh's comment for the full story).
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCmd) {
+        Set-Content -NoNewline -Path (Join-Path $BridgeDir '.node-path') -Value $nodeCmd.Source
+        Write-Host "[OK] cached node path for launcher: $($nodeCmd.Source)"
+    }
 }
 
 # --- Resolve target browsers ----------------------------------------------

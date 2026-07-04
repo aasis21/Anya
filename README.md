@@ -480,6 +480,17 @@ Logs go to the bridge log file (also live in the 🐛 panel):
 | macOS   | `~/Library/Application Support/Anya/bridge.log`              |
 | Linux   | `${XDG_DATA_HOME:-~/.local/share}/Anya/bridge.log`           |
 
+**Sidebar shows "disconnected" and `bridge.log` is missing/empty (macOS
+especially)**: Chrome/Edge/Brave launch Native Messaging hosts with a
+minimal environment that does **not** include your login shell's `PATH`.
+If Node was installed via nvm/volta/asdf/homebrew rather than Apple's or
+Node's official installer, the launcher's bare `node` call can fail to
+resolve — the host process exits before it ever writes a log line.
+`bridge/launcher.sh` handles this by caching the exact `node` path
+`install.sh`/`install.ps1` used (in `bridge/.node-path`) and falling back to
+common install locations; re-run `./setup.sh` (or `install.ps1`) after a
+Node version change so the cache stays fresh.
+
 The extension keypair lives at `.extension-key.pem` (gitignored). Its public
 key is baked into `extension/manifest.json` so the extension ID stays stable
 across reloads — that matters because the bridge's Native Messaging manifest

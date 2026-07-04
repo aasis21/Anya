@@ -241,6 +241,13 @@ if [ "$OS" = "windows" ]; then
 else
     [ -f "$LAUNCHER_SH" ] || { echo "[error] launcher.sh not found at $LAUNCHER_SH" >&2; exit 1; }
     chmod +x "$LAUNCHER_SH"
+    # Cache the exact `node` this install used, so launcher.sh doesn't have
+    # to re-resolve PATH at Chrome-launch time (see launcher.sh comment —
+    # GUI apps get a minimal PATH on macOS, which breaks nvm/volta/asdf
+    # Node installs otherwise).
+    NODE_ABS="$(command -v node)"
+    printf '%s' "$NODE_ABS" > "$BRIDGE_DIR/.node-path"
+    echo "[OK] cached node path for launcher: $NODE_ABS"
 fi
 
 # --- Resolve targets ------------------------------------------------------
