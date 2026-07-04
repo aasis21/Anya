@@ -358,6 +358,14 @@ export class AnyaApp extends LitElement {
     chatId: string; toolName: string; kind: string; tier: 'write' | 'high-risk';
     preview?: string; detail?: string; args?: unknown;
   }>();
+  /**
+   * "Allow for this session" escape hatch (PERMISSIONS.md §high-risk row):
+   * tool names the user has already approved once this session, so future
+   * requests for that same tool are auto-approved without re-prompting.
+   * In-memory only — resets on sidebar/extension reload, never persisted,
+   * so it can never become a silent permanent bypass.
+   */
+  private sessionAllowedTools = new Set<string>();
 
   // ── Per-site trust (#1) ──────────────────────────────────────────────
   // origin -> 'granted' | 'denied'. Sites not in this map fall back to
@@ -1741,6 +1749,11 @@ export class AnyaApp extends LitElement {
           requestId: string; chatId: string; toolName: string; kind: string;
           tier?: 'write' | 'high-risk'; preview?: string; detail?: string; arguments?: unknown;
         };
+        if (this.sessionAllowedTools.has(req.toolName)) {
+          // Already granted via "Allow for this session" — skip the banner.
+          this.bridgeSend({ type: 'permission-response', requestId: req.requestId, approved: true });
+          break;
+        }
         this.pendingApprovals.set(req.requestId, {
           chatId: req.chatId,
           toolName: req.toolName,
@@ -3268,6 +3281,13 @@ export class AnyaApp extends LitElement {
     this.requestUpdate();
   }
 
+  /** "Allow for this session" — approve now, and silently auto-approve this
+   * same tool for the rest of the sidebar session (see sessionAllowedTools). */
+  private allowForSession(requestId: string, toolName: string): void {
+    this.sessionAllowedTools.add(toolName);
+    this.respondToApproval(requestId, true);
+  }
+
   private renderApprovalBanners() {
     if (this.pendingApprovals.size === 0) return nothing;
     const entries = [...this.pendingApprovals.entries()].filter(
@@ -3301,6 +3321,7 @@ export class AnyaApp extends LitElement {
         ` : nothing}
         <div class="approval-actions">
           <button class="approval-btn approve ${highRisk ? 'high-risk' : ''}" @click=${() => this.respondToApproval(id, true)}>✓ Allow</button>
+          <button class="approval-btn session" @click=${() => this.allowForSession(id, req.toolName)}>Allow (session)</button>
           <button class="approval-btn deny" @click=${() => this.respondToApproval(id, false)}>✕ Deny</button>
         </div>
       </div>

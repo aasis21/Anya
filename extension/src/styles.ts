@@ -894,7 +894,7 @@ export const sidebarStyles = css`
       word-break: break-word;
       color: var(--fg-dim);
     }
-    .approval-actions { display: flex; gap: 7px; }
+    .approval-actions { display: flex; gap: 7px; flex-wrap: wrap; }
     .approval-btn {
       display: inline-flex;
       align-items: center;
@@ -923,6 +923,13 @@ export const sidebarStyles = css`
       font-weight: 600;
     }
     .approval-btn.deny:hover { background: color-mix(in srgb, var(--error) 14%, transparent); }
+    .approval-btn.session {
+      background: transparent;
+      color: var(--fg-dim);
+      border-color: var(--bg-rule);
+      font-weight: 500;
+    }
+    .approval-btn.session:hover { background: var(--bg-soft); color: var(--fg); }
 
     /* ── Autopilot pill (composer bar) ──────────────────── */
     .autopilot-pill.on {
