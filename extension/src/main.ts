@@ -3918,7 +3918,7 @@ export class AnyaApp extends LitElement {
               </div>
             ` : nothing}
             <button class="model-pill-btn" @click=${() => { this.modelMenuOpen = !this.modelMenuOpen; }} title="Select model">
-              ${this.selectedModel ? this.availableModels.find((m) => m.id === this.selectedModel)?.name ?? this.selectedModel : 'Auto'} ▾
+              ${this.selectedModel ? this.availableModels.find((m) => m.id === this.selectedModel)?.name ?? this.selectedModel : 'model-auto'} ▾
             </button>
             ${this.modelMenuOpen ? html`
               <div class="model-menu">
@@ -3926,7 +3926,7 @@ export class AnyaApp extends LitElement {
                 <div class="model-menu-note">Changes apply to new chats. Existing chats keep their current model.</div>
                 <button class="model-menu-item ${!this.selectedModel ? 'active' : ''}" @click=${() => this.selectModel('')}>
                   <span class="model-menu-check">${!this.selectedModel ? '✓' : ''}</span>
-                  <span class="model-menu-info"><span class="model-menu-name">Auto</span><span class="model-menu-detail">SDK picks best model</span></span>
+                  <span class="model-menu-info"><span class="model-menu-name">model-auto</span><span class="model-menu-detail">SDK picks best model</span></span>
                 </button>
                 ${this.availableModels.length > 0 ? html`<hr class="model-menu-sep" />` : nothing}
                 ${this.availableModels.map((m) => html`
@@ -3979,7 +3979,7 @@ export class AnyaApp extends LitElement {
               title=${this.autoApprove
                 ? 'Tool approval is OFF — write/shell/MCP tools run without asking (high-risk actions still always ask). Click to require approval again.'
                 : 'Tool approval is ON — write/shell/MCP tools wait for your approval before running. Click to skip approval.'}
-            >${this.autoApprove ? '⚡ Skip approval' : '🛡 Approve each'}</button>
+            >${this.autoApprove ? '⚡ Auto-approval' : '🛡 Approve each'}</button>
             <span class="composer-spacer"></span>
             ${this.toolsPanelOpen ? this.renderToolsPanel() : nothing}
             ${this.speechOutput.supported ? html`
