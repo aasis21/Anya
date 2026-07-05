@@ -6,20 +6,25 @@ Gemini has no memory of this repo, so the style block is repeated inside every p
 
 ---
 
-## The hard constraint: 8 seconds per generation
+## The hard constraint: ~10 seconds per generation
 
-Gemini's video model (Veo 3 / Veo 3.1) generates **8-second clips** — 720p or 1080p,
-24 fps, 16:9, with native audio. There is **no single-shot 56-second generation**:
+Confirmed from your own runs: the Gemini app is currently generating **10-second
+clips** per prompt (not the 8 s the API/Flow default to elsewhere — Google
+varies this by surface and it's changed before, so treat "10 s" as this
+session's ground truth, not a permanent spec). Either way there is **no
+single-shot 56-second generation**:
 
 | Where | Max per generation | Longer videos? |
 |-------|--------------------|----------------|
-| Gemini app ("create a video") | 8 s | No — one clip per prompt |
-| Gemini API (`veo-3.1`) | 8 s | No — stitch clips yourself |
+| Gemini app ("create a video") | **10 s** (confirmed) | No — one clip per prompt |
+| Gemini API (`veo-3.1`) | 8 s typical | No — stitch clips yourself |
 | Google Flow (labs.google/flow, Ultra plan) | 8 s | Yes — "Extend" chains ~7 s continuations and "Scenebuilder" stitches scenes to ~1 min+ |
 
-**So the 56 s video = 9 generations of 8 s each, trimmed and stitched in an editor**
-(CapCut / DaVinci Resolve / Premiere — or Flow's Scenebuilder if you have Ultra).
-The scene table below maps each generation to its slot in the final timeline.
+**So the 56 s video = 9 generations of ~10 s each, trimmed and stitched in an
+editor** (CapCut / DaVinci Resolve / Premiere — or Flow's Scenebuilder if you
+have Ultra). The scene table below maps each generation to its slot in the
+final timeline. The 3 clips you've already generated at 10 s slot into this
+table the same way as the rest — just trim each to its "final cut" duration.
 
 ---
 
@@ -61,7 +66,7 @@ red-orange if you want the clip to match the landing-page mark instead.
 ## Generation settings (use for every clip)
 
 - Model: **Veo 3.1** (in Gemini: attach prompt + optional reference image, choose video)
-- Aspect: **16:9**, resolution **1080p**, duration **8 s** (the default/max)
+- Aspect: **16:9**, resolution **1080p**, duration **~10 s** (Gemini app's current output)
 - For UI scenes (clips 2–6), attach a real screenshot from `docs/ph-screenshots/`
   as the **starting frame / reference image** — this is the single biggest quality
   lever; Veo invents garbled UI text otherwise.
@@ -83,10 +88,10 @@ Every prompt already embeds the style block:
 dark GitHub-style theme — background `#0d1117`, panels `#161b22`, hairline rules
 `#30363d`, text `#e6edf3`, accent blue `#2f81f7`, success green `#3fb950`.
 
-### Clip 1 — Hook (final cut: 0:00–0:05, trim 8 s → 5 s)
+### Clip 1 — Hook (final cut: 0:00–0:05, trim 10 s → 5 s)
 
 ```
-Cinematic 8-second shot, 16:9, moody dark tech aesthetic. A void of deep
+Cinematic 10-second shot, 16:9, moody dark tech aesthetic. A void of deep
 charcoal-navy space (#0d1117). Dozens of translucent glassy browser-tab cards
 float and slowly pile up chaotically: a code pull-request diff, a kanban ticket
 board, a text document, a monitoring dashboard with graphs, an email thread, a
@@ -100,7 +105,7 @@ melody. No subtitles, no captions, no watermarks, no readable body text (text
 as soft out-of-focus glyphs), no camera shake, no faces.
 ```
 
-### Clip 2 — Reveal (0:05–0:11, trim 8 s → 6 s)
+### Clip 2 — Reveal (0:05–0:11, trim 10 s → 6 s)
 
 > Attach `docs/assets/hero.webp` as the starting frame — confirmed exact match
 > (landing page + empty "GitHub Copilot, in your browser!!" sidebar). Note:
@@ -108,7 +113,7 @@ as soft out-of-focus glyphs), no camera shake, no faces.
 > dark mode first, or swap the dark colors below for the light palette.
 
 ```
-Screen-capture style 8-second product shot, 16:9, dark browser UI on a
+Screen-capture style 10-second product shot, 16:9, dark browser UI on a
 GitHub-dark theme (background #0d1117, panels #161b22, thin borders #30363d).
 Start on a Chromium browser window with a crowded tab strip of many small tabs.
 At the 1.5-second mark a sleek chat sidebar smoothly slides in from the right
@@ -122,7 +127,7 @@ captions, no watermarks, no readable body text (suggest text as soft blurred
 lines), no camera shake, no faces.
 ```
 
-### Clip 3a — Sees every tab, part 1 (0:11–0:17, trim 8 s → 6 s)
+### Clip 3a — Sees every tab, part 1 (0:11–0:17, trim 10 s → 6 s)
 
 > Attach `docs/assets/summarize.webp` for vignette 1 (confirmed: PR diff +
 > sidebar streaming a summary with tool cards) and
@@ -132,10 +137,10 @@ lines), no camera shake, no faces.
 > Both are light theme — see the theme-mismatch callout above.
 
 ```
-Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
+Screen-capture style 10-second product montage, 16:9, dark theme (#0d1117
 background, #161b22 panels, #2f81f7 blue accents, #3fb950 green checkmarks).
 A dark chat sidebar sits on the right of a browser. Two quick vignettes,
-4 seconds each, hard cut between them. Vignette 1: behind the sidebar, a
+5 seconds each, hard cut between them. Vignette 1: behind the sidebar, a
 research page with many open tabs; in the sidebar, three small pill-shaped
 "tool cards" appear one after another, each completing with a green check
 (labels suggested as blurred short text), then an answer streams in as soft
@@ -146,16 +151,16 @@ groove, soft pop on each tool-card completion. No subtitles, no captions,
 no watermarks, no readable body text, no camera shake, no faces.
 ```
 
-### Clip 3b — Sees every tab, part 2 (0:17–0:23, trim 8 s → 6 s)
+### Clip 3b — Sees every tab, part 2 (0:17–0:23, trim 10 s → 6 s)
 
 > No real capture exists for the dev-PR-review or support-reply vignettes
 > beyond `docs/assets/summarize.webp` already used in clip 3a — reuse it here
 > too for tool-card styling consistency, or generate without a reference image.
 
 ```
-Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
+Screen-capture style 10-second product montage, 16:9, dark theme (#0d1117
 background, #161b22 panels, #2f81f7 blue accents, #3fb950 green checkmarks).
-A dark chat sidebar on the right of a browser, two quick vignettes, 4 seconds
+A dark chat sidebar on the right of a browser, two quick vignettes, 5 seconds
 each, hard cut between them. Vignette 1: behind the sidebar, a code
 pull-request page with a green-and-red diff; in the sidebar three pill-shaped
 tool cards complete with green checks, then review comments stream in as soft
@@ -166,7 +171,7 @@ continues, soft pop on each tool-card completion. No subtitles, no captions,
 no watermarks, no readable body text, no camera shake, no faces.
 ```
 
-### Clip 4 — Point at anything (0:23–0:29, trim 8 s → 6 s)
+### Clip 4 — Point at anything (0:23–0:29, trim 10 s → 6 s)
 
 > Attach `docs/assets/menu.webp` — confirmed exact match: real right-click
 > context menu with "Add to Anya" highlighted. This is the single best
@@ -174,7 +179,7 @@ no watermarks, no readable body text, no camera shake, no faces.
 > callout above) — recapture in dark mode for a perfect match, or adjust colors.
 
 ```
-Screen-capture style 8-second product shot, 16:9, dark theme (#0d1117
+Screen-capture style 10-second product shot, 16:9, dark theme (#0d1117
 background, #161b22 panels, hairline borders #30363d). A dark documentation
 article page fills the browser, chat sidebar docked on the right. A cursor
 selects a paragraph (selection highlight in translucent blue #2f81f7), then
@@ -188,7 +193,11 @@ chip lands. No subtitles, no captions, no watermarks, no readable body text
 (blurred lines only), no camera shake, no faces.
 ```
 
-### Clip 5 — Acts on your browser (0:29–0:38, needs 9 s → generate 8 s and stretch cut, or trim VO)
+### Clip 5 — Acts on your browser (0:29–0:38, trim 10 s → 9 s)
+
+Good news at 10 s: this clip's 9 s slot now fits with no stretching or VO
+trimming needed — just cut 1 s off the tail instead of the workaround the
+8 s version required.
 
 > Attach `docs/assets/bookmark.webp` for vignette 3 only (confirmed: sidebar
 > files a PR into a new "Code Reviews" bookmarks folder via tool calls —
@@ -197,9 +206,9 @@ chip lands. No subtitles, no captions, no watermarks, no readable body text
 > wizard vignettes — those two stay descriptive/generative.
 
 ```
-Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
+Screen-capture style 10-second product montage, 16:9, dark theme (#0d1117
 background, #161b22 panels, blue #2f81f7 focus rings). Three quick vignettes,
-under 3 seconds each, hard cuts. Vignette 1: a dark web form with several
+about 3 seconds each, hard cuts. Vignette 1: a dark web form with several
 labeled input fields; a text caret moves field to field and text types itself
 in rapidly, each field flashing a subtle blue focus ring. Vignette 2: a
 multi-step wizard with a stepper across the top; the "Next" button clicks
@@ -212,7 +221,7 @@ soft file-away pops in vignette 3. No subtitles, no captions, no watermarks,
 no readable body text, no camera shake, no faces.
 ```
 
-### Clip 6 — You're in control (0:38–0:44, trim 8 s → 6 s)
+### Clip 6 — You're in control (0:38–0:44, trim 10 s → 6 s)
 
 > Attach `docs/ph-screenshots/gallery-final/06-tools-panel.png` for the
 > approval-toggle look (closest real match — it's a settings toggle, not an
@@ -221,7 +230,7 @@ no readable body text, no camera shake, no faces.
 > drawer (confirmed exact match: pinned chat, history list, quick prompts).
 
 ```
-Screen-capture style 8-second product shot, 16:9, dark theme (#0d1117
+Screen-capture style 10-second product shot, 16:9, dark theme (#0d1117
 background, #161b22 panels, #30363d borders). In a dark chat sidebar, an
 approval banner slides down from the top: a rounded amber-tinted panel
 (#d29922 accent) with two buttons — one green-filled, one gray-outlined. A
@@ -236,10 +245,10 @@ captions, no watermarks, no readable body text (short blurred labels only),
 no camera shake, no faces.
 ```
 
-### Clip 7 — Privacy (0:44–0:50, trim 8 s → 6 s)
+### Clip 7 — Privacy (0:44–0:50, trim 10 s → 6 s)
 
 ```
-Cinematic 8-second shot, 16:9, near-black void (#0d1117). Thousands of tiny
+Cinematic 10-second shot, 16:9, near-black void (#0d1117). Thousands of tiny
 particles of cool white and blue light (#2f81f7) drift inward from the
 darkness and slowly assemble into a minimal line-art padlock, centered,
 glowing softly. As the lock completes, its shackle clicks shut with a subtle
@@ -252,14 +261,14 @@ then room-tone silence. No subtitles, no captions, no watermarks, no text,
 no camera shake, no faces.
 ```
 
-### Clip 8 — End card (0:50–0:56, trim 8 s → 6 s)
+### Clip 8 — End card (0:50–0:56, trim 10 s → 6 s)
 
 > Legibility warning: Veo will mangle the install one-liner. Either overlay the
 > real text in your editor (recommended — matches the original plan's HTML end
 > card), or accept stylized glyphs from this prompt and add the text in post.
 
 ```
-Cinematic 8-second end card, 16:9, near-black background (#0d1117). A bold
+Cinematic 10-second end card, 16:9, near-black background (#0d1117). A bold
 glowing letter "A" logo in GitHub blue (#2f81f7) lands center-frame with a
 single confident boom and a soft shockwave of light. Beneath it, a dark
 terminal-style input line appears and a short command types itself out
@@ -277,8 +286,9 @@ terminal line, and caption line.
 
 ## Assembly checklist (editor)
 
-1. **Trim** each 8 s generation to its slot: 5/6/6/6/6/8/6/6/6 s per the table
-   (clip 5's 9 s slot: either slow the 8 s clip ~112 % or tighten VO line 5).
+1. **Trim** each ~10 s generation down to its slot: 5/6/6/6/6/9/6/6/6 s
+   (clips 1 / 2 / 3a / 3b / 4 / 5 / 6 / 7 / 8) — every slot now fits inside a
+   single 10 s take, no stretching needed.
 2. **Stitch** in order 1 → 2 → 3a → 3b → 4 → 5 → 6 → 7 → 8. Hard cuts everywhere;
    the only "soft" joins are the whoosh at 0:05 and the music strip at 0:44.
 3. **VO**: record the 8-line script from the main doc (~140 wpm) as one take;
