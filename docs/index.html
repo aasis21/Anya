@@ -40,7 +40,6 @@
   </a>
   <nav class="nav-links">
     <a href="#what">what</a>
-    <a href="#gallery">see it</a>
     <a href="#install">install</a>
     <a href="#under">under the hood</a>
     <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">github ↗</a>
@@ -71,7 +70,7 @@
 
   <div class="hero-cta">
     <a class="btn btn-primary" href="#install">Install now</a>
-    <a class="btn btn-ghost" href="#how">See what it can do</a>
+    <a class="btn btn-ghost" href="#what">See what it can do</a>
   </div>
 
   <p class="hero-proof">Built on the GitHub Copilot SDK, using your signed-in GitHub account — nothing new to buy or set up.</p>
@@ -95,12 +94,7 @@
     <pre class="hero-install-cmd" data-shell="bash" hidden><span class="prompt">$</span> curl -fsSL <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.sh</span> | bash</pre>
   </div>
 
-  <div class="hero-shot">
-    <figure class="shot">
-      <span class="shot-glow" aria-hidden="true"></span>
-      <img src="./assets/hero.webp" width="1920" height="1040" alt="Anya's sidebar open on its own site, asking 'Hi Anya, what can you do?' and answering with a full breakdown of its browser, tab and file capabilities." />
-    </figure>
-  </div>
+
 </section>
 
 <section id="what" class="features">
@@ -144,32 +138,9 @@
   </ol>
 </section>
 
-<section id="gallery" class="gallery-section">
-  <header class="section-head">
-    <span class="kicker">02 &middot; See it in action</span>
-    <h2>Not a mockup.<br/>This is Anya, running.</h2>
-    <p class="section-lede">Every shot below is a live capture from an actual Anya sidebar session — the same tool calls, the same UI, the same browser you already use.</p>
-  </header>
-
-  <div class="gallery">
-    <figure class="shot-fig">
-      <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/menu.webp" width="1920" height="1040" alt="Right-click context menu on a webpage with the 'Add to Anya' item highlighted, ready to pin the selected text as context." loading="lazy" /></div>
-      <figcaption><b>Point at anything.</b> Right-click any selection → "Add to Anya".</figcaption>
-    </figure>
-    <figure class="shot-fig">
-      <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/summarize.webp" width="1920" height="1040" alt="Anya sidebar showing a completed GitHub pull request summary with review points, generated from the open PR tab." loading="lazy" /></div>
-      <figcaption><b>Summarize a PR.</b> Reads the diff tab, drafts the review in seconds.</figcaption>
-    </figure>
-    <figure class="shot-fig">
-      <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/bookmark.webp" width="1920" height="1040" alt="Anya sidebar confirming it created a 'Code Reviews' bookmarks folder and saved the current pull request into it." loading="lazy" /></div>
-      <figcaption><b>Organize bookmarks.</b> "File this under Code Reviews" — done, no clicking.</figcaption>
-    </figure>
-  </div>
-</section>
-
 <section class="use-cases">
   <header class="section-head">
-    <span class="kicker">03 &middot; Real workflows people run</span>
+    <span class="kicker">02 &middot; Real workflows people run</span>
     <h2>Skip the busywork.</h2>
   </header>
 
@@ -193,7 +164,7 @@
 </section>
 <section id="install" class="install">
   <header class="section-head">
-    <span class="kicker">04 · Install</span>
+    <span class="kicker">03 · Install</span>
     <h2>One command. <br/>Every Chromium browser.</h2>
     <p class="section-lede">Requires Node 20+, a <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot subscription</a>, and <code>playwright-cli</code>. No extra AI subscription required.</p>
   </header>
@@ -256,7 +227,7 @@
 
 <section id="under" class="diagram-section">
   <header class="section-head centered">
-    <span class="kicker">05 · Under the hood</span>
+    <span class="kicker">04 · Under the hood</span>
     <h2>Simple architecture.<br/>Serious power.</h2>
     <p class="section-lede">A sidebar extension, a content script on every page, and a local Node bridge. No servers. No relays. Everything on your machine.</p>
   </header>
