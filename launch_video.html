@@ -300,6 +300,20 @@
 </style>
 </head>
 <body>
+<!-- voiceover clips — drop ElevenLabs output at assets/vo/voN.mp3 (see VO_SCRIPT.md); missing files fail silently -->
+<div id="voRig" style="display:none">
+  <audio id="vo1" src="assets/vo/vo1.mp3" preload="auto"></audio>
+  <audio id="vo2" src="assets/vo/vo2.mp3" preload="auto"></audio>
+  <audio id="vo3a" src="assets/vo/vo3a.mp3" preload="auto"></audio>
+  <audio id="vo3b" src="assets/vo/vo3b.mp3" preload="auto"></audio>
+  <audio id="vo3c" src="assets/vo/vo3c.mp3" preload="auto"></audio>
+  <audio id="vo3d" src="assets/vo/vo3d.mp3" preload="auto"></audio>
+  <audio id="vo4" src="assets/vo/vo4.mp3" preload="auto"></audio>
+  <audio id="vo5" src="assets/vo/vo5.mp3" preload="auto"></audio>
+  <audio id="vo6" src="assets/vo/vo6.mp3" preload="auto"></audio>
+  <audio id="vo7" src="assets/vo/vo7.mp3" preload="auto"></audio>
+  <audio id="vo8" src="assets/vo/vo8.mp3" preload="auto"></audio>
+</div>
 <div id="stageWrap">
   <div id="stage">
 
@@ -647,6 +661,13 @@ function typeInComposer(scope,str,total,cb){
 function caption(k,t){$('capK').textContent=k;$('capT').textContent=t;$('cap').classList.add('on')}
 function capOff(){$('cap').classList.remove('on')}
 function moveCursor(el,x,y){el.style.opacity=1;el.style.left=x+'px';el.style.top=y+'px'}
+function playVO(id){
+  var a=$(id);if(!a)return;
+  try{a.currentTime=0;var p=a.play();if(p&&p.catch)p.catch(function(){/* no clip yet, or blocked before user gesture */});}catch(e){}
+}
+function stopAllVO(){
+  document.querySelectorAll('#voRig audio').forEach(function(a){a.pause();a.currentTime=0});
+}
 function showOnly(id){document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('on')});$(id).classList.add('on')}
 
 /* ========== CLIP 7 · particle Anya mark (canvas) ========== */
@@ -718,6 +739,7 @@ window.__done=false;
 function reset(){
   timers.forEach(clearTimeout);timers=[];
   if(lockRaf)cancelAnimationFrame(lockRaf);lockRaf=null;
+  stopAllVO();
   cx2.clearRect(0,0,1280,720);
   window.__done=false;
   document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('on')});
@@ -768,19 +790,21 @@ function reset(){
 
 /* ---- scenes ---- */
 function c1(){                     /* 0–5 hook */
-  at(30,function(){showOnly('s1')});
+  at(30,function(){showOnly('s1');playVO('vo1')});
   at(600,function(){caption('The problem','Half your work isn’t in your IDE — it’s in twenty open tabs.')});
 }
 function c2(){                     /* 5–11 reveal */
-  at(T.s2,function(){showOnly('s2');capOff()});
+  at(T.s2,function(){showOnly('s2');capOff();playVO('vo2')});
   at(T.s2+1500,function(){$('sidebar2').classList.add('open');$('pageDim').classList.add('on');
     caption('Meet Anya','Copilot in your browser — on the subscription you already have.')});
 }
 function c3(){                     /* 11–23 · 4 × 3s vignettes */
   at(T.s3,function(){showOnly('s3');capOff()});
+  var voIds=['vo3a','vo3b','vo3c','vo3d'];
   VIGNETTES.forEach(function(p,i){
     var t0=T.s3+i*3000;
     at(t0,function(){
+      playVO(voIds[i]);
       document.querySelectorAll('.vg').forEach(function(el){el.classList.remove('on')});
       var pg=$('vg'+i);pg.classList.add('on');caption(p.tag,p.cap);
       timers.push(setTimeout(function(){
@@ -797,7 +821,7 @@ function c3(){                     /* 11–23 · 4 × 3s vignettes */
   });
 }
 function c4(){                     /* 23–29 point at anything */
-  at(T.s4,function(){showOnly('s4');capOff()});
+  at(T.s4,function(){showOnly('s4');capOff();playVO('vo4')});
   at(T.s4+300,function(){moveCursor($('cursor4'),300,148)});
   at(T.s4+500,function(){$('selPara').classList.add('sel')});
   at(T.s4+1100,function(){$('ctxMenu4').style.left='300px';$('ctxMenu4').style.top='168px';$('ctxMenu4').classList.add('on');
@@ -814,7 +838,7 @@ function c4(){                     /* 23–29 point at anything */
   at(T.s4+3500,function(){$('m4msg').classList.add('show')});
 }
 function c5(){                     /* 29–38 acts: form / wizard / bookmarks */
-  at(T.s5,function(){showOnly('s5');capOff();$('actA').classList.add('on');$('u5').classList.add('show')});
+  at(T.s5,function(){showOnly('s5');capOff();$('actA').classList.add('on');$('u5').classList.add('show');playVO('vo5')});
   at(T.s5+250,function(){caption('Acts on your browser','Fills forms —');$('m5a').classList.add('show')});
   at(T.s5+400,function(){$('ff1').classList.add('focus');typeText($('ft1'),'Shipped the Anya launch end-to-end.',700)});
   at(T.s5+1250,function(){$('ff1').classList.remove('focus');$('ff2').classList.add('focus');
@@ -841,7 +865,7 @@ function c5(){                     /* 29–38 acts: form / wizard / bookmarks */
   at(T.s5+8000,function(){$('fol3').classList.remove('pulse');$('m5d').classList.add('show')});
 }
 function c6(){                     /* 38–44 in control */
-  at(T.s6,function(){showOnly('s6');capOff()});
+  at(T.s6,function(){showOnly('s6');capOff();playVO('vo6')});
   at(T.s6+300,function(){$('approval6').classList.add('on');
     $('cursor6').style.left='300px';$('cursor6').style.top='210px';$('cursor6').style.opacity=1;
     caption('You’re in control','Approve each action —')});
@@ -856,12 +880,12 @@ function c6(){                     /* 38–44 in control */
   at(T.s6+5500,function(){$('drawer6').classList.remove('on')});
 }
 function c7(){                     /* 44–50 privacy */
-  at(T.s7,function(){showOnly('s7');capOff()});
+  at(T.s7,function(){showOnly('s7');capOff();playVO('vo7')});
   at(T.s7+300,startLock);
   at(T.s7+3800,function(){$('lockTxt').classList.add('on')});
 }
 function c8(){                     /* 50–56 end card */
-  at(T.s8,function(){showOnly('s8')});
+  at(T.s8,function(){showOnly('s8');playVO('vo8')});
   at(T.s8+300,function(){$('s8').classList.add('boom')});
   at(T.s8+1100,function(){typeText($('termTxt'),' irm https://raw.githubusercontent.com/aasis21/Anya/main/install.ps1 | iex',1300)});
   at(T.s8+2800,function(){$('endSub').classList.add('show')});
