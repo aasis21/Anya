@@ -23,6 +23,41 @@ The scene table below maps each generation to its slot in the final timeline.
 
 ---
 
+## ⚠️ Theme mismatch in the existing screenshots
+
+The script calls for Anya's **dark** theme throughout. Every real screenshot
+currently in `docs/assets/` and `docs/ph-screenshots/` is the **light** theme
+(cream/beige landing page, white sidebar) — dark mode exists (moon-icon
+toggle, top-right of the landing page) but nobody captured it yet.
+
+**Recommended fix before generating:** click the moon icon and recapture the
+five shots below in dark mode — 10 minutes of work, and it makes every UI
+clip's reference image match the target look exactly. If you'd rather ship
+with what exists, swap `#0d1117 / #161b22` for a light palette (`#fdf6ee`
+background, `#ffffff` panels, `#e5decf` borders) in the clip prompts below —
+I've left both palettes noted per clip so you can pick.
+
+## Reference image map (real screenshots → clip)
+
+| Clip | File | What it shows | Fit |
+|------|------|----------------|-----|
+| 2 — Reveal | `docs/assets/hero.webp` | Landing page + empty sidebar "GitHub Copilot, in your browser!!" | Exact match |
+| 3a — Sees every tab (dev) | `docs/assets/summarize.webp` | GitHub PR diff + sidebar streaming a PR summary with tool cards | Exact match (dev/PR persona) |
+| 3a — Sees every tab (researcher) | `docs/ph-screenshots/gallery-final/02-compare-tabs-workflow.png` | Tool cards (Open Tabs, Page Content ×2) → tab-comparison table streams in | Exact match (researcher persona) |
+| 3b — PM/support vignettes | *(none exist)* | Ticket triage and support-reply-from-docs have no real capture | Descriptive only — no reference image |
+| 4 — Point at anything | `docs/assets/menu.webp` | Real right-click context menu, "Add to Anya" row highlighted | Exact match — use this one, it's perfect |
+| 5 — Bookmarks vignette | `docs/assets/bookmark.webp` (or `gallery-final/08-browser-automation.png`, near-duplicate) | Sidebar files a PR into a new "Code Reviews" bookmarks folder via tool calls | Good match for the bookmarks beat only |
+| 5 — Form-fill / wizard vignettes | *(none exist)* | No capture of field-typing or a multi-step wizard | Descriptive only — no reference image |
+| 6 — Approval control | `docs/ph-screenshots/gallery-final/06-tools-panel.png` | "Require approval for write tools" toggle + full tool list | Closest real match to the Allow/Deny concept (not an identical inline banner) |
+| 6 — Model picker | `docs/ph-screenshots/gallery-final/08-browser-automation.png` | Composer bar shows a `model-auto ▾` pill | Confirms the pill exists and its exact wording |
+| 6 — Thread drawer | `docs/ph-screenshots/gallery-final/05-chat-history.png` | Chat list drawer: pinned chat, chat history, quick prompts | Exact match |
+| 1, 7, 8 | *(none — by design)* | Hook, privacy padlock, end card are pure cinematic/abstract shots | No screenshot needed |
+
+Note on the logo: the marketing-site mark is a **red-orange** square "A"
+(not blue), while the in-app chat avatar is a **blue** circular "A". Clips 2
+and 8 below use blue for brand consistency with the product chrome — swap to
+red-orange if you want the clip to match the landing-page mark instead.
+
 ## Generation settings (use for every clip)
 
 - Model: **Veo 3.1** (in Gemini: attach prompt + optional reference image, choose video)
@@ -67,8 +102,10 @@ as soft out-of-focus glyphs), no camera shake, no faces.
 
 ### Clip 2 — Reveal (0:05–0:11, trim 8 s → 6 s)
 
-> Attach `docs/ph-screenshots/anya-landing-hero.png` or a real sidebar screenshot
-> as the starting frame.
+> Attach `docs/assets/hero.webp` as the starting frame — confirmed exact match
+> (landing page + empty "GitHub Copilot, in your browser!!" sidebar). Note:
+> it's the light theme (see the theme-mismatch callout above); recapture in
+> dark mode first, or swap the dark colors below for the light palette.
 
 ```
 Screen-capture style 8-second product shot, 16:9, dark browser UI on a
@@ -87,7 +124,12 @@ lines), no camera shake, no faces.
 
 ### Clip 3a — Sees every tab, part 1 (0:11–0:17, trim 8 s → 6 s)
 
-> Attach `docs/assets/summarize.webp` (or a real chat screenshot) as reference.
+> Attach `docs/assets/summarize.webp` for vignette 1 (confirmed: PR diff +
+> sidebar streaming a summary with tool cards) and
+> `docs/ph-screenshots/gallery-final/02-compare-tabs-workflow.png` for
+> vignette 2's tool-card look (it shows tab-comparison, not ticket triage —
+> there's no real capture of a kanban board, so that part stays descriptive).
+> Both are light theme — see the theme-mismatch callout above.
 
 ```
 Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
@@ -106,6 +148,10 @@ no watermarks, no readable body text, no camera shake, no faces.
 
 ### Clip 3b — Sees every tab, part 2 (0:17–0:23, trim 8 s → 6 s)
 
+> No real capture exists for the dev-PR-review or support-reply vignettes
+> beyond `docs/assets/summarize.webp` already used in clip 3a — reuse it here
+> too for tool-card styling consistency, or generate without a reference image.
+
 ```
 Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
 background, #161b22 panels, #2f81f7 blue accents, #3fb950 green checkmarks).
@@ -122,7 +168,10 @@ no watermarks, no readable body text, no camera shake, no faces.
 
 ### Clip 4 — Point at anything (0:23–0:29, trim 8 s → 6 s)
 
-> Attach `docs/assets/menu.webp` (context-menu screenshot) as reference.
+> Attach `docs/assets/menu.webp` — confirmed exact match: real right-click
+> context menu with "Add to Anya" highlighted. This is the single best
+> reference image in the whole pack; lean on it heavily. Light theme (see
+> callout above) — recapture in dark mode for a perfect match, or adjust colors.
 
 ```
 Screen-capture style 8-second product shot, 16:9, dark theme (#0d1117
@@ -141,6 +190,12 @@ chip lands. No subtitles, no captions, no watermarks, no readable body text
 
 ### Clip 5 — Acts on your browser (0:29–0:38, needs 9 s → generate 8 s and stretch cut, or trim VO)
 
+> Attach `docs/assets/bookmark.webp` for vignette 3 only (confirmed: sidebar
+> files a PR into a new "Code Reviews" bookmarks folder via tool calls —
+> `docs/ph-screenshots/gallery-final/08-browser-automation.png` is a near-duplicate
+> if you want a wider crop). No real capture exists for the form-fill or
+> wizard vignettes — those two stay descriptive/generative.
+
 ```
 Screen-capture style 8-second product montage, 16:9, dark theme (#0d1117
 background, #161b22 panels, blue #2f81f7 focus rings). Three quick vignettes,
@@ -158,6 +213,12 @@ no readable body text, no camera shake, no faces.
 ```
 
 ### Clip 6 — You're in control (0:38–0:44, trim 8 s → 6 s)
+
+> Attach `docs/ph-screenshots/gallery-final/06-tools-panel.png` for the
+> approval-toggle look (closest real match — it's a settings toggle, not an
+> inline Allow/Deny banner, so the banner itself is descriptive) and
+> `docs/ph-screenshots/gallery-final/05-chat-history.png` for the thread
+> drawer (confirmed exact match: pinned chat, history list, quick prompts).
 
 ```
 Screen-capture style 8-second product shot, 16:9, dark theme (#0d1117
