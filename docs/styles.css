@@ -883,6 +883,14 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   .feature-grid li { border-right: none !important; }
   .use-grid { grid-template-columns: 1fr; }
   .hero-title .line-2 { padding-left: 0; }
+  .hero-cta { flex-wrap: nowrap; gap: 10px; }
+  .hero-cta .btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 13px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
   .hero-install-label { font-size: 10px; }
   .install-tab { padding: 5px 8px; font-size: 10px; letter-spacing: 0.1em; }
   .hero-install-cmd, .terminal-body { font-size: 12px; padding: 14px 14px; }
