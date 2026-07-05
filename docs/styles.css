@@ -921,11 +921,23 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
     .hero-shot .shot { box-shadow: 0 55px 140px -36px rgba(0, 0, 0, 0.65), 0 0 90px -30px color-mix(in srgb, var(--accent) 35%, transparent); }
 
     .gallery {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 26px;
+      display: flex;
+      gap: 22px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding-bottom: 10px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: var(--rule) transparent;
     }
-    .gallery figure { margin: 0; }
+    .gallery::-webkit-scrollbar { height: 6px; }
+    .gallery::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+    .gallery figure {
+      margin: 0;
+      flex: 0 0 auto;
+      width: min(78vw, 420px);
+      scroll-snap-align: start;
+    }
     .gallery figcaption {
       font-family: var(--mono);
       font-size: 12.5px;
@@ -934,9 +946,10 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
       display: flex;
       align-items: baseline;
       gap: 10px;
+      flex-wrap: wrap;
     }
     .gallery figcaption b { color: var(--bone); font-weight: 600; font-size: 14px; }
 
     @media (max-width: 760px) {
-      .gallery { grid-template-columns: 1fr; }
+      .gallery figure { width: 82vw; }
     }
