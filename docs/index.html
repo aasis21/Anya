@@ -40,7 +40,7 @@
   </a>
   <nav class="nav-links">
     <a href="#what">what</a>
-    <a href="#how">how</a>
+    <a href="#gallery">see it</a>
     <a href="#install">install</a>
     <a href="#under">under the hood</a>
     <a href="https://github.com/aasis21/Anya" target="_blank" rel="noopener">github ↗</a>
@@ -76,6 +76,13 @@
 
   <p class="hero-proof">Already have Copilot? Anya is built on the GitHub Copilot SDK and uses your signed-in GitHub account. No extra AI plan.</p>
 
+  <ul class="badge-strip" aria-label="Highlights">
+    <li class="badge">Local-only · <b>no telemetry</b></li>
+    <li class="badge">Edge · Chrome · Brave · Vivaldi · Arc</li>
+    <li class="badge">Built on <b>GitHub Copilot SDK</b></li>
+    <li class="badge">One-line <b>install</b></li>
+  </ul>
+
   <div class="hero-install">
     <div class="hero-install-label">
       <span>Install — one line</span>
@@ -107,22 +114,22 @@
     <li>
       <span class="feat-num">01</span>
       <h3>Sees your browser.</h3>
-      <p>Ask about any page and Anya reads it — tabs, bookmarks, history, downloads, selections. Need precision? Right-click → "Add to Anya" to pin a specific section, table, or field. Or use the 📎 menu and <code>@</code> references.</p>
+      <p>Tabs, bookmarks, history, downloads, selections. Right-click any element → "Add to Anya" to pin it exactly.</p>
     </li>
     <li>
       <span class="feat-num">02</span>
       <h3>Acts on your browser.</h3>
-      <p>Fill forms, click through wizards, navigate dashboards — Anya drives <em>your</em> logged-in browser via Playwright. Toggle approval for write tools and you Allow / Deny each action, or leave it off and let Anya flow.</p>
+      <p>Fills forms, clicks through wizards, drives <em>your</em> logged-in browser via Playwright. Approve each action, or let it flow.</p>
     </li>
     <li>
       <span class="feat-num">03</span>
       <h3>Your repo too.</h3>
-      <p>Attach a local folder — the SDK loads your skills, prompts, MCP servers, and file tools. Read files, grep, edit, run shell commands, all while the AI is also looking at your browser.</p>
+      <p>Attach a local folder — Anya reads files, greps, edits, and runs shell commands alongside your browser context.</p>
     </li>
     <li>
       <span class="feat-num">04</span>
       <h3>Multi-chat, your way.</h3>
-      <p>Pin, tag, search, rename, export chats to Markdown. Pick your model — GPT-4o, Claude, or Auto. Slash commands and hotkeys for power users. Everything persists across restarts.</p>
+      <p>Pin, tag, search, rename, export to Markdown. Pick GPT-4o, Claude, or model-auto. Everything persists across restarts.</p>
     </li>
     <li>
       <span class="feat-num">05</span>
@@ -132,64 +139,14 @@
     <li>
       <span class="feat-num">06</span>
       <h3>Nothing leaves your machine.</h3>
-      <p>Your existing GitHub Copilot seat, your browser, your laptop. Chats live in <code>chrome.storage</code>. The bridge runs locally. No server, no telemetry, no cloud sync.</p>
+      <p>Your Copilot seat, your browser, your laptop. No server, no telemetry, no cloud sync.</p>
     </li>
   </ol>
 </section>
 
-<section id="how" class="language">
-  <header class="section-head">
-    <span class="kicker">02 · What Anya can do</span>
-    <h2>Your browser is<br/>its workspace.</h2>
-    <p class="section-lede">In the editor, Copilot reads your files. Here, Anya reads your tabs, bookmarks, and history. Point at what matters. Then let it drive — fill forms, click through workflows, navigate dashboards — all in your logged-in browser.</p>
-  </header>
-
-  <div class="prefix-row">
-    <article class="prefix">
-      <div class="prefix-glyph at">🤖</div>
-      <h3>Just ask</h3>
-      <p class="prefix-meaning">Talk naturally. On top of Copilot's standard tools, Anya has built-in browser powers — it reads pages, searches bookmarks, checks history, and drives tabs on its own.</p>
-      <ul class="prefix-list">
-        <li>"Summarize this page"</li>
-        <li>"Find my Redis bookmark"</li>
-        <li>"What did I look at yesterday?"</li>
-        <li>"Fill this form"</li>
-        <li>"What's across my tabs?"</li>
-        <li>"Click the submit button"</li>
-      </ul>
-    </article>
-
-    <article class="prefix">
-      <div class="prefix-glyph at">+</div>
-      <h3>Point when it matters</h3>
-      <p class="prefix-meaning">Right-click → "Add to Anya", click 📎, or type <code>@</code> to attach exactly what you mean.</p>
-      <ul class="prefix-list">
-        <li>📄 Sections, tables, elements</li>
-        <li>✏️ Text fields · 🔗 Links</li>
-        <li>🌐 Tabs · 📋 Clipboard · ✂️ Selection</li>
-        <li>🔖 Bookmarks · 📜 History · ⬇ Downloads</li>
-        <li>📁 Local folders · 🖼️ Images</li>
-      </ul>
-    </article>
-
-    <article class="prefix">
-      <div class="prefix-glyph slash">⚡</div>
-      <h3>Let it drive</h3>
-      <p class="prefix-meaning">Anya connects to your tab and acts — clicks, fills, navigates, screenshots. You stay in control with optional approval for every write action.</p>
-      <ul class="prefix-list">
-        <li>"Fill every field on this form"</li>
-        <li>"Click approve on all pending items"</li>
-        <li>"Screenshot each step for me"</li>
-        <li>"Walk through this deployment wizard"</li>
-        <li>"Check console errors on this page"</li>
-      </ul>
-    </article>
-  </div>
-</section>
-
 <section id="gallery" class="gallery-section">
   <header class="section-head">
-    <span class="kicker">&middot; Real screenshots, real sessions</span>
+    <span class="kicker">02 &middot; See it in action</span>
     <h2>Not a mockup.<br/>This is Anya, running.</h2>
     <p class="section-lede">Every shot below is a live capture from an actual Anya sidebar session — the same tool calls, the same UI, the same browser you already use.</p>
   </header>
@@ -204,16 +161,8 @@
       <figcaption><b>Summarize a PR.</b> Reads the diff tab, drafts the review in seconds.</figcaption>
     </figure>
     <figure class="shot-fig">
-      <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/review.webp" width="1920" height="1040" alt="Anya sidebar with tool calls for opening tabs and reading bookmarks, drafting a code review comment on a GitHub pull request." loading="lazy" /></div>
-      <figcaption><b>Draft a review comment.</b> Reads the code, writes the comment, you approve.</figcaption>
-    </figure>
-    <figure class="shot-fig">
       <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/bookmark.webp" width="1920" height="1040" alt="Anya sidebar confirming it created a 'Code Reviews' bookmarks folder and saved the current pull request into it." loading="lazy" /></div>
       <figcaption><b>Organize bookmarks.</b> "File this under Code Reviews" — done, no clicking.</figcaption>
-    </figure>
-    <figure class="shot-fig">
-      <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/blog.webp" width="566" height="1040" alt="Anya sidebar showing a drafted blog post based on open tabs and reference material." loading="lazy" /></div>
-      <figcaption><b>Draft a blog post.</b> Pulls context from open tabs, writes the first draft.</figcaption>
     </figure>
     <figure class="shot-fig">
       <div class="shot"><span class="shot-glow" aria-hidden="true"></span><img src="./assets/capabilities.webp" width="683" height="898" alt="Anya sidebar answering 'Hi Anya, what can you do?' with a full breakdown: see what you see, act in the browser, work with code, and typical asks." loading="lazy" /></div>
@@ -235,44 +184,14 @@
       <p class="use-outcome">A 20-tab review session becomes one focused pass with action items and draft comments ready to send.</p>
     </li>
     <li>
-      <span class="use-who">Developer</span>
-      <p class="use-quote">&ldquo;Deploy this build &mdash; here&rsquo;s the runbook.&rdquo;</p>
-      <p class="use-outcome">Release-day clicks are handled step-by-step from your runbook, while you only stop for sensitive approvals.</p>
-    </li>
-    <li>
       <span class="use-who">Ops / IT</span>
       <p class="use-quote">&ldquo;Organise my OneDrive files by project and year.&rdquo;</p>
       <p class="use-outcome">A messy drive cleanup turns into a structured folder tree with predictable names and fewer duplicates.</p>
     </li>
     <li>
-      <span class="use-who">People Ops</span>
-      <p class="use-quote">&ldquo;Help me fill this performance evaluation form.&rdquo;</p>
-      <p class="use-outcome">Scattered notes become clear, role-aligned answers section-by-section, then you do a quick final polish.</p>
-    </li>
-    <li>
       <span class="use-who">PM / Lead</span>
       <p class="use-quote">&ldquo;Triage these tickets and draft a priority list.&rdquo;</p>
       <p class="use-outcome">Morning triage ends with a ranked backlog and one-line summaries you can paste into standup immediately.</p>
-    </li>
-    <li>
-      <span class="use-who">Finance / Admin</span>
-      <p class="use-quote">&ldquo;Find all tax receipts from this year and summarize totals.&rdquo;</p>
-      <p class="use-outcome">Receipt hunting across portals and downloads turns into one list with totals, gaps, and follow-up needed.</p>
-    </li>
-    <li>
-      <span class="use-who">QA / Test</span>
-      <p class="use-quote">&ldquo;Run this browser test plan and capture evidence.&rdquo;</p>
-      <p class="use-outcome">Regression checks produce a clean evidence trail with screenshots and mismatches already highlighted.</p>
-    </li>
-    <li>
-      <span class="use-who">Support / CS</span>
-      <p class="use-quote">&ldquo;Take this course on my behalf and send me a summary.&rdquo;</p>
-      <p class="use-outcome">Long training modules become a short debrief with key points, decisions, and exact next actions.</p>
-    </li>
-    <li>
-      <span class="use-who">Anyone</span>
-      <p class="use-quote">&ldquo;I just did a manual process &mdash; document it as a runbook.&rdquo;</p>
-      <p class="use-outcome">A one-off manual flow becomes a reusable runbook your team can hand over and repeat with confidence.</p>
     </li>
   </ul>
 </section>

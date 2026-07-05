@@ -279,6 +279,31 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   animation: fade-up 1s ease-out 0.48s both;
 }
 
+.badge-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  max-width: 760px;
+  animation: fade-up 1s ease-out 0.5s both;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface-1);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.badge b { color: var(--bone); font-weight: 500; margin-left: 3px; }
+
 .hero-install {
   margin: 32px 0 28px;
   max-width: 760px;
@@ -609,101 +634,6 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   color: var(--bone-dim);
   font-size: 14px;
   line-height: 1.5;
-}
-
-/* ─── language (composer prefixes) ────────────────────── */
-.language {
-  max-width: var(--max);
-  margin: 0 auto;
-  padding: clamp(80px, 12vw, 140px) 0;
-  position: relative;
-}
-
-.prefix-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  margin: 0 var(--pad-x);
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  overflow: hidden;
-  background: linear-gradient(180deg, var(--ink-soft), transparent);
-}
-
-.prefix {
-  position: relative;
-  padding: 44px 32px 40px;
-  border-right: 1px solid var(--rule);
-  transition: background 0.25s ease;
-}
-.prefix:last-child { border-right: none; }
-.prefix:hover {
-  background: rgba(255, 77, 46, 0.025);
-}
-
-.prefix-glyph {
-  display: inline-grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  font-family: var(--display);
-  font-weight: 300;
-  font-size: 56px;
-  line-height: 1;
-  letter-spacing: -0.05em;
-  color: var(--accent);
-  margin-bottom: 24px;
-  font-variation-settings: "opsz" 144, "WONK" 1;
-}
-.prefix-glyph.slash { transform: skewX(-8deg); }
-.prefix-glyph.at    { font-style: italic; }
-.prefix-glyph.hash  { font-weight: 500; }
-
-.prefix h3 {
-  font-family: var(--display);
-  font-weight: 400;
-  font-size: 24px;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-  color: var(--bone);
-}
-.prefix-meaning {
-  margin: 0 0 18px;
-  font-style: italic;
-  font-size: 15px;
-  color: var(--accent-2);
-  font-variation-settings: "WONK" 1;
-}
-.prefix-detail {
-  margin: 0 0 24px;
-  color: var(--bone-soft);
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-.prefix-list {
-  list-style: none;
-  margin: 0;
-  padding: 18px 0 0;
-  border-top: 1px dashed var(--rule);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-}
-.prefix-list li {
-  color: var(--muted);
-}
-.prefix-list code {
-  font-size: 12px;
-  white-space: nowrap;
-}
-.prefix-list .muted {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: var(--muted-2);
-  padding-top: 4px;
 }
 
 /* ─── install ─────────────────────────────────────────── */
