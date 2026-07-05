@@ -197,7 +197,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .hero {
   max-width: var(--max);
   margin: 0 auto;
-  padding: clamp(56px, 10vw, 110px) var(--pad-x) clamp(48px, 8vw, 90px);
+  padding: clamp(44px, 7vw, 80px) var(--pad-x) clamp(36px, 6vw, 64px);
   position: relative;
 }
 
@@ -439,7 +439,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .diagram-section {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 40px var(--pad-x) 80px;
+  padding: 24px var(--pad-x) 48px;
 }
 
 /* architecture diagram — CSS grid */
@@ -526,7 +526,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .features {
   max-width: var(--max);
   margin: 0 auto;
-  padding: clamp(56px, 9vw, 100px) 0;
+  padding: clamp(40px, 6vw, 72px) 0;
 }
 .feature-grid {
   list-style: none;
@@ -583,7 +583,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .use-cases {
   max-width: var(--max);
   margin: 0 auto;
-  padding: clamp(56px, 9vw, 100px) 0;
+  padding: clamp(40px, 6vw, 72px) 0;
 }
 .use-grid {
   list-style: none;
@@ -640,7 +640,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .install {
   max-width: var(--max);
   margin: 0 auto;
-  padding: clamp(56px, 9vw, 100px) 0;
+  padding: clamp(40px, 6vw, 72px) 0;
 }
 .install-grid {
   display: grid;
@@ -761,7 +761,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .quote {
   max-width: 920px;
   margin: 0 auto;
-  padding: clamp(48px, 8vw, 90px) var(--pad-x);
+  padding: clamp(32px, 5vw, 56px) var(--pad-x);
   text-align: center;
 }
 .quote p {
@@ -796,7 +796,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 /* ─── footer ──────────────────────────────────────────── */
 .foot {
   border-top: 1px solid var(--rule);
-  padding: 56px var(--pad-x) 64px;
+  padding: 28px var(--pad-x) 32px;
 }
 .foot-inner {
   max-width: var(--max);
@@ -804,33 +804,34 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 40px;
+  gap: 24px;
 }
 .foot-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-family: var(--display);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
   font-variation-settings: "WONK" 1;
+  opacity: 0.85;
 }
 .foot-links {
   display: flex;
-  gap: 28px;
+  gap: 22px;
   justify-content: center;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
   text-transform: lowercase;
   color: var(--muted);
 }
 .foot-meta {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
   text-align: right;
   max-width: 320px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .foot-meta a { color: var(--accent); }
 
