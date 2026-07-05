@@ -23,13 +23,13 @@ sized to fit its scene with ~0.5-1s of natural silence to spare, so don't rush i
 |---|-------|-------------|--------|------|
 | 1 | S1 hook | 0 – 5000 | 5.0s | **Half your work isn't in your IDE. It's in twenty open tabs.** |
 | 2 | S2 reveal | 5000 – 11000 | 6.0s | **Meet Anya. Copilot, in your browser — on the subscription you already have.** |
-| 3a | S3 researcher | 11000 – 14000 | 3.0s | **Ten tabs. One brief. Three themes, one open question.** |
-| 3b | S3 PM | 14000 – 17000 | 3.0s | **A messy backlog. One ranked list — start with PAY-812.** |
-| 3c | S3 developer | 17000 – 20000 | 3.0s | **A pull request. A drafted review — one risk flagged.** |
-| 3d | S3 support | 20000 – 23000 | 3.0s | **A ticket. A ready reply — grounded in your docs.** |
-| 4 | S4 point-at-anything | 23000 – 29000 | 6.0s | **Point at anything, on any page. Right-click, add to Anya — it's context.** |
+| 3a | S3 researcher | 11000 – 14000 | 3.0s | **Ten tabs, one clear summary.** |
+| 3b | S3 PM | 14000 – 17000 | 3.0s | **A messy backlog, sorted by what matters.** |
+| 3c | S3 developer | 17000 – 20000 | 3.0s | **A pull request, reviewed for you.** |
+| 3d | S3 support | 20000 – 23000 | 3.0s | **A support ticket, answered from your docs.** |
+| 4 | S4 point-at-anything | 23000 – 29000 | 6.0s | **Point at anything. Right-click, add to Anya.** |
 | 5 | S5 acts | 29000 – 38000 | 9.0s | **And it acts. Fills forms, clicks through wizards, files your bookmarks — driving your real, logged-in browser.** |
-| 6 | S6 in control | 38000 – 44000 | 6.0s | **You're always in control. Approve each action, or let it flow. Model and threads — all saved.** |
+| 6 | S6 in control | 38000 – 44000 | 6.0s | **Approve each action, or let it flow — all saved.** |
 | 7 | S7 privacy | 44000 – 50000 | 6.0s | **No Anya server. No telemetry. Just a local bridge, talking to your own Copilot.** |
 | 8 | S8 end card | 50000 – 56000 | 6.0s | **GitHub Copilot, in your browser. One line to install. Every Chromium browser.** |
 
