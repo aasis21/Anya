@@ -856,12 +856,26 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   .feature-grid li:nth-child(2n) { border-right: none; }
   .install-grid { grid-template-columns: 1fr; }
   .use-grid { grid-template-columns: 1fr 1fr; }
-  .prefix-row { grid-template-columns: 1fr; }
-  .prefix { border-right: none; border-bottom: 1px solid var(--rule); }
-  .prefix:last-child { border-bottom: none; }
   .foot-inner { grid-template-columns: 1fr; text-align: center; }
   .foot-links { justify-content: center; flex-wrap: wrap; }
   .foot-meta { text-align: center; max-width: none; margin: 0 auto; }
+
+  /* architecture diagram: stack instead of 3-col grid */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 28px clamp(16px, 5vw, 32px);
+  }
+  .arch-diagram > * { order: initial; width: 100%; }
+  .arch-box.arch-box-sidebar { order: 1; }
+  .arch-leaf-page { order: 2; padding-top: 4px; }
+  .arch-wire { order: 3; flex-direction: row; justify-content: center; gap: 10px; padding: 10px 0; }
+  .arch-box.arch-box-bridge { order: 4; }
+  .arch-leaf-cli { order: 5; padding-top: 4px; }
+  .arch-leaf-spacer { display: none; }
+  .arch-arrow { white-space: normal; text-align: center; }
 }
 
 @media (max-width: 540px) {
@@ -873,6 +887,7 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   .install-tab { padding: 5px 8px; font-size: 10px; letter-spacing: 0.1em; }
   .hero-install-cmd, .terminal-body { font-size: 12px; padding: 14px 14px; }
   .install-tabs-terminal { margin-left: 0; width: 100%; }
+  .arch-arrow { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

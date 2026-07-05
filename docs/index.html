@@ -261,7 +261,7 @@
     <p class="section-lede">A sidebar extension, a content script on every page, and a local Node bridge. No servers. No relays. Everything on your machine.</p>
   </header>
   <div class="arch-diagram">
-    <div class="arch-box">
+    <div class="arch-box arch-box-sidebar">
       <strong>Sidebar</strong>
       <span>chat UI · context chips · 📎 menu</span>
     </div>
@@ -269,17 +269,17 @@
       <span class="arch-arrow">◀ ─── JSON frames ─── ▶</span>
       <span class="arch-label">Native Messaging</span>
     </div>
-    <div class="arch-box">
+    <div class="arch-box arch-box-bridge">
       <strong>Node bridge</strong>
       <span>@github/copilot-sdk · browser tools</span>
     </div>
-    <div class="arch-leaf">
+    <div class="arch-leaf arch-leaf-page">
       <span class="arch-down">↑</span>
       <span>right-click · Alt+A · field tracking</span>
       <strong>Page bridge</strong>
     </div>
     <div class="arch-leaf-spacer"></div>
-    <div class="arch-leaf">
+    <div class="arch-leaf arch-leaf-cli">
       <span class="arch-down">↓</span>
       <span>click · type · screenshot · navigate</span>
       <strong>playwright-cli</strong>
