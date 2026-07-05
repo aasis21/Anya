@@ -31,7 +31,7 @@ sized to fit its scene with ~0.5-1s of natural silence to spare, so don't rush i
 | 5 | S5 acts | 29000 – 38000 | 9.0s | **And it acts. Fills forms, clicks through wizards, files your bookmarks — driving your real, logged-in browser.** |
 | 6 | S6 in control | 38000 – 44000 | 6.0s | **Approve each action, or let it flow — all saved.** |
 | 7 | S7 privacy | 44000 – 50000 | 6.0s | **No Anya server. No telemetry. Just a local bridge, talking to your own Copilot.** |
-| 8 | S8 end card | 50000 – 56000 | 6.0s | **GitHub Copilot, in your browser. One line to install. Every Chromium browser.** |
+| 8 | S8 end card | 50000 – 56000 | 6.0s | **Your tabs finally have a copilot. One line to install — every Chromium browser.** |
 
 ## Plain-text block (for a single copy-paste if you'd rather generate one continuous read then
 manually chop it in Audacity/ffmpeg — riskier for hitting the tight scene marks, the per-line
@@ -55,7 +55,7 @@ You're always in control. Approve each action, or let it flow. Model and threads
 
 No Anya server. No telemetry. Just a local bridge, talking to your own Copilot.
 
-GitHub Copilot, in your browser. One line to install. Every Chromium browser.
+Your tabs finally have a copilot. One line to install — every Chromium browser.
 ```
 
 ## After generating
