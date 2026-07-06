@@ -361,6 +361,76 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
 .hero-install-cmd .prompt { color: var(--accent); margin-right: 10px; }
 .hero-install-cmd .highlight { color: var(--bone); border-bottom: 1px dotted var(--bone-dim); }
 
+.hero-film {
+  margin: 8px 0 28px;
+  max-width: 760px;
+  animation: fade-up 1s ease-out 0.58s both;
+}
+.hero-film-play {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1280 / 720;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: var(--surface-1);
+  padding: 0;
+  cursor: pointer;
+}
+.hero-film-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.9) brightness(0.72);
+  transition: filter 0.2s ease, transform 0.4s ease;
+}
+.hero-film-play:hover .hero-film-poster {
+  filter: saturate(1) brightness(0.6);
+  transform: scale(1.02);
+}
+.hero-film-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12,13,15,0.05) 40%, rgba(12,13,15,0.55) 100%);
+}
+.hero-film-btn {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 36px -10px rgba(255, 77, 46, 0.7);
+  transition: transform 0.15s ease;
+}
+.hero-film-play:hover .hero-film-btn { transform: translate(-50%, -50%) scale(1.08); }
+.hero-film-btn svg { margin-left: 3px; }
+.hero-film-label {
+  position: absolute;
+  left: 18px; bottom: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--bone);
+  text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+}
+.hero-film-frame {
+  width: 100%;
+  aspect-ratio: 1280 / 720;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #05070a;
+}
+.hero-film-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+
 .hero-cta {
   display: flex;
   flex-wrap: wrap;

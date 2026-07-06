@@ -93,6 +93,16 @@
     <pre class="hero-install-cmd" data-shell="bash" hidden><span class="prompt">$</span> curl -fsSL <span class="highlight">https://raw.githubusercontent.com/aasis21/Anya/main/install.sh</span> | bash</pre>
   </div>
 
+  <div class="hero-film" id="heroFilm">
+    <button type="button" class="hero-film-play" id="heroFilmPlay" aria-label="Play the Anya launch film">
+      <img src="assets/film-poster.png" alt="" class="hero-film-poster">
+      <span class="hero-film-scrim"></span>
+      <span class="hero-film-btn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 4v16l14-8L7 4z" fill="currentColor"/></svg>
+      </span>
+      <span class="hero-film-label">Watch the launch film · 56s</span>
+    </button>
+  </div>
 
 </section>
 
@@ -367,6 +377,24 @@
       btn.addEventListener('click', function () { apply(btn.getAttribute('data-shell')); });
     });
     apply(active);
+  })();
+
+  // Launch film — swap the poster button for the interactive reel iframe on click,
+  // so the ~1MB of narration/music audio only loads if someone actually wants to watch.
+  (function () {
+    var wrap = document.getElementById('heroFilm');
+    var btn = document.getElementById('heroFilmPlay');
+    if (!wrap || !btn) return;
+    btn.addEventListener('click', function () {
+      var frame = document.createElement('div');
+      frame.className = 'hero-film-frame';
+      var iframe = document.createElement('iframe');
+      iframe.src = 'launch_video.html';
+      iframe.title = 'Anya — launch film';
+      iframe.allow = 'autoplay';
+      frame.appendChild(iframe);
+      wrap.replaceChild(frame, btn);
+    });
   })();
 </script>
 
