@@ -967,6 +967,13 @@ em { font-style: italic; color: var(--bone); font-feature-settings: "ss01"; }
   .hero-install-cmd, .terminal-body { font-size: 12px; padding: 14px 14px; }
   .install-tabs-terminal { margin-left: 0; width: 100%; }
   .arch-arrow { font-size: 11px; }
+
+  /* launch film: give the embed more height so its own fit() doesn't
+     over-shrink the stage just to squeeze in the control bar below it */
+  .hero-film-play,
+  .hero-film-frame { aspect-ratio: 4 / 3.6; }
+  .hero-film-label { font-size: 11px; left: 14px; bottom: 12px; }
+  .hero-film-btn { width: 52px; height: 52px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
